@@ -1,0 +1,34 @@
+import { ADMIN_PASSWORD } from '$env/static/private';
+
+/**
+ * Call at the top of every non-GET +server.ts handler.
+ * Returns a 401 Response if auth fails, or null if auth passes.
+ */
+export function requireAuth(request: Request): Response | null {
+  return _requireAuth(request, ADMIN_PASSWORD);
+}
+
+/**
+ * Pure function for testing — accepts password directly.
+ */
+export function _requireAuth(request: Request, password: string | undefined): Response | null {
+  if (!password) return null;
+
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  const token = authHeader.slice(7);
+  if (token !== password) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  return null;
+}
