@@ -21,8 +21,8 @@
   const weekKey = getWeekKey();
 
   // --- Queries ---
-  const tasksQuery = createQuery({
-    queryKey: ['tasks', type],
+  const tasksQuery = createQuery(() => ({
+    queryKey: ['tasks', type] as const,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
@@ -32,14 +32,14 @@
       if (error) throw error;
       return (data ?? []) as Task[];
     }
-  });
+  }));
 
-  const attachmentsQuery = createQuery({
-    queryKey: ['attachments', type],
+  const attachmentsQuery = createQuery(() => ({
+    queryKey: ['attachments', type] as const,
     queryFn: async () => {
-      const tasks = $tasksQuery.data ?? [];
+      const tasks = tasksQuery.data ?? [];
       if (tasks.length === 0) return [] as TaskAttachment[];
-      const ids = tasks.map((t) => t.id);
+      const ids = (tasks as Task[]).map((t) => t.id);
       const { data, error } = await supabase
         .from('task_attachments')
         .select('*')
@@ -47,22 +47,22 @@
       if (error) throw error;
       return (data ?? []) as TaskAttachment[];
     }
-  });
+  }));
 
   // Sorted: incomplete first
   const sortedTasks = $derived(
-    [...($tasksQuery.data ?? [])].sort((a, b) => {
+    [...(tasksQuery.data ?? [])].sort((a, b) => {
       if (a.completed === b.completed) return 0;
       return a.completed ? 1 : -1;
     })
   );
 
-  const completedCount = $derived(($tasksQuery.data ?? []).filter((t) => t.completed).length);
-  const totalCount = $derived(($tasksQuery.data ?? []).length);
+  const completedCount = $derived((tasksQuery.data ?? []).filter((t) => t.completed).length);
+  const totalCount = $derived((tasksQuery.data ?? []).length);
   const progressValue = $derived(totalCount > 0 ? (completedCount / totalCount) * 100 : 0);
 
   function getAttachmentsForTask(taskId: string): TaskAttachment[] {
-    return ($attachmentsQuery.data ?? []).filter((a) => a.task_id === taskId);
+    return (attachmentsQuery.data ?? []).filter((a) => a.task_id === taskId);
   }
 
   // --- Auto-reset on mount (Weekly/Monthly only) ---
@@ -158,7 +158,7 @@
   </div>
 
   <!-- Task list -->
-  {#if $tasksQuery.isLoading}
+  {#if tasksQuery.isLoading}
     <div class="text-sm text-zinc-400 py-4 text-center">Loading…</div>
   {:else}
     <div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
