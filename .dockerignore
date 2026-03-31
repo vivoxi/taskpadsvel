@@ -1,6 +1,11 @@
 node_modules
-build
 .svelte-kit
+build
 .env
 .env.*
-!.env.example
+*.local
+.git
+.gitignore
+README.md
+docs
+tests
