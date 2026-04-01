@@ -4,6 +4,7 @@
   import { supabase } from '$lib/supabase';
   import { toast } from 'svelte-sonner';
   import { DAY_NAMES } from '$lib/weekUtils';
+  import { Trash2 } from 'lucide-svelte';
   import AttachmentManager from './AttachmentManager.svelte';
   import type { TaskType } from '$lib/types';
   import type { ScheduleBlock, TaskAttachment } from '$lib/types';
@@ -16,6 +17,7 @@
     readonly = false,
     onUpdate,
     onMoveDay,
+    onDelete,
     onAttachmentAdded,
     onAttachmentDeleted
   }: {
@@ -26,6 +28,7 @@
     readonly?: boolean;
     onUpdate: (updated: ScheduleBlock) => void;
     onMoveDay?: (block: ScheduleBlock, targetDay: string) => Promise<void> | void;
+    onDelete?: (id: string) => void;
     onAttachmentAdded: (attachment: TaskAttachment) => void;
     onAttachmentDeleted: (id: string) => void;
   } = $props();
@@ -177,7 +180,8 @@
 <div class="group flex gap-3 rounded-md border px-3 py-2 text-sm cursor-default
   {completed
     ? 'border-green-200 dark:border-green-900 bg-green-50/40 dark:bg-green-950/20'
-    : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900'}">
+    : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900'}
+  relative">
   <button
     onclick={toggleCompleted}
     disabled={readonly}
@@ -196,8 +200,9 @@
   </button>
 
   <div class="flex flex-1 flex-col gap-1 min-w-0">
-  <!-- Time range -->
+  <!-- Time range + delete button -->
   <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+    <div class="flex flex-1 items-center gap-2">
     {#if !readonly}
       <select
         value={selectedDay}
@@ -237,6 +242,17 @@
     {:else}
       <button onclick={() => startEdit('end_time')} class="hover:text-zinc-900 dark:hover:text-zinc-100">
         {block.end_time}
+      </button>
+    {/if}
+    </div>
+    {#if !readonly && onDelete}
+      <button
+        onclick={() => onDelete!(block.id)}
+        class="ml-auto shrink-0 rounded-md p-1 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
+        title="Delete block"
+        type="button"
+      >
+        <Trash2 size={13} />
       </button>
     {/if}
   </div>

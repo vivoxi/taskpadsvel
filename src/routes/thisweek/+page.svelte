@@ -318,6 +318,48 @@
       console.error(err);
     }
   }
+
+  async function addBlockToDay(
+    targetDay: string,
+    draft: { start_time: string; end_time: string; task_title: string; notes: string }
+  ) {
+    const existingBlocks = (scheduleQuery.data ?? []).filter((b) => b.day === targetDay);
+    const nextSortOrder = existingBlocks.length > 0
+      ? Math.max(...existingBlocks.map((b) => b.sort_order)) + 1
+      : 0;
+
+    const { error: insertError } = await supabase.from('weekly_schedule').insert({
+      week_key: currentWeekKey,
+      day: targetDay,
+      start_time: draft.start_time,
+      end_time: draft.end_time,
+      task_title: draft.task_title,
+      notes: draft.notes,
+      sort_order: nextSortOrder
+    });
+
+    if (insertError) {
+      toast.error('Failed to add block');
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['weekly_schedule', currentWeekKey] });
+  }
+
+  async function deleteBlock(blockId: string) {
+    const { error: deleteError } = await supabase
+      .from('weekly_schedule')
+      .delete()
+      .eq('id', blockId);
+
+    if (deleteError) {
+      toast.error('Failed to delete block');
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['weekly_schedule', currentWeekKey] });
+    toast.success('Block deleted');
+  }
 </script>
 
 <svelte:head><title>This Week — TaskpadSvel</title></svelte:head>
@@ -580,6 +622,8 @@
                     {onBlocksReordered}
                     onMoveBlockDay={moveBlockToDay}
                     {onBlockUpdated}
+                    onDeleteBlock={deleteBlock}
+                    onAddBlock={addBlockToDay}
                     {getLinkedTaskForBlock}
                     {getAttachmentsForBlock}
                     onAttachmentAdded={onScheduleAttachmentAdded}
