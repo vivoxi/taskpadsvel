@@ -45,3 +45,43 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 
   return json({ success: true });
 };
+
+export const PATCH: RequestHandler = async ({ request, params }) => {
+  const authError = requireAuth(request);
+  if (authError) return authError;
+
+  const { taskId } = params;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    throw error(400, 'Invalid JSON');
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    throw error(400, 'Body must be an object');
+  }
+
+  const allowed = ['title', 'completed', 'notes'] as const;
+  const update: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in (body as Record<string, unknown>)) {
+      update[key] = (body as Record<string, unknown>)[key];
+    }
+  }
+
+  if (Object.keys(update).length === 0) {
+    throw error(400, 'No valid fields to update');
+  }
+
+  const { data, error: dbError } = await supabaseAdmin
+    .from('tasks')
+    .update(update)
+    .eq('id', taskId)
+    .select()
+    .single();
+
+  if (dbError) throw error(500, dbError.message);
+  return json(data);
+};

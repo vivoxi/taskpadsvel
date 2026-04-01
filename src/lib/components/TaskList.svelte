@@ -269,8 +269,21 @@
 
   async function toggleTask(id: string, completed: boolean) {
     const task = (tasksQuery.data ?? []).find((entry) => entry.id === id);
-    const { error } = await supabase.from('tasks').update({ completed }).eq('id', id);
-    if (error) {
+
+    let password = '';
+    const unsub = authPassword.subscribe((value) => (password = value));
+    unsub();
+
+    const res = await fetch(`/api/task/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(password ? { Authorization: `Bearer ${password}` } : {})
+      },
+      body: JSON.stringify({ completed })
+    });
+
+    if (!res.ok) {
       toast.error('Failed to update task');
       return;
     }
@@ -289,8 +302,20 @@
   }
 
   async function updateTaskTitle(id: string, title: string) {
-    const { error } = await supabase.from('tasks').update({ title }).eq('id', id);
-    if (error) {
+    let password = '';
+    const unsub = authPassword.subscribe((value) => (password = value));
+    unsub();
+
+    const res = await fetch(`/api/task/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(password ? { Authorization: `Bearer ${password}` } : {})
+      },
+      body: JSON.stringify({ title })
+    });
+
+    if (!res.ok) {
       toast.error('Failed to update task');
       return;
     }

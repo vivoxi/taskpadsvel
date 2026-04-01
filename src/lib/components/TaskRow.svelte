@@ -5,6 +5,7 @@
   import * as Accordion from '$lib/components/ui/accordion/index.js';
   import AttachmentManager from './AttachmentManager.svelte';
   import { supabase } from '$lib/supabase';
+  import { authPassword } from '$lib/stores';
   import { debounce } from '$lib/debounce';
   import {
     PREFERRED_DAY_OPTIONS,
@@ -90,17 +91,27 @@
         (nextPreferredDay || null) as PreferredDay | null,
         nextCategory || null
       );
-    const { error } = await supabase
-      .from('tasks')
-      .update({ notes: payload })
-      .eq('id', taskId);
-    if (error) {
-      toast.error('Failed to save task details');
-      return;
-    }
 
-    queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    queryClient.invalidateQueries({ queryKey: ['tasks_all'] });
+      let password = '';
+      const unsub = authPassword.subscribe((value) => (password = value));
+      unsub();
+
+      const res = await fetch(`/api/task/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(password ? { Authorization: `Bearer ${password}` } : {})
+        },
+        body: JSON.stringify({ notes: payload })
+      });
+
+      if (!res.ok) {
+        toast.error('Failed to save task details');
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks_all'] });
     },
     500
   );
