@@ -67,14 +67,24 @@
 
   $effect(() => {
     if (!browser || taskOrderLoaded) return;
+
+    // Instant local fallback while Supabase loads
     try {
-      const stored = localStorage.getItem(taskOrderStorageKey);
-      taskOrder = stored ? (JSON.parse(stored) as string[]) : [];
-    } catch {
-      taskOrder = [];
-    } finally {
-      taskOrderLoaded = true;
-    }
+      const cached = localStorage.getItem(taskOrderStorageKey);
+      if (cached) taskOrder = JSON.parse(cached) as string[];
+    } catch { /* ignore */ }
+
+    supabase
+      .from('user_preferences')
+      .select('value')
+      .eq('key', taskOrderStorageKey)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value && Array.isArray(data.value)) {
+          taskOrder = data.value as string[];
+        }
+        taskOrderLoaded = true;
+      });
   });
 
   const orderedTasks = $derived.by(() => {
@@ -117,6 +127,10 @@
   $effect(() => {
     if (!browser || !taskOrderLoaded) return;
     localStorage.setItem(taskOrderStorageKey, JSON.stringify(taskOrder));
+    supabase
+      .from('user_preferences')
+      .upsert({ key: taskOrderStorageKey, value: taskOrder, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .then(({ error }) => { if (error) console.error('Failed to save task order', error); });
   });
 
   const completedCount = $derived((tasksQuery.data ?? []).filter((t) => t.completed).length);

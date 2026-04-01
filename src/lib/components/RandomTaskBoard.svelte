@@ -63,27 +63,48 @@
   $effect(() => {
     if (!browser || categoryStateLoaded) return;
 
+    // Instant local fallback
     try {
       const storedCategories = localStorage.getItem(RANDOM_CATEGORIES_STORAGE_KEY);
       const storedOrderMap = localStorage.getItem(RANDOM_CATEGORY_ORDER_STORAGE_KEY);
-
-      categories = storedCategories ? (JSON.parse(storedCategories) as string[]) : [DEFAULT_CATEGORY];
-      categoryOrderMap = storedOrderMap ? (JSON.parse(storedOrderMap) as Record<string, string[]>) : {};
+      if (storedCategories) categories = JSON.parse(storedCategories) as string[];
+      if (storedOrderMap) categoryOrderMap = JSON.parse(storedOrderMap) as Record<string, string[]>;
     } catch {
-      categories = [DEFAULT_CATEGORY];
       categoryOrderMap = {};
-    } finally {
+    }
+
+    Promise.all([
+      supabase.from('user_preferences').select('value').eq('key', RANDOM_CATEGORIES_STORAGE_KEY).maybeSingle(),
+      supabase.from('user_preferences').select('value').eq('key', RANDOM_CATEGORY_ORDER_STORAGE_KEY).maybeSingle()
+    ]).then(([catResult, orderResult]) => {
+      if (catResult.data?.value && Array.isArray(catResult.data.value)) {
+        categories = catResult.data.value as string[];
+      }
+      if (orderResult.data?.value && typeof orderResult.data.value === 'object' && !Array.isArray(orderResult.data.value)) {
+        categoryOrderMap = orderResult.data.value as Record<string, string[]>;
+      }
       if (!categories.includes(DEFAULT_CATEGORY)) {
         categories = [DEFAULT_CATEGORY, ...categories];
       }
       categoryStateLoaded = true;
-    }
+    });
   });
 
   $effect(() => {
     if (!browser || !categoryStateLoaded) return;
     localStorage.setItem(RANDOM_CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
     localStorage.setItem(RANDOM_CATEGORY_ORDER_STORAGE_KEY, JSON.stringify(categoryOrderMap));
+
+    supabase
+      .from('user_preferences')
+      .upsert(
+        [
+          { key: RANDOM_CATEGORIES_STORAGE_KEY, value: categories, updated_at: new Date().toISOString() },
+          { key: RANDOM_CATEGORY_ORDER_STORAGE_KEY, value: categoryOrderMap, updated_at: new Date().toISOString() }
+        ],
+        { onConflict: 'key' }
+      )
+      .then(({ error }) => { if (error) console.error('Failed to save category state', error); });
   });
 
   $effect(() => {
