@@ -25,6 +25,7 @@
     shellClass: string;
     glowClass: string;
     railClass: string;
+    href: string;
   };
 
   const currentWeekKey = getWeekKey();
@@ -155,7 +156,8 @@
       shellClass:
         'border-orange-200/80 bg-orange-50/90 dark:border-orange-500/20 dark:bg-orange-950/18',
       glowClass: '',
-      railClass: 'bg-orange-400 dark:bg-orange-400'
+      railClass: 'bg-orange-400 dark:bg-orange-400',
+      href: '/weekly'
     },
     {
       title: 'Monthly',
@@ -167,7 +169,8 @@
       shellClass:
         'border-sky-200/80 bg-sky-50/90 dark:border-sky-500/20 dark:bg-sky-950/18',
       glowClass: '',
-      railClass: 'bg-sky-400 dark:bg-sky-400'
+      railClass: 'bg-sky-400 dark:bg-sky-400',
+      href: '/monthly'
     },
     {
       title: 'This Week Schedule',
@@ -179,7 +182,8 @@
       shellClass:
         'border-emerald-200/80 bg-emerald-50/90 dark:border-emerald-500/20 dark:bg-emerald-950/18',
       glowClass: '',
-      railClass: 'bg-emerald-400 dark:bg-emerald-400'
+      railClass: 'bg-emerald-400 dark:bg-emerald-400',
+      href: '/thisweek'
     },
     {
       title: 'Random',
@@ -191,7 +195,8 @@
       shellClass:
         'border-zinc-300/80 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/85',
       glowClass: '',
-      railClass: 'bg-zinc-500 dark:bg-zinc-400'
+      railClass: 'bg-zinc-500 dark:bg-zinc-400',
+      href: '/random'
     }
   ]);
 </script>
@@ -277,7 +282,7 @@
     {:else}
       <section class="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         {#each metricCards as card (card.title)}
-          <article class={`group relative overflow-hidden rounded-[26px] border p-5 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.42)] transition-transform duration-200 hover:-translate-y-0.5 ${card.shellClass}`}>
+          <a href={card.href} class={`group relative overflow-hidden rounded-[26px] border p-5 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.42)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-36px_rgba(15,23,42,0.55)] ${card.shellClass}`}>
             <div class="relative flex h-full flex-col gap-5">
               <div class="flex items-start justify-between gap-3">
                 <div>
@@ -308,7 +313,7 @@
                 </div>
               </div>
             </div>
-          </article>
+          </a>
         {/each}
       </section>
 
