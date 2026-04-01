@@ -2,21 +2,35 @@
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { supabase } from '$lib/supabase';
   import ScheduleBlockCard from './ScheduleBlockCard.svelte';
-  import type { ScheduleBlock } from '$lib/types';
+  import type { ScheduleBlock, TaskAttachment, TaskType } from '$lib/types';
 
   let {
     day,
     blocks,
+    weekKey,
     readonly = false,
-    onBlocksReordered
+    onBlocksReordered,
+    onMoveBlockDay,
+    onBlockUpdated,
+    getLinkedTaskForBlock,
+    getAttachmentsForBlock,
+    onAttachmentAdded,
+    onAttachmentDeleted
   }: {
     day: string;
     blocks: ScheduleBlock[];
+    weekKey: string;
     readonly?: boolean;
     onBlocksReordered: (day: string, reordered: ScheduleBlock[]) => void;
+    onMoveBlockDay: (block: ScheduleBlock, targetDay: string) => Promise<void> | void;
+    onBlockUpdated: (updated: ScheduleBlock) => void;
+    getLinkedTaskForBlock: (block: ScheduleBlock) => { id: string; type: TaskType } | null;
+    getAttachmentsForBlock: (block: ScheduleBlock) => TaskAttachment[];
+    onAttachmentAdded: (attachment: TaskAttachment) => void;
+    onAttachmentDeleted: (id: string) => void;
   } = $props();
 
-  let localBlocks = $state([...blocks]);
+  let localBlocks = $state<ScheduleBlock[]>([]);
 
   $effect(() => {
     localBlocks = [...blocks];
@@ -39,6 +53,7 @@
 
   function onUpdate(updated: ScheduleBlock) {
     localBlocks = localBlocks.map((b) => (b.id === updated.id ? updated : b));
+    onBlockUpdated(updated);
   }
 </script>
 
@@ -52,7 +67,16 @@
   {:else if readonly}
     <div class="flex flex-col gap-1.5">
       {#each localBlocks as block (block.id)}
-        <ScheduleBlockCard {block} {readonly} onUpdate={() => {}} />
+        <ScheduleBlockCard
+          {block}
+          attachments={getAttachmentsForBlock(block)}
+          resolvedTaskId={getLinkedTaskForBlock(block)?.id ?? null}
+          {weekKey}
+          {readonly}
+          onUpdate={() => {}}
+          {onAttachmentAdded}
+          {onAttachmentDeleted}
+        />
       {/each}
     </div>
   {:else}
@@ -64,7 +88,17 @@
     >
       {#each localBlocks as block (block.id)}
         <div class="cursor-grab active:cursor-grabbing">
-          <ScheduleBlockCard {block} {readonly} {onUpdate} />
+          <ScheduleBlockCard
+            {block}
+            attachments={getAttachmentsForBlock(block)}
+            resolvedTaskId={getLinkedTaskForBlock(block)?.id ?? null}
+            {weekKey}
+            {readonly}
+            {onUpdate}
+            onMoveDay={onMoveBlockDay}
+            {onAttachmentAdded}
+            {onAttachmentDeleted}
+          />
         </div>
       {/each}
     </div>

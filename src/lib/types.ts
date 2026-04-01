@@ -45,6 +45,8 @@ export interface HistorySnapshot {
   period_label: string;
   completed_tasks: Task[];
   missed_tasks: Task[];
+  completed_schedule_blocks?: ScheduleBlock[];
+  missed_schedule_blocks?: ScheduleBlock[];
   planner_notes: Record<string, string>;
   completion_rate: number;
   created_at: string;

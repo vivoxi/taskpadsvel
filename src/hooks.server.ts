@@ -1,9 +1,7 @@
 import type { Handle } from '@sveltejs/kit';
 import { readFile } from 'fs/promises';
 import path from 'path';
-
-const UPLOADS_DIR = '/app/uploads';
-const NORMALIZED_UPLOADS_DIR = path.normalize(UPLOADS_DIR) + path.sep;
+import { UPLOADS_DIR, NORMALIZED_UPLOADS_DIR } from '$lib/server/uploads';
 
 function getMimeType(ext: string): string {
   const types: Record<string, string> = {

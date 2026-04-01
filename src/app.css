@@ -21,6 +21,8 @@
   --font-mono: 'Geist Mono', monospace;
 }
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @custom-variant data-open {
 	&:where([data-state="open"]), &:where([data-open]:not([data-open="false"])) {
 		@slot;

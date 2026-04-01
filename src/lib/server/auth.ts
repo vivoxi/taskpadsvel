@@ -1,11 +1,9 @@
-import { ADMIN_PASSWORD } from '$env/static/private';
-
 /**
  * Call at the top of every non-GET +server.ts handler.
  * Returns a 401 Response if auth fails, or null if auth passes.
  */
 export function requireAuth(request: Request): Response | null {
-  return _requireAuth(request, ADMIN_PASSWORD);
+  return _requireAuth(request, process.env.ADMIN_PASSWORD);
 }
 
 /**

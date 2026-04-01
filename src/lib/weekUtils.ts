@@ -4,6 +4,7 @@ import {
   startOfISOWeek,
   addDays,
   addWeeks as dateFnsAddWeeks,
+  addMonths as dateFnsAddMonths,
   format
 } from 'date-fns';
 
@@ -58,4 +59,14 @@ export function monthLabel(monthKey: string): string {
 
 export function addWeeks(date: Date, weeks: number): Date {
   return dateFnsAddWeeks(date, weeks);
+}
+
+export function addMonths(date: Date, months: number): Date {
+  return dateFnsAddMonths(date, months);
+}
+
+export function getWeekOfMonth(weekKey: string): number {
+  const days = getWeekDays(weekKey);
+  const anchor = days[2];
+  return Math.ceil(anchor.getDate() / 7);
 }

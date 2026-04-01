@@ -1,15 +1,21 @@
 import { supabase } from './supabase';
+import { parseScheduleBlockDetails } from './scheduleBlockDetails';
 import { getWeekKey, getMonthKey, weekLabel, monthLabel } from './weekUtils';
+import type { ScheduleBlock } from './types';
 
 /**
  * Captures a snapshot of tasks (and planner notes for weekly) before resetting.
  * Uses upsert so re-running is safe.
  */
-export async function takeSnapshot(type: 'weekly' | 'monthly'): Promise<void> {
+export async function takeSnapshot(
+  type: 'weekly' | 'monthly',
+  periodKey?: string
+): Promise<void> {
   const now = new Date();
-  const periodKey = type === 'weekly' ? getWeekKey(now) : getMonthKey(now);
+  const resolvedPeriodKey =
+    periodKey ?? (type === 'weekly' ? getWeekKey(now) : getMonthKey(now));
   const periodLabel =
-    type === 'weekly' ? weekLabel(periodKey) : monthLabel(periodKey);
+    type === 'weekly' ? weekLabel(resolvedPeriodKey) : monthLabel(resolvedPeriodKey);
 
   // Fetch tasks of this type
   const { data: tasks, error: tasksError } = await supabase
@@ -26,24 +32,44 @@ export async function takeSnapshot(type: 'weekly' | 'monthly'): Promise<void> {
 
   // Fetch planner notes (weekly only)
   let plannerNotes: Record<string, string> = {};
+  let completedScheduleBlocks: ScheduleBlock[] = [];
+  let missedScheduleBlocks: ScheduleBlock[] = [];
   if (type === 'weekly') {
     const { data: planRows } = await supabase
       .from('weekly_plan')
       .select('day, content')
-      .eq('week_key', periodKey);
+      .eq('week_key', resolvedPeriodKey);
 
     if (planRows) {
       plannerNotes = Object.fromEntries(planRows.map((r) => [r.day, r.content]));
     }
+
+    const { data: scheduleRows, error: scheduleError } = await supabase
+      .from('weekly_schedule')
+      .select('*')
+      .eq('week_key', resolvedPeriodKey)
+      .order('sort_order', { ascending: true });
+
+    if (scheduleError) throw scheduleError;
+
+    const scheduleBlocks = (scheduleRows ?? []) as ScheduleBlock[];
+    completedScheduleBlocks = scheduleBlocks.filter((block) =>
+      parseScheduleBlockDetails(block.notes).completed
+    );
+    missedScheduleBlocks = scheduleBlocks.filter(
+      (block) => !parseScheduleBlockDetails(block.notes).completed
+    );
   }
 
   const { error: upsertError } = await supabase.from('history_snapshots').upsert(
     {
       period_type: type,
-      period_key: periodKey,
+      period_key: resolvedPeriodKey,
       period_label: periodLabel,
       completed_tasks: completedTasks,
       missed_tasks: missedTasks,
+      completed_schedule_blocks: completedScheduleBlocks,
+      missed_schedule_blocks: missedScheduleBlocks,
       planner_notes: plannerNotes,
       completion_rate: completionRate
     },

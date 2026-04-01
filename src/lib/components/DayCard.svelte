@@ -17,11 +17,15 @@
     readonly?: boolean;
   } = $props();
 
-  let content = $state(initialContent);
+  let content = $state('');
 
-  const saveContent = debounce(async (value: string) => {
+  $effect(() => {
+    content = initialContent;
+  });
+
+  const saveContent = debounce(async (weekKeyValue: string, dayValue: string, value: string) => {
     const { error } = await supabase.from('weekly_plan').upsert(
-      { week_key: weekKey, day, content: value },
+      { week_key: weekKeyValue, day: dayValue, content: value },
       { onConflict: 'week_key,day' }
     );
     if (error) toast.error('Failed to save planner note');
@@ -29,7 +33,7 @@
 
   function onInput(e: Event) {
     content = (e.target as HTMLTextAreaElement).value;
-    saveContent(content);
+    saveContent(weekKey, day, content);
   }
 </script>
 

@@ -3,9 +3,8 @@ import { unlink } from 'fs/promises';
 import path from 'path';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { UPLOADS_DIR, NORMALIZED_UPLOADS_DIR } from '$lib/server/uploads';
 import type { RequestHandler } from './$types';
-
-const UPLOADS_DIR = '/app/uploads';
 
 export const DELETE: RequestHandler = async ({ request, params }) => {
   const authError = requireAuth(request);
@@ -23,8 +22,7 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 
   // Build file path and validate
   const filePath = path.join(UPLOADS_DIR, attachment.week_key ?? '', attachment.filename);
-  const normalizedBase = path.normalize(UPLOADS_DIR) + path.sep;
-  if (!filePath.startsWith(normalizedBase)) {
+  if (!filePath.startsWith(NORMALIZED_UPLOADS_DIR)) {
     throw error(400, 'Invalid path');
   }
 

@@ -1,12 +1,89 @@
 import { json, error } from '@sveltejs/kit';
-import Anthropic from '@anthropic-ai/sdk';
-import { ANTHROPIC_API_KEY } from '$env/static/private';
+import { generateScheduleText } from '$lib/server/ai';
+import { generateRuleBasedSchedule } from '$lib/server/ruleScheduler';
+import { serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { toSchedulableTask } from '$lib/taskDetails';
 import type { RequestHandler } from './$types';
 import type { Task } from '$lib/types';
 
-const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+const WORK_WINDOWS = [
+  { start: '10:00', end: '13:00' },
+  { start: '14:00', end: '17:00' }
+] as const;
+
+type GeneratedBlock = {
+  day: string;
+  start_time: string;
+  end_time: string;
+  task_title: string;
+  notes: string;
+  linked_task_id?: string;
+  linked_task_type?: Task['type'];
+};
+
+function extractJsonArray(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return trimmed;
+  }
+
+  const firstBracket = trimmed.indexOf('[');
+  const lastBracket = trimmed.lastIndexOf(']');
+  if (firstBracket === -1 || lastBracket === -1 || lastBracket <= firstBracket) {
+    throw new Error('No JSON array found in AI response');
+  }
+
+  return trimmed.slice(firstBracket, lastBracket + 1);
+}
+
+function validateBlocks(value: unknown): GeneratedBlock[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Response is not an array');
+  }
+
+  const isWithinWorkingHours = (start: string, end: string) =>
+    WORK_WINDOWS.some((window) => start >= window.start && end <= window.end && start < end);
+
+  return value.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`Block ${index + 1} is not an object`);
+    }
+
+    const candidate = item as Record<string, unknown>;
+    const day = String(candidate.day ?? '');
+    const start_time = String(candidate.start_time ?? '');
+    const end_time = String(candidate.end_time ?? '');
+    const task_title = String(candidate.task_title ?? '');
+    const notes = typeof candidate.notes === 'string' ? candidate.notes : '';
+
+    if (!DAY_NAMES.includes(day as (typeof DAY_NAMES)[number])) {
+      throw new Error(`Block ${index + 1} has invalid day`);
+    }
+
+    if (!/^\d{2}:\d{2}$/.test(start_time) || !/^\d{2}:\d{2}$/.test(end_time)) {
+      throw new Error(`Block ${index + 1} has invalid time format`);
+    }
+
+    if (!isWithinWorkingHours(start_time, end_time)) {
+      throw new Error(`Block ${index + 1} falls outside work hours 10:00-13:00 / 14:00-17:00`);
+    }
+
+    if (!task_title.trim()) {
+      throw new Error(`Block ${index + 1} is missing task_title`);
+    }
+
+    return {
+      day,
+      start_time,
+      end_time,
+      task_title,
+      notes
+    };
+  });
+}
 
 export const POST: RequestHandler = async ({ request }) => {
   const authError = requireAuth(request);
@@ -15,25 +92,53 @@ export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
   const {
     weekKey,
+    weekOfMonth,
+    plannerNotes,
     weeklyTasks,
     monthlyTasks,
-    randomTasks,
-    lastWeekCompletion
+    lastWeekCompletion,
+    mode
   }: {
     weekKey: string;
+    weekOfMonth?: number;
+    plannerNotes?: Record<string, string>;
     weeklyTasks: Task[];
     monthlyTasks: Task[];
-    randomTasks: Task[];
     lastWeekCompletion?: number;
+    mode?: 'ai' | 'rules';
   } = body;
 
   if (!weekKey) throw error(400, 'weekKey is required');
 
+  const describeTask = (label: string, task: Task): string => {
+    const normalizedTask = toSchedulableTask(task);
+    const estimatedHours = normalizedTask.estimated_hours ?? 1;
+    const notes = normalizedTask.scheduling_notes.trim();
+
+    return [
+      `[${label}] ${normalizedTask.title}`,
+      `hours=${estimatedHours}`,
+      normalizedTask.completed ? 'completed=yes' : 'completed=no',
+      normalizedTask.preferred_week_of_month
+        ? `preferred_week=${normalizedTask.preferred_week_of_month}`
+        : null,
+      normalizedTask.preferred_day ? `preferred_day=${normalizedTask.preferred_day}` : null,
+      notes ? `notes=${notes}` : null
+    ]
+      .filter(Boolean)
+      .join(' | ');
+  };
+
+  const linkedTasks = [...weeklyTasks, ...monthlyTasks];
+
   const taskLines = [
-    ...weeklyTasks.map((t: Task) => `[Weekly] ${t.title}${t.completed ? ' ✓' : ''}`),
-    ...monthlyTasks.map((t: Task) => `[Monthly] ${t.title}${t.completed ? ' ✓' : ''}`),
-    ...randomTasks.map((t: Task) => `[Random] ${t.title}${t.completed ? ' ✓' : ''}`)
+    ...weeklyTasks.map((t: Task) => describeTask('Weekly', t)),
+    ...monthlyTasks.map((t: Task) => describeTask('Monthly', t))
   ].join('\n');
+
+  const plannerLines = Object.entries(plannerNotes ?? {})
+    .map(([day, content]) => `${day}: ${content}`)
+    .join('\n');
 
   const completionNote =
     lastWeekCompletion !== undefined
@@ -41,10 +146,14 @@ export const POST: RequestHandler = async ({ request }) => {
       : '';
 
   const prompt = `You are a personal productivity assistant. Create a weekly schedule for ${weekKey}.
+This is week ${weekOfMonth ?? '?'} of the month.
 
 Tasks to schedule:
 ${taskLines || '(No tasks — create a light general schedule)'}
 ${completionNote}
+
+Daily planner notes and constraints for this week:
+${plannerLines || '(No planner notes provided)'}
 
 Return ONLY a JSON array. No markdown fences. No explanation. Each element must have exactly these fields:
 {
@@ -56,44 +165,52 @@ Return ONLY a JSON array. No markdown fences. No explanation. Each element must 
 }
 
 Rules:
+- Work hours are 10:00-17:00 with a mandatory break from 13:00-14:00
+- Schedule blocks only inside these windows: 10:00-13:00 and 14:00-17:00
+- Never place any task during 13:00-14:00
 - Use 24-hour time format (e.g., "09:00", "14:30")
+- Make the plan concrete and specific. Do not write generic labels like "Monthly work", "General control", or "Weekly tasks".
+- task_title must be exactly one of the provided task titles. Do not paraphrase task names.
+- Use the provided hours field as the approximate total effort needed for each task this week
+- Split tasks into as many focus blocks as needed to cover their estimated hours realistically
+- Prefer 30-120 minute blocks, but allow longer blocks when necessary
 - Distribute tasks realistically across Mon–Fri primarily
-- Include short focus blocks (25–90 min each)
+- Use weekly tasks as recurring priorities that should be placed on specific days this week
+- If a weekly task has preferred_day, place it on that day unless planner notes conflict
+- Choose only the monthly tasks that should realistically be worked on in this specific week of the month
+- If a monthly task has preferred_week, strongly prefer it only in that week of the month
+- If a monthly task has preferred_day, place it on that day unless planner notes conflict
+- If planner notes mention a task, day, time window, dependency, or sequence, follow those notes closely
+- If planner notes include example time blocks, reuse those blocks instead of inventing vague placeholders
+- Make sure every weekly task appears at least once in the schedule
+- Do not schedule random tasks at all
 - Keep notes brief (one sentence max, or empty string)
 - Return the raw JSON array only`;
 
   let responseText: string;
+  let blocks: GeneratedBlock[];
 
-  try {
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }]
+  if (mode === 'ai') {
+    try {
+      responseText = await generateScheduleText(prompt);
+    } catch (err) {
+      throw error(502, `${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    responseText = responseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+
+    try {
+      blocks = validateBlocks(JSON.parse(extractJsonArray(responseText)));
+    } catch (parseErr) {
+      throw error(500, `Failed to parse AI response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+    }
+  } else {
+    blocks = generateRuleBasedSchedule({
+      weekOfMonth,
+      plannerNotes,
+      weeklyTasks,
+      monthlyTasks
     });
-
-    const content = message.content[0];
-    if (content.type !== 'text') throw new Error('Unexpected response type');
-    responseText = content.text.trim();
-  } catch (err) {
-    throw error(502, `Claude API error: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  // Strip possible markdown fences
-  responseText = responseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-
-  let blocks: Array<{
-    day: string;
-    start_time: string;
-    end_time: string;
-    task_title: string;
-    notes: string;
-  }>;
-
-  try {
-    blocks = JSON.parse(responseText);
-    if (!Array.isArray(blocks)) throw new Error('Response is not an array');
-  } catch (parseErr) {
-    throw error(500, `Failed to parse AI response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
   }
 
   // Replace existing schedule for this week
@@ -105,6 +222,11 @@ Rules:
   if (deleteError) throw error(500, deleteError.message);
 
   const toInsert = blocks.map((b, i) => ({
+    linkedTask:
+      linkedTasks.find((task) => task.id === b.linked_task_id) ??
+      linkedTasks.find(
+        (task) => task.title === b.task_title && (!b.linked_task_type || task.type === b.linked_task_type)
+      ),
     week_key: weekKey,
     day: b.day,
     start_time: b.start_time,
@@ -112,6 +234,14 @@ Rules:
     task_title: b.task_title,
     notes: b.notes ?? '',
     sort_order: i
+  })).map(({ linkedTask, ...block }) => ({
+    ...block,
+    notes: serializeScheduleBlockDetails(
+      block.notes,
+      false,
+      linkedTask?.id ?? null,
+      linkedTask?.type ?? null
+    )
   }));
 
   const { data, error: insertError } = await supabaseAdmin
