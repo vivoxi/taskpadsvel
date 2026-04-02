@@ -187,6 +187,37 @@
     return date ? format(date, 'd MMM') : '';
   }
 
+  function mergeMonthlyInstances(
+    persistedInstances: PersistedPeriodTaskInstance[],
+    templateInstances: PersistedPeriodTaskInstance[]
+  ): PersistedPeriodTaskInstance[] {
+    const templateByKey = new Map(
+      templateInstances.map((instance) => [instance.instance_key, instance])
+    );
+
+    const mergedInstances = persistedInstances
+      .filter((instance) => templateByKey.has(instance.instance_key))
+      .map((instance) => {
+        const templateInstance = templateByKey.get(instance.instance_key);
+        if (!templateInstance) return instance;
+
+        return {
+          ...templateInstance,
+          preferred_week_of_month:
+            instance.preferred_week_of_month ?? templateInstance.preferred_week_of_month,
+          preferred_day: instance.preferred_day ?? templateInstance.preferred_day,
+          carryover: templateInstance.carryover,
+          carryover_source_period_key: templateInstance.carryover_source_period_key
+        };
+      });
+
+    const mergedKeys = new Set(mergedInstances.map((instance) => instance.instance_key));
+    return [
+      ...mergedInstances,
+      ...templateInstances.filter((instance) => !mergedKeys.has(instance.instance_key))
+    ];
+  }
+
   $effect(() => {
     if (isPastMonth) {
       monthlyPeriodInstances = [];
@@ -195,7 +226,7 @@
 
     const persisted = parsePersistedPeriodInstances(monthlyInstancesQuery.data);
     monthlyPeriodInstances = persisted?.instances.length
-      ? persisted.instances
+      ? mergeMonthlyInstances(persisted.instances, generatedMonthlyInstances)
       : generatedMonthlyInstances;
   });
 
@@ -234,8 +265,11 @@
     }
 
     const persisted = parsePersistedPeriodInstances(monthlyInstancesQuery.data);
+    const nextInstances = persisted?.instances.length
+      ? mergeMonthlyInstances(persisted.instances, generatedMonthlyInstances)
+      : generatedMonthlyInstances;
     const nextValue = {
-      instances: generatedMonthlyInstances,
+      instances: nextInstances,
       updatedAt: new Date().toISOString()
     };
 
