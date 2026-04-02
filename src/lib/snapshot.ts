@@ -1,7 +1,15 @@
+import {
+  getMonthlyInstanceStatusStorageKey,
+  getMonthlyInstancesStorageKey,
+  getWeeklyInstanceStatusStorageKey,
+  getWeeklyInstancesStorageKey,
+  parsePersistedPeriodInstanceStatus,
+  parsePersistedPeriodInstances
+} from './periodInstances';
 import { supabase } from './supabase';
 import { parseScheduleBlockDetails } from './scheduleBlockDetails';
 import { getWeekKey, getMonthKey, weekLabel, monthLabel } from './weekUtils';
-import type { ScheduleBlock } from './types';
+import type { ScheduleBlock, Task } from './types';
 
 /**
  * Captures a snapshot of tasks (and planner notes for weekly) before resetting.
@@ -26,9 +34,45 @@ export async function takeSnapshot(
   if (tasksError) throw tasksError;
   if (!tasks) return;
 
-  const completedTasks = tasks.filter((t) => t.completed);
-  const missedTasks = tasks.filter((t) => !t.completed);
-  const completionRate = tasks.length > 0 ? completedTasks.length / tasks.length : 0;
+  let completedTasks = tasks.filter((t) => t.completed);
+  let missedTasks = tasks.filter((t) => !t.completed);
+  let completionRate = tasks.length > 0 ? completedTasks.length / tasks.length : 0;
+
+  const instancesStorageKey =
+    type === 'weekly'
+      ? getWeeklyInstancesStorageKey(resolvedPeriodKey)
+      : getMonthlyInstancesStorageKey(resolvedPeriodKey);
+  const instanceStatusStorageKey =
+    type === 'weekly'
+      ? getWeeklyInstanceStatusStorageKey(resolvedPeriodKey)
+      : getMonthlyInstanceStatusStorageKey(resolvedPeriodKey);
+
+  const [{ data: persistedInstancesRow }, { data: persistedStatusRow }] = await Promise.all([
+    supabase.from('user_preferences').select('value').eq('key', instancesStorageKey).maybeSingle(),
+    supabase.from('user_preferences').select('value').eq('key', instanceStatusStorageKey).maybeSingle()
+  ]);
+
+  const persistedInstances = parsePersistedPeriodInstances(persistedInstancesRow?.value);
+  const persistedStatus = parsePersistedPeriodInstanceStatus(persistedStatusRow?.value);
+
+  if (persistedInstances?.instances.length) {
+    const completedKeys = new Set(persistedStatus?.completedInstanceKeys ?? []);
+    const materializedTasks = persistedInstances.instances.map(
+      (instance): Task => ({
+        id: instance.template_id,
+        title: instance.title,
+        type: instance.type,
+        completed: completedKeys.has(instance.instance_key),
+        notes: instance.notes,
+        created_at: instance.created_at
+      })
+    );
+
+    completedTasks = materializedTasks.filter((task) => task.completed);
+    missedTasks = materializedTasks.filter((task) => !task.completed);
+    completionRate =
+      materializedTasks.length > 0 ? completedTasks.length / materializedTasks.length : 0;
+  }
 
   // Fetch planner notes (weekly only)
   let plannerNotes: Record<string, string> = {};

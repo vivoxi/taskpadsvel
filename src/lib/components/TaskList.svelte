@@ -12,6 +12,12 @@
   import { GripVertical } from 'lucide-svelte';
   import { Progress } from '$lib/components/ui/progress/index.js';
   import TaskRow from './TaskRow.svelte';
+  import {
+    getMonthlyInstanceStatusStorageKey,
+    getWeeklyInstanceStatusStorageKey,
+    parsePersistedPeriodInstanceStatus,
+    updateCompletedInstanceKeys
+  } from '$lib/periodInstances';
   import { parseScheduleBlockDetails, serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import { supabase } from '$lib/supabase';
   import { authPassword } from '$lib/stores';
@@ -29,6 +35,7 @@
 
   const queryClient = useQueryClient();
   const weekKey = getWeekKey();
+  const monthKey = getMonthKey();
   const taskOrderStorageKey = $derived(`${TASK_ORDER_STORAGE_PREFIX}${type}`);
 
   // --- Queries ---
@@ -59,6 +66,29 @@
       return (data ?? []) as TaskAttachment[];
     },
     enabled: tasksQuery.isSuccess && taskIds.length > 0
+  }));
+
+  const instanceStatusStorageKey = $derived(
+    type === 'weekly'
+      ? getWeeklyInstanceStatusStorageKey(weekKey)
+      : type === 'monthly'
+        ? getMonthlyInstanceStatusStorageKey(monthKey)
+        : null
+  );
+
+  const instanceStatusQuery = createQuery(() => ({
+    queryKey: ['period_instance_status', type, instanceStatusStorageKey] as const,
+    queryFn: async () => {
+      if (!instanceStatusStorageKey) return null;
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('value')
+        .eq('key', instanceStatusStorageKey)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.value ?? null;
+    },
+    enabled: type !== 'random'
   }));
 
   let taskOrder = $state<string[]>([]);
@@ -124,6 +154,28 @@
     localTasks = orderedTasks;
   });
 
+  const completedInstanceKeys = $derived(
+    parsePersistedPeriodInstanceStatus(instanceStatusQuery.data)?.completedInstanceKeys ?? []
+  );
+
+  function getInstanceKeyForTask(task: Task): string | null {
+    if (task.type === 'weekly') return `weekly:${task.id}:${weekKey}`;
+    if (task.type === 'monthly') return `monthly:${task.id}:${monthKey}`;
+    return null;
+  }
+
+  const displayTasks = $derived(
+    localTasks.map((task) => {
+      if (task.type === 'random') return task;
+      const instanceKey = getInstanceKeyForTask(task);
+      if (!instanceKey) return task;
+      return {
+        ...task,
+        completed: completedInstanceKeys.includes(instanceKey)
+      };
+    })
+  );
+
   $effect(() => {
     if (!browser || !taskOrderLoaded) return;
     localStorage.setItem(taskOrderStorageKey, JSON.stringify(taskOrder));
@@ -133,8 +185,8 @@
       .then(({ error }) => { if (error) console.error('Failed to save task order', error); });
   });
 
-  const completedCount = $derived((tasksQuery.data ?? []).filter((t) => t.completed).length);
-  const totalCount = $derived((tasksQuery.data ?? []).length);
+  const completedCount = $derived(displayTasks.filter((t) => t.completed).length);
+  const totalCount = $derived(displayTasks.length);
   const progressValue = $derived(totalCount > 0 ? (completedCount / totalCount) * 100 : 0);
 
   function getAttachmentsForTask(taskId: string): TaskAttachment[] {
@@ -260,7 +312,8 @@
           details.notes,
           completed,
           details.linkedTaskId,
-          details.linkedTaskType
+          details.linkedTaskType,
+          details.linkedInstanceKey
         )
       };
     });
@@ -283,6 +336,49 @@
 
   async function toggleTask(id: string, completed: boolean) {
     const task = (tasksQuery.data ?? []).find((entry) => entry.id === id);
+    if (!task) return;
+
+    if (task.type !== 'random') {
+      if (!instanceStatusStorageKey) return;
+
+      const nextCompletedInstanceKeys = updateCompletedInstanceKeys(
+        completedInstanceKeys,
+        getInstanceKeyForTask(task) ?? '',
+        completed
+      );
+      const updatedAt = new Date().toISOString();
+
+      const { error } = await supabase.from('user_preferences').upsert(
+        {
+          key: instanceStatusStorageKey,
+          value: {
+            completedInstanceKeys: nextCompletedInstanceKeys,
+            updatedAt
+          },
+          updated_at: updatedAt
+        },
+        { onConflict: 'key' }
+      );
+
+      if (error) {
+        toast.error('Failed to update task');
+        return;
+      }
+
+      queryClient.setQueryData(['period_instance_status', type, instanceStatusStorageKey], {
+        completedInstanceKeys: nextCompletedInstanceKeys,
+        updatedAt
+      });
+
+      try {
+        await syncScheduleCompletionForTask(task, completed);
+      } catch (syncError) {
+        console.error(syncError);
+        toast.error('Task updated, but schedule sync failed');
+      }
+
+      return;
+    }
 
     let password = '';
     const unsub = authPassword.subscribe((value) => (password = value));
@@ -301,16 +397,6 @@
       toast.error('Failed to update task');
       return;
     }
-
-    if (task && task.type !== 'random') {
-      try {
-        await syncScheduleCompletionForTask(task, completed);
-      } catch (syncError) {
-        console.error(syncError);
-        toast.error('Task updated, but schedule sync failed');
-      }
-    }
-
     queryClient.invalidateQueries({ queryKey: ['tasks', type] });
     queryClient.invalidateQueries({ queryKey: ['tasks_all'] });
   }
@@ -398,7 +484,7 @@
       onfinalize={handleTaskOrderFinalize}
       class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
     >
-      {#each localTasks as task (task.id)}
+      {#each displayTasks as task (task.id)}
         <div class="flex items-start gap-2 group">
           <div class="pt-3 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
             <GripVertical size={14} />

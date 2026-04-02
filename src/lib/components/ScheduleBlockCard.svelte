@@ -190,6 +190,11 @@
     );
 
     if (saveError) throw saveError;
+
+    queryClient.setQueryData(['period_instance_status', parsedInstanceKey.periodType, storageKey], {
+      completedInstanceKeys,
+      updatedAt
+    });
   }
 
   async function syncLinkedTaskCompletion(updatedBlock: ScheduleBlock) {

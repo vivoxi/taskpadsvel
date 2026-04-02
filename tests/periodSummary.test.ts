@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeSnapshot, summarizeTasks } from '../src/lib/periodSummary';
+import { summarizeInstances, summarizeSnapshot, summarizeTasks } from '../src/lib/periodSummary';
 import { serializeTaskDetails } from '../src/lib/taskDetails';
 
 describe('periodSummary helpers', () => {
@@ -71,5 +71,61 @@ describe('periodSummary helpers', () => {
     expect(summary.completedHours).toBe(3);
     expect(summary.openHours).toBe(5);
     expect(summary.completionPercentage).toBe(50);
+  });
+
+  it('summarizes persisted instances using completed instance keys', () => {
+    const summary = summarizeInstances(
+      [
+        {
+          id: 'w1',
+          title: 'Bank',
+          type: 'weekly',
+          completed: false,
+          notes: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          scheduling_notes: '',
+          estimated_hours: 4,
+          preferred_week_of_month: null,
+          preferred_day: null,
+          category: null,
+          template_id: 'w1',
+          period_key: '2026-W14',
+          period_type: 'weekly',
+          instance_key: 'weekly:w1:2026-W14',
+          carryover: false,
+          carryover_source_period_key: null
+        },
+        {
+          id: 'w2',
+          title: 'Inventory',
+          type: 'weekly',
+          completed: false,
+          notes: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          scheduling_notes: '',
+          estimated_hours: 2,
+          preferred_week_of_month: null,
+          preferred_day: null,
+          category: null,
+          template_id: 'w2',
+          period_key: '2026-W14',
+          period_type: 'weekly',
+          instance_key: 'weekly:w2:2026-W14',
+          carryover: true,
+          carryover_source_period_key: '2026-W13'
+        }
+      ],
+      ['weekly:w1:2026-W14']
+    );
+
+    expect(summary).toEqual({
+      totalTasks: 2,
+      completedTasks: 1,
+      openTasks: 1,
+      plannedHours: 6,
+      completedHours: 4,
+      openHours: 2,
+      completionPercentage: 50
+    });
   });
 });

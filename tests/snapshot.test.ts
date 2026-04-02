@@ -61,6 +61,16 @@ describe('takeSnapshot', () => {
         };
       }
 
+      if (table === 'user_preferences') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+            }))
+          }))
+        };
+      }
+
       if (table === 'weekly_schedule') {
         return {
           select: vi.fn(() => ({
@@ -151,6 +161,16 @@ describe('takeSnapshot', () => {
       if (table === 'history_snapshots') {
         return {
           upsert: upsertMock
+        };
+      }
+
+      if (table === 'user_preferences') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+            }))
+          }))
         };
       }
 
