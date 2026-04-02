@@ -1,10 +1,12 @@
 import { json, error } from '@sveltejs/kit';
 import { generateRuleBasedSchedule } from '$lib/server/ruleScheduler';
 import type { MaterializedTaskInstance } from '$lib/recurringTasks';
+import { materializeWeeklyTaskInstances } from '$lib/recurringTasks';
 import { serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { getMonthKey, getPreviousMonthKey, getPreviousWeekKey, getWeekDays } from '$lib/weekUtils';
+import { getWeeklyInstancesStorageKey } from '$lib/periodInstances';
 import type { RequestHandler } from './$types';
 import type { HistorySnapshot, Task } from '$lib/types';
 
@@ -112,5 +114,24 @@ export const POST: RequestHandler = async ({ request }) => {
     .select();
 
   if (insertError) throw error(500, insertError.message);
+
+  const weeklyInstances = materializeWeeklyTaskInstances(weeklyTasks, weekKey).map((instance) => ({
+    ...instance,
+    carryover: false,
+    carryover_source_period_key: null
+  }));
+
+  const updatedAt = new Date().toISOString();
+  const { error: instancesError } = await supabaseAdmin.from('user_preferences').upsert(
+    {
+      key: getWeeklyInstancesStorageKey(weekKey),
+      value: { instances: weeklyInstances, updatedAt },
+      updated_at: updatedAt
+    },
+    { onConflict: 'key' }
+  );
+
+  if (instancesError) throw error(500, instancesError.message);
+
   return json(data);
 };

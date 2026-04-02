@@ -41,6 +41,7 @@ function makeWeeklyScheduleTable(data: unknown[] = []) {
     select: typeof selectMock;
   });
   const snapshotMaybeSingleMock = vi.fn().mockResolvedValue({ data: null, error: null });
+  const upsertMock = vi.fn().mockResolvedValue({ error: null });
 
   fromMock.mockImplementation((table: string) => {
     if (table === 'weekly_schedule') {
@@ -62,10 +63,14 @@ function makeWeeklyScheduleTable(data: unknown[] = []) {
       };
     }
 
+    if (table === 'user_preferences') {
+      return { upsert: upsertMock };
+    }
+
     throw new Error(`Unexpected table: ${table}`);
   });
 
-  return { eqDeleteMock, insertMock, snapshotMaybeSingleMock };
+  return { eqDeleteMock, insertMock, snapshotMaybeSingleMock, upsertMock };
 }
 
 describe('schedule generate API', () => {
@@ -87,7 +92,7 @@ describe('schedule generate API', () => {
   });
 
   it('stores rule-based schedule blocks with linked task metadata', async () => {
-    const { eqDeleteMock, insertMock } = makeWeeklyScheduleTable([
+    const { eqDeleteMock, insertMock, upsertMock } = makeWeeklyScheduleTable([
       { id: 'block-1', task_title: 'Bank reconciliation' }
     ]);
 
@@ -156,10 +161,11 @@ describe('schedule generate API', () => {
       linkedInstanceKey: 'weekly:weekly-1:2026-W14'
     });
     expect(await response.json()).toEqual([{ id: 'block-1', task_title: 'Bank reconciliation' }]);
+    expect(upsertMock).toHaveBeenCalledTimes(1);
   });
 
   it('uses monthly instances from This Month and ignores stale AI mode payloads', async () => {
-    const { insertMock } = makeWeeklyScheduleTable([{ id: 'block-2' }]);
+    const { insertMock, upsertMock } = makeWeeklyScheduleTable([{ id: 'block-2' }]);
 
     generateRuleBasedScheduleMock.mockReturnValue([
       {
@@ -241,5 +247,57 @@ describe('schedule generate API', () => {
       linkedInstanceKey: 'monthly:m1:2026-M04'
     });
     expect(await response.json()).toEqual([{ id: 'block-2' }]);
+    expect(upsertMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists weekly period instances to user_preferences after generate', async () => {
+    const { upsertMock } = makeWeeklyScheduleTable([{ id: 'block-1' }]);
+
+    generateRuleBasedScheduleMock.mockReturnValue([
+      {
+        day: 'Monday',
+        start_time: '10:00',
+        end_time: '12:00',
+        task_title: 'Bank reconciliation',
+        notes: '',
+        linked_task_id: 'weekly-1',
+        linked_task_type: 'weekly',
+        linked_instance_key: 'weekly:weekly-1:2026-W14'
+      }
+    ]);
+
+    await POST({
+      request: new Request('http://localhost/api/schedule/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test'
+        },
+        body: JSON.stringify({
+          weekKey: '2026-W14',
+          weekOfMonth: 1,
+          plannerNotes: {},
+          weeklyTasks: [weeklyTask],
+          monthlyTasks: []
+        })
+      })
+    } as never);
+
+    expect(upsertMock).toHaveBeenCalledTimes(1);
+    const [upsertArg, upsertOptions] = upsertMock.mock.calls[0] as [
+      Record<string, unknown>,
+      Record<string, unknown>
+    ];
+    expect(upsertArg.key).toBe('period_instances:weekly:2026-W14');
+    expect(upsertOptions).toMatchObject({ onConflict: 'key' });
+    const value = upsertArg.value as { instances: unknown[]; updatedAt: string };
+    expect(value.instances).toHaveLength(1);
+    expect(value.instances[0]).toMatchObject({
+      template_id: 'weekly-1',
+      period_type: 'weekly',
+      period_key: '2026-W14',
+      carryover: false,
+      carryover_source_period_key: null
+    });
   });
 });
