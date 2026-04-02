@@ -132,18 +132,15 @@
   );
   const overallPercentage = $derived(totalTasks > 0 ? Math.round((totalCompleted / totalTasks) * 100) : 0);
   const loading = $derived(
-    tasksQuery.isLoading ||
-      scheduleQuery.isLoading ||
-      latestWeeklySnapshotQuery.isLoading ||
-      latestMonthlySnapshotQuery.isLoading
+    tasksQuery.isLoading || scheduleQuery.isLoading
   );
   const hasError = $derived(
     Boolean(
-      tasksQuery.error ||
-        scheduleQuery.error ||
-        latestWeeklySnapshotQuery.error ||
-      latestMonthlySnapshotQuery.error
+      tasksQuery.error || scheduleQuery.error
     )
+  );
+  const archiveHasError = $derived(
+    Boolean(latestWeeklySnapshotQuery.error || latestMonthlySnapshotQuery.error)
   );
   const metricCards = $derived<MetricCard[]>([
     {
@@ -365,7 +362,9 @@
           <div class="mt-6 space-y-4">
             <div class="rounded-[22px] border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-xs uppercase tracking-[0.18em] text-zinc-400">Weekly Archive</div>
-              {#if latestWeeklySnapshotQuery.data}
+              {#if latestWeeklySnapshotQuery.isLoading}
+                <div class="mt-2 text-sm text-zinc-400">Yukleniyor…</div>
+              {:else if latestWeeklySnapshotQuery.data}
                 <div class="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-50">
                   {Math.round((latestWeeklySnapshotQuery.data.completion_rate ?? 0) * 100)}%
                 </div>
@@ -379,7 +378,9 @@
 
             <div class="rounded-[22px] border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-xs uppercase tracking-[0.18em] text-zinc-400">Monthly Archive</div>
-              {#if latestMonthlySnapshotQuery.data}
+              {#if latestMonthlySnapshotQuery.isLoading}
+                <div class="mt-2 text-sm text-zinc-400">Yukleniyor…</div>
+              {:else if latestMonthlySnapshotQuery.data}
                 <div class="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-50">
                   {Math.round((latestMonthlySnapshotQuery.data.completion_rate ?? 0) * 100)}%
                 </div>
@@ -390,6 +391,12 @@
                 <div class="mt-2 text-sm text-zinc-400">Henuz monthly arsiv yok.</div>
               {/if}
             </div>
+
+            {#if archiveHasError}
+              <div class="rounded-[18px] border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+                Arsiv verileri simdilik yuklenemedi, ama canli metrikler gorunuyor.
+              </div>
+            {/if}
           </div>
         </article>
       </section>
