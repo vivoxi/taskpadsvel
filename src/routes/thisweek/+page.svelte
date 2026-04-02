@@ -1,6 +1,6 @@
 <script lang="ts">
   import { format } from 'date-fns';
-  import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-svelte';
+  import { ChevronLeft, ChevronRight } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
@@ -10,8 +10,8 @@
   import { normalizeScheduleDayBlocks } from '$lib/scheduleLayout';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import { supabase } from '$lib/supabase';
-  import { weekOffset, generatedWeeks, authPassword } from '$lib/stores';
-  import { getWeekKey, getWeekDays, getWeekOfMonth, weekLabel, addWeeks, DAY_NAMES } from '$lib/weekUtils';
+  import { weekOffset } from '$lib/stores';
+  import { getWeekKey, getWeekDays, weekLabel, addWeeks, DAY_NAMES } from '$lib/weekUtils';
   import type { ScheduleBlock, WeeklyPlan, HistorySnapshot, Task, TaskAttachment, TaskType } from '$lib/types';
 
   const queryClient = useQueryClient();
@@ -19,7 +19,6 @@
   const currentWeekKey = $derived(getWeekKey(addWeeks(today, $weekOffset)));
   const isPastWeek = $derived($weekOffset < 0);
   const weekDays = $derived(getWeekDays(currentWeekKey));
-  const weekOfMonth = $derived(getWeekOfMonth(currentWeekKey));
 
   function isToday(dayIndex: number): boolean {
     if ($weekOffset !== 0) return false;
@@ -47,12 +46,6 @@
 
   function getPlanContent(day: string): string {
     return planQuery.data?.find((p) => p.day === day)?.content ?? '';
-  }
-
-  function getPlannerNotesPayload(): Record<string, string> {
-    return Object.fromEntries(
-      DAY_NAMES.map((day) => [day, getPlanContent(day).trim()]).filter(([, content]) => content.length > 0)
-    );
   }
 
   const scheduleQuery = createQuery(() => ({
@@ -128,55 +121,6 @@
     },
     enabled: browser && !isPastWeek && linkedTaskIds.length > 0
   }));
-
-  let generating = $state(false);
-  let autoGenAttempted = $state(false);
-
-  $effect(() => {
-    if (!browser || isPastWeek || autoGenAttempted) return;
-    if (!scheduleQuery.data || !tasksQuery.data) return;
-    if (scheduleQuery.data.length > 0) return;
-    let alreadyGenerated = false;
-    generatedWeeks.subscribe((s) => (alreadyGenerated = s.has(currentWeekKey)))();
-    if (alreadyGenerated) return;
-    autoGenAttempted = true;
-    generateSchedule('rules');
-  });
-
-  async function generateSchedule(mode: 'rules' | 'ai' = 'rules') {
-    if (isPastWeek || generating) return;
-    generating = true;
-    const tasks = tasksQuery.data ?? [];
-    let password = '';
-    authPassword.subscribe((p) => (password = p))();
-    try {
-      const res = await fetch('/api/schedule/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(password ? { Authorization: `Bearer ${password}` } : {})
-        },
-        body: JSON.stringify({
-          mode,
-          weekKey: currentWeekKey,
-          weekOfMonth,
-          plannerNotes: getPlannerNotesPayload(),
-          weeklyTasks: tasks.filter((t) => t.type === 'weekly'),
-          monthlyTasks: tasks.filter((t) => t.type === 'monthly')
-        })
-      });
-      if (!res.ok) throw new Error(await res.text());
-      generatedWeeks.update((s) => new Set([...s, currentWeekKey]));
-      queryClient.invalidateQueries({ queryKey: ['weekly_schedule', currentWeekKey] });
-      toast.success(mode === 'ai' ? 'AI schedule generated' : 'Schedule generated');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to generate schedule';
-      toast.error(message.slice(0, 180));
-      console.error(err);
-    } finally {
-      generating = false;
-    }
-  }
 
   const snapshotQuery = createQuery(() => ({
     queryKey: ['snapshot', currentWeekKey] as const,
@@ -429,23 +373,12 @@
     {#if isPastWeek}
       <span class="text-xs text-zinc-400 italic">Archived Week — Read Only</span>
     {:else}
-      <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-        <button
-          onclick={() => generateSchedule('rules')}
-          disabled={generating}
-          class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw size={12} class={generating ? 'animate-spin' : ''} />
-          {generating ? 'Generating…' : 'Generate'}
-        </button>
-        <button
-          onclick={() => generateSchedule('ai')}
-          disabled={generating}
-          class="px-3 py-1.5 text-xs rounded-md border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 disabled:opacity-50 transition-colors"
-        >
-          Generate with AI
-        </button>
-      </div>
+      <a
+        href="/thismonth"
+        class="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      >
+        Generate from This Month
+      </a>
     {/if}
   </div>
 
@@ -630,21 +563,16 @@
           {/if}
         </div>
 
-        <!-- Right: AI schedule blocks -->
+        <!-- Right: weekly schedule blocks -->
         <div class="flex flex-col gap-4">
           <h3 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-            AI Schedule
+            Weekly Schedule
           </h3>
           {#if scheduleQuery.isLoading}
             <div class="text-sm text-zinc-400">Loading…</div>
-          {:else if (scheduleQuery.data ?? []).length === 0 && !generating}
+          {:else if (scheduleQuery.data ?? []).length === 0}
             <div class="text-sm text-zinc-400 italic py-4">
-              No schedule yet. Click "Regenerate" to create one.
-            </div>
-          {:else if generating}
-            <div class="flex items-center gap-2 text-sm text-zinc-400 py-4">
-              <RefreshCw size={14} class="animate-spin" />
-              Generating schedule with AI…
+              No schedule yet. Open This Month and generate the monthly plan.
             </div>
           {:else}
             <div class="flex flex-col gap-6">

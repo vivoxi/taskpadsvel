@@ -1,7 +1,9 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { format } from 'date-fns';
+  import { dndzone, type DndEvent } from 'svelte-dnd-action';
+  import { ChevronLeft, ChevronRight, GripVertical, RefreshCw } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import {
     MONTHLY_PLAN_DAYS,
@@ -18,9 +20,21 @@
     type PersistedPeriodTaskInstance
   } from '$lib/periodInstances';
   import { summarizeInstances, summarizeSnapshot } from '$lib/periodSummary';
+  import {
+    parseScheduleBlockDetails,
+    serializeScheduleBlockDetails
+  } from '$lib/scheduleBlockDetails';
+  import { authPassword } from '$lib/stores';
   import { supabase } from '$lib/supabase';
-  import { addMonths, getMonthKey, getPreviousMonthKey, monthLabel } from '$lib/weekUtils';
-  import type { HistorySnapshot, Task } from '$lib/types';
+  import {
+    addMonths,
+    getMonthKey,
+    getMonthWeekKey,
+    getPreviousMonthKey,
+    getWeekDays,
+    monthLabel
+  } from '$lib/weekUtils';
+  import type { HistorySnapshot, ScheduleBlock, Task } from '$lib/types';
 
   const queryClient = useQueryClient();
   const today = new Date();
@@ -41,6 +55,20 @@
         .from('tasks')
         .select('*')
         .eq('type', 'monthly')
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Task[];
+    },
+    enabled: browser && !isPastMonth
+  }));
+
+  const weeklyTasksQuery = createQuery(() => ({
+    queryKey: ['thismonth_page', 'weekly_tasks'] as const,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('type', 'weekly')
         .order('created_at', { ascending: true });
       if (error) throw error;
       return (data ?? []) as Task[];
@@ -93,7 +121,7 @@
   }));
 
   const monthlyInstanceStatusQuery = createQuery(() => ({
-    queryKey: ['thismonth_page', 'period_instance_status', currentMonthKey] as const,
+    queryKey: ['period_instance_status', 'monthly', monthlyInstanceStatusStorageKey] as const,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('user_preferences')
@@ -108,6 +136,9 @@
 
   let monthlyPeriodInstances = $state<PersistedPeriodTaskInstance[]>([]);
   let monthlyCompletedInstanceKeys = $state<string[]>([]);
+  let localMonthCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
+  let localFlexibleInstances = $state<PersistedPeriodTaskInstance[]>([]);
+  let generatingMonth = $state(false);
 
   const generatedMonthlyInstances = $derived(
     createMonthlyPeriodInstances({
@@ -145,6 +176,17 @@
     );
   }
 
+  function getCellKey(week: number, day: string): string {
+    return `${week}:${day}`;
+  }
+
+  function getMonthCellDateLabel(week: number, day: string): string {
+    const weekDays = getWeekDays(getMonthWeekKey(currentMonthKey, week));
+    const dayIndex = MONTHLY_PLAN_DAYS.indexOf(day as (typeof MONTHLY_PLAN_DAYS)[number]);
+    const date = weekDays[dayIndex];
+    return date ? format(date, 'd MMM') : '';
+  }
+
   $effect(() => {
     if (isPastMonth) {
       monthlyPeriodInstances = [];
@@ -155,6 +197,19 @@
     monthlyPeriodInstances = persisted?.instances.length
       ? persisted.instances
       : generatedMonthlyInstances;
+  });
+
+  $effect(() => {
+    const board = buildMonthlyPlanBoardFromInstances(monthlyPeriodInstances);
+    const nextCells: Record<string, PersistedPeriodTaskInstance[]> = {};
+
+    for (const cell of board.cells) {
+      nextCells[getCellKey(cell.week, cell.day)] =
+        cell.tasks as PersistedPeriodTaskInstance[];
+    }
+
+    localMonthCells = nextCells;
+    localFlexibleInstances = board.flexibleTasks as PersistedPeriodTaskInstance[];
   });
 
   $effect(() => {
@@ -231,13 +286,180 @@
     }
 
     monthlyCompletedInstanceKeys = nextCompletedInstanceKeys;
+
+    await syncScheduleBlocksForInstance(instanceKey, !isInstanceCompleted(instanceKey));
+
     queryClient.setQueryData(
-      ['thismonth_page', 'period_instance_status', currentMonthKey],
+      ['period_instance_status', 'monthly', monthlyInstanceStatusStorageKey],
       {
         completedInstanceKeys: nextCompletedInstanceKeys,
         updatedAt
       }
     );
+  }
+
+  async function syncScheduleBlocksForInstance(instanceKey: string, completed: boolean) {
+    const monthWeekKeys = MONTHLY_PLAN_WEEKS.map((week) => getMonthWeekKey(currentMonthKey, week));
+    const { data, error } = await supabase
+      .from('weekly_schedule')
+      .select('id, notes, week_key, day, start_time, end_time, task_title, sort_order')
+      .in('week_key', monthWeekKeys);
+
+    if (error) {
+      toast.error('This Month updated, but This Week sync failed');
+      return;
+    }
+
+    const matchingBlocks = ((data ?? []) as ScheduleBlock[]).filter(
+      (block) => parseScheduleBlockDetails(block.notes).linkedInstanceKey === instanceKey
+    );
+
+    if (matchingBlocks.length === 0) return;
+
+    const results = await Promise.all(
+      matchingBlocks.map((block) => {
+        const details = parseScheduleBlockDetails(block.notes);
+        return supabase
+          .from('weekly_schedule')
+          .update({
+            notes: serializeScheduleBlockDetails(
+              details.notes,
+              completed,
+              details.linkedTaskId,
+              details.linkedTaskType,
+              details.linkedInstanceKey
+            )
+          })
+          .eq('id', block.id);
+      })
+    );
+
+    if (results.some((result) => result.error)) {
+      toast.error('This Month updated, but This Week sync failed');
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['weekly_schedule'] });
+  }
+
+  function updateCellItems(week: number, day: string, items: PersistedPeriodTaskInstance[]) {
+    localMonthCells = {
+      ...localMonthCells,
+      [getCellKey(week, day)]: items.map((instance) => ({
+        ...instance,
+        preferred_week_of_month: week,
+        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
+      }))
+    };
+  }
+
+  async function persistMonthlyInstances() {
+    const nextInstances = [
+      ...MONTHLY_PLAN_WEEKS.flatMap((week) =>
+        MONTHLY_PLAN_DAYS.flatMap((day) => localMonthCells[getCellKey(week, day)] ?? [])
+      ),
+      ...localFlexibleInstances
+    ];
+    const updatedAt = new Date().toISOString();
+    monthlyPeriodInstances = nextInstances;
+
+    const { error } = await supabase.from('user_preferences').upsert(
+      {
+        key: monthlyInstancesStorageKey,
+        value: {
+          instances: nextInstances,
+          updatedAt
+        },
+        updated_at: updatedAt
+      },
+      { onConflict: 'key' }
+    );
+
+    if (error) {
+      toast.error('Failed to save month board order');
+      return;
+    }
+
+    queryClient.setQueryData(['thismonth_page', 'period_instances', currentMonthKey], {
+      instances: nextInstances,
+      updatedAt
+    });
+  }
+
+  function handleCellConsider(
+    week: number,
+    day: string,
+    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
+  ) {
+    updateCellItems(week, day, event.detail.items);
+  }
+
+  async function handleCellFinalize(
+    week: number,
+    day: string,
+    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
+  ) {
+    updateCellItems(week, day, event.detail.items);
+    await persistMonthlyInstances();
+  }
+
+  function handleFlexibleConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
+    localFlexibleInstances = event.detail.items.map((instance) => ({
+      ...instance,
+      preferred_week_of_month: null,
+      preferred_day: null
+    }));
+  }
+
+  async function handleFlexibleFinalize(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
+    handleFlexibleConsider(event);
+    await persistMonthlyInstances();
+  }
+
+  async function generateMonthSchedule() {
+    if (isPastMonth || generatingMonth) return;
+    if (!weeklyTasksQuery.data) {
+      toast.error('Weekly templates are still loading');
+      return;
+    }
+
+    generatingMonth = true;
+
+    let password = '';
+    const unsubscribe = authPassword.subscribe((value) => (password = value));
+    unsubscribe();
+
+    try {
+      for (const week of MONTHLY_PLAN_WEEKS) {
+        const response = await fetch('/api/schedule/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(password ? { Authorization: `Bearer ${password}` } : {})
+          },
+          body: JSON.stringify({
+            weekKey: getMonthWeekKey(currentMonthKey, week),
+            weekOfMonth: week,
+            plannerNotes: {},
+            weeklyTasks: weeklyTasksQuery.data,
+            monthlyInstances: monthlyPeriodInstances
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['weekly_schedule'] });
+      toast.success('Month schedule generated');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to generate month schedule';
+      toast.error(message.slice(0, 180));
+      console.error(err);
+    } finally {
+      generatingMonth = false;
+    }
   }
 </script>
 
@@ -286,6 +508,16 @@
                 class="text-xs text-blue-600 hover:underline dark:text-blue-400"
               >
                 Current month
+              </button>
+            {/if}
+            {#if !isPastMonth}
+              <button
+                onclick={generateMonthSchedule}
+                disabled={generatingMonth}
+                class="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <RefreshCw size={12} class={generatingMonth ? 'animate-spin' : ''} />
+                {generatingMonth ? 'Generating…' : 'Generate Month'}
               </button>
             {/if}
           </div>
@@ -411,52 +643,83 @@
                   Week {week}
                 </div>
                 {#each MONTHLY_PLAN_DAYS as day}
-                  {@const cell = monthlyPlanBoard.cells.find(
-                    (item) => item.week === week && item.day === day
-                  )}
+                  {@const cellKey = getCellKey(week, day)}
+                  {@const cellTasks = localMonthCells[cellKey] ?? []}
                   <div class="min-h-[120px] rounded-[18px] border border-zinc-200 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
-                    {#if cell && cell.tasks.length > 0}
-                      <div class="flex flex-col gap-2">
-                        {#each cell.tasks as instance (instance.instance_key)}
-                          <button
-                            onclick={() => toggleInstance(instance.instance_key)}
-                            class={`w-full rounded-[14px] border px-3 py-2 text-left transition-colors ${
-                              isInstanceCompleted(instance.instance_key)
-                                ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-950/20'
-                                : 'border-sky-200/80 bg-sky-50/80 dark:border-sky-500/20 dark:bg-sky-950/18'
-                            }`}
-                          >
-                            <div
-                              class={`text-sm font-medium ${
+                    <div class="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-400">
+                      {getMonthCellDateLabel(week, day)}
+                    </div>
+                    <div
+                      use:dndzone={{
+                        items: cellTasks,
+                        flipDurationMs: 150,
+                        type: 'monthly-instance',
+                        dropTargetStyle: {
+                          outline: '2px dashed rgba(14, 165, 233, 0.45)',
+                          outlineOffset: '2px'
+                        }
+                      }}
+                      onconsider={(event) => handleCellConsider(week, day, event)}
+                      onfinalize={(event) => handleCellFinalize(week, day, event)}
+                      class="flex min-h-[76px] flex-col gap-2"
+                    >
+                      {#if cellTasks.length === 0}
+                        <div class="text-xs italic text-zinc-400">No fixed task</div>
+                      {:else}
+                        {#each cellTasks as instance (instance.instance_key)}
+                          <div class="group flex items-start gap-2">
+                            <div class="mt-3 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
+                              <GripVertical size={12} />
+                            </div>
+                            <button
+                              onclick={() => toggleInstance(instance.instance_key)}
+                              class={`w-full rounded-[14px] border px-3 py-2 text-left transition-colors ${
                                 isInstanceCompleted(instance.instance_key)
-                                  ? 'text-zinc-400 line-through'
-                                  : 'text-zinc-900 dark:text-zinc-100'
+                                  ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-950/20'
+                                  : 'border-sky-200/80 bg-sky-50/80 dark:border-sky-500/20 dark:bg-sky-950/18'
                               }`}
                             >
-                              {instance.title}
-                            </div>
-                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                              {instance.estimated_hours ?? 1}h{#if hasCarryover(instance)} · carry-over{/if}
-                            </div>
-                          </button>
+                              <div
+                                class={`text-sm font-medium ${
+                                  isInstanceCompleted(instance.instance_key)
+                                    ? 'text-zinc-400 line-through'
+                                    : 'text-zinc-900 dark:text-zinc-100'
+                                }`}
+                              >
+                                {instance.title}
+                              </div>
+                              <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                {instance.estimated_hours ?? 1}h{#if hasCarryover(instance)} · carry-over{/if}
+                              </div>
+                            </button>
+                          </div>
                         {/each}
-                      </div>
-                    {:else}
-                      <div class="text-xs italic text-zinc-400">No fixed task</div>
-                    {/if}
+                      {/if}
+                    </div>
                   </div>
                 {/each}
               {/each}
             </div>
           </div>
 
-          {#if monthlyPlanBoard.flexibleTasks.length > 0}
-            <div class="mt-5 rounded-[22px] border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-950/16">
-              <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
-                Flexible Monthly Tasks
-              </div>
-              <div class="mt-3 flex flex-wrap gap-2">
-                {#each monthlyPlanBoard.flexibleTasks as instance (instance.instance_key)}
+          <div class="mt-5 rounded-[22px] border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-950/16">
+            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
+              Flexible Monthly Tasks
+            </div>
+            <div
+              use:dndzone={{
+                items: localFlexibleInstances,
+                flipDurationMs: 150,
+                type: 'monthly-instance'
+              }}
+              onconsider={handleFlexibleConsider}
+              onfinalize={handleFlexibleFinalize}
+              class="mt-3 flex min-h-[44px] flex-wrap gap-2"
+            >
+              {#if localFlexibleInstances.length === 0}
+                <div class="text-xs italic text-zinc-400">No flexible task</div>
+              {:else}
+                {#each localFlexibleInstances as instance (instance.instance_key)}
                   <button
                     onclick={() => toggleInstance(instance.instance_key)}
                     class={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
@@ -468,9 +731,9 @@
                     {instance.title} · {instance.estimated_hours ?? 1}h
                   </button>
                 {/each}
-              </div>
+              {/if}
             </div>
-          {/if}
+          </div>
         </section>
       {/if}
     </div>

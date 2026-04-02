@@ -77,6 +77,14 @@ export function getPreviousMonthKey(monthKey: string): string {
   return getMonthKey(dateFnsAddMonths(date, -1));
 }
 
+export function getMonthWeekKey(monthKey: string, weekOfMonth: number): string {
+  const [yearStr, monthStr] = monthKey.split('-M');
+  const year = parseInt(yearStr, 10);
+  const monthIndex = parseInt(monthStr, 10) - 1;
+  const anchorDay = Math.max(1, (weekOfMonth - 1) * 7 + 3);
+  return getWeekKey(new Date(year, monthIndex, anchorDay));
+}
+
 export function getWeekOfMonth(weekKey: string): number {
   const days = getWeekDays(weekKey);
   const anchor = days[2];

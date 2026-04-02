@@ -19,12 +19,8 @@ export type MonthlyPlanBoard = {
   flexibleTasks: MonthlyPlanTask[];
 };
 
-function sortTasks<T extends MonthlyPlanTask>(tasks: T[]): T[] {
-  return [...tasks].sort((a, b) => {
-    const aHours = a.estimated_hours ?? 0;
-    const bHours = b.estimated_hours ?? 0;
-    return bHours - aHours || a.title.localeCompare(b.title);
-  });
+function copyTasks<T extends MonthlyPlanTask>(tasks: T[]): T[] {
+  return [...tasks];
 }
 
 export function buildMonthlyPlanBoard(tasks: Task[], monthKey: string): MonthlyPlanBoard {
@@ -42,7 +38,7 @@ export function buildMonthlyPlanBoardFromInstances(
       cells.push({
         week,
         day,
-        tasks: sortTasks(
+        tasks: copyTasks(
           instances.filter(
             (task) => task.preferred_week_of_month === week && task.preferred_day === day
           )
@@ -51,7 +47,7 @@ export function buildMonthlyPlanBoardFromInstances(
     }
   }
 
-  const flexibleTasks = sortTasks(
+  const flexibleTasks = copyTasks(
     instances.filter(
       (task) =>
         task.preferred_week_of_month === null ||

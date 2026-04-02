@@ -1,4 +1,9 @@
-import { materializeTasksForWeek, type MaterializedTaskInstance } from '$lib/recurringTasks';
+import {
+  filterMonthlyInstancesForWeek,
+  materializeMonthlyTaskInstances,
+  materializeWeeklyTaskInstances,
+  type MaterializedTaskInstance
+} from '$lib/recurringTasks';
 import { DAY_NAMES } from '$lib/weekUtils';
 import type { Task, TaskType } from '$lib/types';
 
@@ -179,19 +184,17 @@ export function generateRuleBasedSchedule(input: {
   weekOfMonth?: number;
   plannerNotes?: Record<string, string>;
   weeklyTasks: Task[];
-  monthlyTasks: Task[];
+  monthlyTasks?: Task[];
+  monthlyInstances?: MaterializedTaskInstance[];
   carryoverTaskTitles?: string[];
 }): GeneratedScheduleBlock[] {
   const plannerNotes = input.plannerNotes ?? {};
   const weekOfMonth = input.weekOfMonth ?? 1;
   const carryoverTitles = new Set((input.carryoverTaskTitles ?? []).map((title) => normalizeText(title)));
-  const { weeklyInstances, selectedMonthlyInstances } = materializeTasksForWeek({
-    weekKey: input.weekKey,
-    monthKey: input.monthKey,
-    weekOfMonth,
-    weeklyTasks: input.weeklyTasks,
-    monthlyTasks: input.monthlyTasks
-  });
+  const weeklyInstances = materializeWeeklyTaskInstances(input.weeklyTasks, input.weekKey);
+  const monthlyInstances =
+    input.monthlyInstances ?? materializeMonthlyTaskInstances(input.monthlyTasks ?? [], input.monthKey);
+  const selectedMonthlyInstances = filterMonthlyInstancesForWeek(monthlyInstances, weekOfMonth);
 
   const allocations: TaskAllocation[] = [...weeklyInstances, ...selectedMonthlyInstances]
     .map((task) => ({

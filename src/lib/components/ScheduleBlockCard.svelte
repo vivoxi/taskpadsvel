@@ -142,19 +142,35 @@
     }
 
     try {
-      await syncInstanceCompletion(nextCompleted);
-      await syncLinkedTaskCompletion(updated);
+      await syncInstanceCompletion(updated);
     } catch (syncError) {
       console.error(syncError);
       toast.error('Schedule updated, but task sync failed');
     }
   }
 
-  async function syncInstanceCompletion(completedValue: boolean) {
+  async function syncInstanceCompletion(updatedBlock: ScheduleBlock) {
     if (!linkedInstanceKey) return;
 
     const parsedInstanceKey = parsePeriodInstanceKey(linkedInstanceKey);
     if (!parsedInstanceKey) return;
+
+    const { data: matchingBlocks, error: blocksError } = await supabase
+      .from('weekly_schedule')
+      .select('id, notes');
+
+    if (blocksError) throw blocksError;
+
+    const parsedBlock = parseScheduleBlockDetails(updatedBlock.notes);
+    const allCompleted = (matchingBlocks ?? [])
+      .filter((row) => {
+        if (row.id === updatedBlock.id) return true;
+        return parseScheduleBlockDetails(row.notes).linkedInstanceKey === linkedInstanceKey;
+      })
+      .every((row) => {
+        if (row.id === updatedBlock.id) return parsedBlock.completed;
+        return parseScheduleBlockDetails(row.notes).completed;
+      });
 
     const storageKey = getPeriodInstanceStatusStorageKey(
       parsedInstanceKey.periodType,
@@ -173,7 +189,7 @@
     const completedInstanceKeys = updateCompletedInstanceKeys(
       persisted?.completedInstanceKeys ?? [],
       linkedInstanceKey,
-      completedValue
+      allCompleted
     );
 
     const updatedAt = new Date().toISOString();
@@ -195,40 +211,6 @@
       completedInstanceKeys,
       updatedAt
     });
-  }
-
-  async function syncLinkedTaskCompletion(updatedBlock: ScheduleBlock) {
-    const { data: matchingBlocks, error: blocksError } = await supabase
-      .from('weekly_schedule')
-      .select('id, notes')
-      .eq('week_key', updatedBlock.week_key)
-      .eq('task_title', updatedBlock.task_title);
-
-    if (blocksError) throw blocksError;
-
-    const parsedBlock = parseScheduleBlockDetails(updatedBlock.notes);
-    const allCompleted = (matchingBlocks ?? []).every((row) => {
-      if (row.id === updatedBlock.id) return parsedBlock.completed;
-      return parseScheduleBlockDetails(row.notes).completed;
-    });
-
-    let updateQuery = supabase.from('tasks').update({ completed: allCompleted });
-
-    if (parsedBlock.linkedTaskId) {
-      updateQuery = updateQuery.eq('id', parsedBlock.linkedTaskId);
-    } else {
-      updateQuery = updateQuery.eq('title', updatedBlock.task_title).in('type', ['weekly', 'monthly']);
-    }
-
-    if (parsedBlock.linkedTaskType) {
-      updateQuery = updateQuery.eq('type', parsedBlock.linkedTaskType);
-    }
-
-    const { error: taskError } = await updateQuery;
-    if (taskError) throw taskError;
-
-    queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    queryClient.invalidateQueries({ queryKey: ['tasks_all'] });
   }
 
   async function handleMoveDay(event: Event) {
