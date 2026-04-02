@@ -65,6 +65,18 @@ export function addMonths(date: Date, months: number): Date {
   return dateFnsAddMonths(date, months);
 }
 
+export function getPreviousWeekKey(weekKey: string): string {
+  const weekDays = getWeekDays(weekKey);
+  const previousWeekAnchor = addDays(weekDays[0] ?? new Date(), -7);
+  return getWeekKey(previousWeekAnchor);
+}
+
+export function getPreviousMonthKey(monthKey: string): string {
+  const [yearStr, monthStr] = monthKey.split('-M');
+  const date = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1);
+  return getMonthKey(dateFnsAddMonths(date, -1));
+}
+
 export function getWeekOfMonth(weekKey: string): number {
   const days = getWeekDays(weekKey);
   const anchor = days[2];

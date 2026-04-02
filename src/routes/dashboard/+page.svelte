@@ -10,6 +10,7 @@
     Clock3,
     Target
   } from 'lucide-svelte';
+  import { summarizeSnapshot, summarizeTasks } from '$lib/periodSummary';
   import { supabase } from '$lib/supabase';
   import { getWeekKey } from '$lib/weekUtils';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
@@ -123,6 +124,8 @@
   const weeklyMetrics = $derived(getCompletionMetrics('weekly'));
   const monthlyMetrics = $derived(getCompletionMetrics('monthly'));
   const randomMetrics = $derived(getCompletionMetrics('random'));
+  const weeklyHours = $derived(summarizeTasks(getTasksByType('weekly')));
+  const monthlyHours = $derived(summarizeTasks(getTasksByType('monthly')));
   const scheduleMetrics = $derived(getScheduleMetrics());
   const totalCompleted = $derived(
     weeklyMetrics.completed + monthlyMetrics.completed + randomMetrics.completed
@@ -142,6 +145,8 @@
   const archiveHasError = $derived(
     Boolean(latestWeeklySnapshotQuery.error || latestMonthlySnapshotQuery.error)
   );
+  const latestWeeklySummary = $derived(summarizeSnapshot(latestWeeklySnapshotQuery.data));
+  const latestMonthlySummary = $derived(summarizeSnapshot(latestMonthlySnapshotQuery.data));
   const metricCards = $derived<MetricCard[]>([
     {
       title: 'Weekly',
@@ -222,11 +227,11 @@
           <div class="grid gap-3 sm:grid-cols-3">
             <div class="rounded-[20px] border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Weekly Load</div>
-              <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{weeklyMetrics.total}</div>
+              <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{weeklyHours.plannedHours}h</div>
             </div>
             <div class="rounded-[20px] border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Monthly Load</div>
-              <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{monthlyMetrics.total}</div>
+              <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{monthlyHours.plannedHours}h</div>
             </div>
             <div class="rounded-[20px] border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Schedule Blocks</div>
@@ -371,6 +376,14 @@
                 <div class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                   {latestWeeklySnapshotQuery.data.period_label}
                 </div>
+                <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
+                    Carry-over: {latestWeeklySummary.openTasks}
+                  </div>
+                  <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
+                    {latestWeeklySummary.openHours}h acik
+                  </div>
+                </div>
               {:else}
                 <div class="mt-2 text-sm text-zinc-400">Henuz weekly arsiv yok.</div>
               {/if}
@@ -386,6 +399,14 @@
                 </div>
                 <div class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                   {latestMonthlySnapshotQuery.data.period_label}
+                </div>
+                <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
+                    Carry-over: {latestMonthlySummary.openTasks}
+                  </div>
+                  <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
+                    {latestMonthlySummary.openHours}h acik
+                  </div>
                 </div>
               {:else}
                 <div class="mt-2 text-sm text-zinc-400">Henuz monthly arsiv yok.</div>

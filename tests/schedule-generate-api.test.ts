@@ -40,19 +40,32 @@ function makeWeeklyScheduleTable(data: unknown[] = []) {
   ) => {
     select: typeof selectMock;
   });
+  const snapshotMaybeSingleMock = vi.fn().mockResolvedValue({ data: null, error: null });
 
   fromMock.mockImplementation((table: string) => {
-    if (table !== 'weekly_schedule') {
-      throw new Error(`Unexpected table: ${table}`);
+    if (table === 'weekly_schedule') {
+      return {
+        delete: deleteMock,
+        insert: insertMock
+      };
     }
 
-    return {
-      delete: deleteMock,
-      insert: insertMock
-    };
+    if (table === 'history_snapshots') {
+      return {
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: snapshotMaybeSingleMock
+            }))
+          }))
+        }))
+      };
+    }
+
+    throw new Error(`Unexpected table: ${table}`);
   });
 
-  return { eqDeleteMock, insertMock };
+  return { eqDeleteMock, insertMock, snapshotMaybeSingleMock };
 }
 
 describe('schedule generate API', () => {
@@ -86,7 +99,8 @@ describe('schedule generate API', () => {
         task_title: 'Bank reconciliation',
         notes: 'Focus block',
         linked_task_id: 'weekly-1',
-        linked_task_type: 'weekly'
+        linked_task_type: 'weekly',
+        linked_instance_key: 'weekly:weekly-1:2026-W14'
       }
     ]);
 
@@ -109,10 +123,13 @@ describe('schedule generate API', () => {
     } as never);
 
     expect(generateRuleBasedScheduleMock).toHaveBeenCalledWith({
+      weekKey: '2026-W14',
+      monthKey: '2026-M04',
       weekOfMonth: 1,
       plannerNotes: {},
       weeklyTasks: [weeklyTask],
-      monthlyTasks: []
+      monthlyTasks: [],
+      carryoverTaskTitles: []
     });
     expect(eqDeleteMock).toHaveBeenCalledWith('week_key', '2026-W14');
 
@@ -135,7 +152,8 @@ describe('schedule generate API', () => {
       notes: 'Focus block',
       completed: false,
       linkedTaskId: 'weekly-1',
-      linkedTaskType: 'weekly'
+      linkedTaskType: 'weekly',
+      linkedInstanceKey: 'weekly:weekly-1:2026-W14'
     });
     expect(await response.json()).toEqual([{ id: 'block-1', task_title: 'Bank reconciliation' }]);
   });

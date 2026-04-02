@@ -28,13 +28,7 @@
       .filter(Boolean).length
   );
   const syncLabel = $derived(
-    syncState === 'saving'
-      ? 'Syncing...'
-      : syncState === 'saved'
-        ? 'Cloud synced'
-        : syncState === 'error'
-          ? 'Sync error'
-          : 'Local only'
+    syncState === 'error' ? 'Sync error' : 'Cloud backup on'
   );
 
   let remoteSaveTimer: ReturnType<typeof setTimeout> | null = null;

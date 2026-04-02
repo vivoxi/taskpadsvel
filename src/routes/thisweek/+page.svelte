@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { format } from 'date-fns';
   import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
@@ -23,6 +24,12 @@
   function isToday(dayIndex: number): boolean {
     if ($weekOffset !== 0) return false;
     return new Date().getDay() === (dayIndex + 1) % 7;
+  }
+
+  function getDayDateLabel(day: string): string {
+    const index = DAY_NAMES.indexOf(day as (typeof DAY_NAMES)[number]);
+    const date = weekDays[index];
+    return date ? format(date, 'd MMM') : '';
   }
 
   const planQuery = createQuery(() => ({
@@ -614,6 +621,7 @@
               <DayCard
                 weekKey={currentWeekKey}
                 {day}
+                dateLabel={getDayDateLabel(day)}
                 initialContent={getPlanContent(day)}
                 isToday={isToday(i)}
                 readonly={false}
@@ -644,6 +652,7 @@
                 {#if getBlocksForDay(day).length > 0}
                   <ScheduleDay
                     {day}
+                    dateLabel={getDayDateLabel(day)}
                     blocks={getBlocksForDay(day)}
                     weekKey={currentWeekKey}
                     readonly={false}

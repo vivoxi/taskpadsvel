@@ -1,12 +1,13 @@
 import { json, error } from '@sveltejs/kit';
 import { generateScheduleText } from '$lib/server/ai';
 import { generateRuleBasedSchedule } from '$lib/server/ruleScheduler';
+import { materializeTasksForWeek } from '$lib/recurringTasks';
 import { serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { toSchedulableTask } from '$lib/taskDetails';
+import { getMonthKey, getPreviousMonthKey, getPreviousWeekKey, getWeekDays } from '$lib/weekUtils';
 import type { RequestHandler } from './$types';
-import type { Task } from '$lib/types';
+import type { HistorySnapshot, Task } from '$lib/types';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 const WORK_WINDOWS = [
@@ -22,6 +23,7 @@ type GeneratedBlock = {
   notes: string;
   linked_task_id?: string;
   linked_task_type?: Task['type'];
+  linked_instance_key?: string;
 };
 
 function extractJsonArray(text: string): string {
@@ -110,8 +112,23 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (!weekKey) throw error(400, 'weekKey is required');
 
-  const describeTask = (label: string, task: Task): string => {
-    const normalizedTask = toSchedulableTask(task);
+  const weekDays = getWeekDays(weekKey);
+  const monthKey = getMonthKey(weekDays[2] ?? weekDays[0] ?? new Date());
+  const previousWeekKey = getPreviousWeekKey(weekKey);
+  const previousMonthKey = getPreviousMonthKey(monthKey);
+  const { weeklyInstances, selectedMonthlyInstances, allInstances } = materializeTasksForWeek({
+    weekKey,
+    monthKey,
+    weekOfMonth: weekOfMonth ?? 1,
+    weeklyTasks,
+    monthlyTasks
+  });
+
+  const describeTask = (
+    label: string,
+    task: (typeof allInstances)[number]
+  ): string => {
+    const normalizedTask = task;
     const estimatedHours = normalizedTask.estimated_hours ?? 1;
     const notes = normalizedTask.scheduling_notes.trim();
 
@@ -130,10 +147,34 @@ export const POST: RequestHandler = async ({ request }) => {
   };
 
   const linkedTasks = [...weeklyTasks, ...monthlyTasks];
+  const [previousWeeklySnapshotResult, previousMonthlySnapshotResult] = await Promise.all([
+    supabaseAdmin
+      .from('history_snapshots')
+      .select('*')
+      .eq('period_type', 'weekly')
+      .eq('period_key', previousWeekKey)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('history_snapshots')
+      .select('*')
+      .eq('period_type', 'monthly')
+      .eq('period_key', previousMonthKey)
+      .maybeSingle()
+  ]);
+
+  const previousWeeklySnapshot = previousWeeklySnapshotResult.data as HistorySnapshot | null;
+  const previousMonthlySnapshot = previousMonthlySnapshotResult.data as HistorySnapshot | null;
+  const weeklyCarryoverTitles = (previousWeeklySnapshot?.missed_tasks ?? [])
+    .map((task) => task.title)
+    .filter((title): title is string => Boolean(title));
+  const monthlyCarryoverTitles = (previousMonthlySnapshot?.missed_tasks ?? [])
+    .map((task) => task.title)
+    .filter((title): title is string => Boolean(title));
+  const carryoverTaskTitles = Array.from(new Set([...weeklyCarryoverTitles, ...monthlyCarryoverTitles]));
 
   const taskLines = [
-    ...weeklyTasks.map((t: Task) => describeTask('Weekly', t)),
-    ...monthlyTasks.map((t: Task) => describeTask('Monthly', t))
+    ...weeklyInstances.map((t) => describeTask('Weekly', t)),
+    ...selectedMonthlyInstances.map((t) => describeTask('Monthly', t))
   ].join('\n');
 
   const plannerLines = Object.entries(plannerNotes ?? {})
@@ -151,6 +192,13 @@ This is week ${weekOfMonth ?? '?'} of the month.
 Tasks to schedule:
 ${taskLines || '(No tasks — create a light general schedule)'}
 ${completionNote}
+
+Carry-over priorities from previous periods:
+${
+    carryoverTaskTitles.length > 0
+      ? carryoverTaskTitles.map((title) => `- ${title}`).join('\n')
+      : '(No carry-over tasks)'
+  }
 
 Daily planner notes and constraints for this week:
 ${plannerLines || '(No planner notes provided)'}
@@ -182,6 +230,7 @@ Rules:
 - If a monthly task has preferred_day, place it on that day unless planner notes conflict
 - If planner notes mention a task, day, time window, dependency, or sequence, follow those notes closely
 - If planner notes include example time blocks, reuse those blocks instead of inventing vague placeholders
+- If a task is listed in carry-over priorities, schedule it earlier in the week when possible
 - Make sure every weekly task appears at least once in the schedule
 - Do not schedule random tasks at all
 - Keep notes brief (one sentence max, or empty string)
@@ -206,10 +255,13 @@ Rules:
     }
   } else {
     blocks = generateRuleBasedSchedule({
+      weekKey,
+      monthKey,
       weekOfMonth,
       plannerNotes,
       weeklyTasks,
-      monthlyTasks
+      monthlyTasks,
+      carryoverTaskTitles
     });
   }
 
@@ -222,11 +274,11 @@ Rules:
   if (deleteError) throw error(500, deleteError.message);
 
   const toInsert = blocks.map((b, i) => ({
-    linkedTask:
-      linkedTasks.find((task) => task.id === b.linked_task_id) ??
+    linkedTask: linkedTasks.find((task) => task.id === b.linked_task_id) ??
       linkedTasks.find(
         (task) => task.title === b.task_title && (!b.linked_task_type || task.type === b.linked_task_type)
       ),
+    linked_instance_key: b.linked_instance_key ?? null,
     week_key: weekKey,
     day: b.day,
     start_time: b.start_time,
@@ -240,7 +292,8 @@ Rules:
       block.notes,
       false,
       linkedTask?.id ?? null,
-      linkedTask?.type ?? null
+      linkedTask?.type ?? null,
+      block.linked_instance_key ?? null
     )
   }));
 

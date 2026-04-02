@@ -1,5 +1,11 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
+  import {
+    getPeriodInstanceStatusStorageKey,
+    parsePeriodInstanceKey,
+    parsePersistedPeriodInstanceStatus,
+    updateCompletedInstanceKeys
+  } from '$lib/periodInstances';
   import { parseScheduleBlockDetails, serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import { supabase } from '$lib/supabase';
   import { toast } from 'svelte-sonner';
@@ -45,6 +51,7 @@
   let selectedDay = $state('');
   let linkedTaskId = $state<string | null>(null);
   let linkedTaskType = $state<TaskType | null>(null);
+  let linkedInstanceKey = $state<string | null>(null);
 
   $effect(() => {
     const details = parseScheduleBlockDetails(block.notes);
@@ -53,6 +60,7 @@
     selectedDay = block.day;
     linkedTaskId = details.linkedTaskId;
     linkedTaskType = details.linkedTaskType;
+    linkedInstanceKey = details.linkedInstanceKey;
   });
 
   $effect(() => {
@@ -74,7 +82,13 @@
     const field = editingField;
     const value =
       field === 'notes'
-        ? serializeScheduleBlockDetails(editValue, completed, linkedTaskId, linkedTaskType)
+        ? serializeScheduleBlockDetails(
+            editValue,
+            completed,
+            linkedTaskId,
+            linkedTaskType,
+            linkedInstanceKey
+          )
         : editValue;
     editingField = null;
 
@@ -107,7 +121,8 @@
       displayNotes,
       nextCompleted,
       linkedTaskId,
-      linkedTaskType
+      linkedTaskType,
+      linkedInstanceKey
     );
     const updated = { ...block, notes: nextNotes };
 
@@ -127,11 +142,54 @@
     }
 
     try {
+      await syncInstanceCompletion(nextCompleted);
       await syncLinkedTaskCompletion(updated);
     } catch (syncError) {
       console.error(syncError);
       toast.error('Schedule updated, but task sync failed');
     }
+  }
+
+  async function syncInstanceCompletion(completedValue: boolean) {
+    if (!linkedInstanceKey) return;
+
+    const parsedInstanceKey = parsePeriodInstanceKey(linkedInstanceKey);
+    if (!parsedInstanceKey) return;
+
+    const storageKey = getPeriodInstanceStatusStorageKey(
+      parsedInstanceKey.periodType,
+      parsedInstanceKey.periodKey
+    );
+
+    const { data, error } = await supabase
+      .from('user_preferences')
+      .select('value')
+      .eq('key', storageKey)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const persisted = parsePersistedPeriodInstanceStatus(data?.value);
+    const completedInstanceKeys = updateCompletedInstanceKeys(
+      persisted?.completedInstanceKeys ?? [],
+      linkedInstanceKey,
+      completedValue
+    );
+
+    const updatedAt = new Date().toISOString();
+    const { error: saveError } = await supabase.from('user_preferences').upsert(
+      {
+        key: storageKey,
+        value: {
+          completedInstanceKeys,
+          updatedAt
+        },
+        updated_at: updatedAt
+      },
+      { onConflict: 'key' }
+    );
+
+    if (saveError) throw saveError;
   }
 
   async function syncLinkedTaskCompletion(updatedBlock: ScheduleBlock) {

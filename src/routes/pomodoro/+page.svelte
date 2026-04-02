@@ -90,13 +90,7 @@
   );
   const latestHistory = $derived(history.slice(0, 8));
   const syncLabel = $derived(
-    syncState === 'saving'
-      ? 'Syncing...'
-      : syncState === 'saved'
-        ? 'Cloud synced'
-        : syncState === 'error'
-          ? 'Sync error'
-          : 'Local only'
+    syncState === 'error' ? 'Sync error' : 'Cloud backup on'
   );
 
   let intervalId: ReturnType<typeof setInterval> | null = null;

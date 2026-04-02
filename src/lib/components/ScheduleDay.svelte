@@ -6,6 +6,7 @@
 
   let {
     day,
+    dateLabel = '',
     blocks,
     weekKey,
     readonly = false,
@@ -20,6 +21,7 @@
     onAttachmentDeleted
   }: {
     day: string;
+    dateLabel?: string;
     blocks: ScheduleBlock[];
     weekKey: string;
     readonly?: boolean;
@@ -102,9 +104,16 @@
 </script>
 
 <div class="flex flex-col gap-2">
-  <h4 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-    {day}
-  </h4>
+  <div class="flex items-center gap-2">
+    <h4 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+      {day}
+    </h4>
+    {#if dateLabel}
+      <span class="text-xs text-zinc-400 dark:text-zinc-500">
+        {dateLabel}
+      </span>
+    {/if}
+  </div>
 
   {#if localBlocks.length === 0}
     <p class="text-xs text-zinc-400 italic py-1">No blocks scheduled</p>

@@ -10,18 +10,26 @@ describe('scheduleBlockDetails helpers', () => {
       notes: 'Follow up with client',
       completed: false,
       linkedTaskId: null,
-      linkedTaskType: null
+      linkedTaskType: null,
+      linkedInstanceKey: null
     });
   });
 
   it('serializes and parses completed schedule metadata', () => {
-    const serialized = serializeScheduleBlockDetails('Finish report', true, 'task-1', 'weekly');
+    const serialized = serializeScheduleBlockDetails(
+      'Finish report',
+      true,
+      'task-1',
+      'weekly',
+      'weekly:task-1:2026-W14'
+    );
 
     expect(parseScheduleBlockDetails(serialized)).toEqual({
       notes: 'Finish report',
       completed: true,
       linkedTaskId: 'task-1',
-      linkedTaskType: 'weekly'
+      linkedTaskType: 'weekly',
+      linkedInstanceKey: 'weekly:task-1:2026-W14'
     });
   });
 

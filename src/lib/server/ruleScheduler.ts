@@ -1,4 +1,4 @@
-import { toSchedulableTask, type SchedulableTask } from '$lib/taskDetails';
+import { materializeTasksForWeek, type MaterializedTaskInstance } from '$lib/recurringTasks';
 import { DAY_NAMES } from '$lib/weekUtils';
 import type { Task, TaskType } from '$lib/types';
 
@@ -10,6 +10,7 @@ export type GeneratedScheduleBlock = {
   notes: string;
   linked_task_id?: string;
   linked_task_type?: TaskType;
+  linked_instance_key?: string;
 };
 
 type PlannerSlot = {
@@ -20,7 +21,7 @@ type PlannerSlot = {
 };
 
 type TaskAllocation = {
-  task: SchedulableTask;
+  task: MaterializedTaskInstance;
   remainingMinutes: number;
 };
 
@@ -94,7 +95,7 @@ function parsePlannerSlots(plannerNotes: Record<string, string>): PlannerSlot[] 
   );
 }
 
-function getMatchingScore(task: SchedulableTask, label: string): number {
+function getMatchingScore(task: MaterializedTaskInstance, label: string): number {
   const normalizedLabel = normalizeText(label);
   const normalizedTitle = normalizeText(task.title);
   if (!normalizedLabel || !normalizedTitle) return 0;
@@ -106,7 +107,7 @@ function getMatchingScore(task: SchedulableTask, label: string): number {
   return titleTokens.filter((token) => labelTokens.has(token)).length;
 }
 
-function getTaskMinutes(task: SchedulableTask): number {
+function getTaskMinutes(task: MaterializedTaskInstance): number {
   return Math.max(30, Math.round((task.estimated_hours ?? 1) * 60));
 }
 
@@ -134,7 +135,7 @@ function subtractInterval(
   return next.filter((interval) => interval.endMinutes - interval.startMinutes >= 30);
 }
 
-function getDayPriority(task: SchedulableTask): string[] {
+function getDayPriority(task: MaterializedTaskInstance): string[] {
   const weekdays = DAY_NAMES.slice(0, 5);
   const weekends = DAY_NAMES.slice(5);
 
@@ -154,7 +155,7 @@ function getDayPriority(task: SchedulableTask): string[] {
 }
 
 function buildBlock(
-  task: SchedulableTask,
+  task: MaterializedTaskInstance,
   day: string,
   startMinutes: number,
   endMinutes: number,
@@ -166,31 +167,42 @@ function buildBlock(
     end_time: minutesToTime(endMinutes),
     task_title: task.title,
     notes: label && normalizeText(label) !== normalizeText(task.title) ? label : task.scheduling_notes,
-    linked_task_id: task.id,
-    linked_task_type: task.type
+    linked_task_id: task.template_id,
+    linked_task_type: task.type,
+    linked_instance_key: task.instance_key
   };
 }
 
 export function generateRuleBasedSchedule(input: {
+  weekKey: string;
+  monthKey: string;
   weekOfMonth?: number;
   plannerNotes?: Record<string, string>;
   weeklyTasks: Task[];
   monthlyTasks: Task[];
+  carryoverTaskTitles?: string[];
 }): GeneratedScheduleBlock[] {
   const plannerNotes = input.plannerNotes ?? {};
   const weekOfMonth = input.weekOfMonth ?? 1;
+  const carryoverTitles = new Set((input.carryoverTaskTitles ?? []).map((title) => normalizeText(title)));
+  const { weeklyInstances, selectedMonthlyInstances } = materializeTasksForWeek({
+    weekKey: input.weekKey,
+    monthKey: input.monthKey,
+    weekOfMonth,
+    weeklyTasks: input.weeklyTasks,
+    monthlyTasks: input.monthlyTasks
+  });
 
-  const weeklyTasks = input.weeklyTasks.map(toSchedulableTask);
-  const monthlyTasks = input.monthlyTasks
-    .map(toSchedulableTask)
-    .filter(
-      (task) => task.preferred_week_of_month === null || task.preferred_week_of_month === weekOfMonth
-    );
-
-  const allocations: TaskAllocation[] = [...weeklyTasks, ...monthlyTasks].map((task) => ({
-    task,
-    remainingMinutes: getTaskMinutes(task)
-  }));
+  const allocations: TaskAllocation[] = [...weeklyInstances, ...selectedMonthlyInstances]
+    .map((task) => ({
+      task,
+      remainingMinutes: getTaskMinutes(task)
+    }))
+    .sort((a, b) => {
+      const aCarryover = carryoverTitles.has(normalizeText(a.task.title)) ? 1 : 0;
+      const bCarryover = carryoverTitles.has(normalizeText(b.task.title)) ? 1 : 0;
+      return bCarryover - aCarryover || b.remainingMinutes - a.remainingMinutes;
+    });
 
   const freeWindows = new Map(
     DAY_NAMES.map((day) => [day, WORK_WINDOWS.map((window) => ({ ...window }))])
@@ -204,10 +216,16 @@ export function generateRuleBasedSchedule(input: {
       .filter((allocation) => allocation.remainingMinutes > 0)
       .map((allocation) => ({
         allocation,
-        score: getMatchingScore(allocation.task, slot.label)
+        score: getMatchingScore(allocation.task, slot.label),
+        carryoverBoost: carryoverTitles.has(normalizeText(allocation.task.title)) ? 1 : 0
       }))
       .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score || a.allocation.remainingMinutes - b.allocation.remainingMinutes);
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.carryoverBoost - a.carryoverBoost ||
+          a.allocation.remainingMinutes - b.allocation.remainingMinutes
+      );
 
     const match = candidates[0]?.allocation;
     if (!match) continue;

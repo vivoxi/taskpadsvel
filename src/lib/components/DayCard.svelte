@@ -6,12 +6,14 @@
   let {
     weekKey,
     day,
+    dateLabel = '',
     initialContent = '',
     isToday = false,
     readonly = false
   }: {
     weekKey: string;
     day: string;
+    dateLabel?: string;
     initialContent?: string;
     isToday?: boolean;
     readonly?: boolean;
@@ -47,6 +49,11 @@
     <span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
       {day}
     </span>
+    {#if dateLabel}
+      <span class="text-xs text-zinc-400 dark:text-zinc-500">
+        {dateLabel}
+      </span>
+    {/if}
     {#if isToday}
       <span class="text-xs text-blue-500 font-medium">Today</span>
     {/if}
