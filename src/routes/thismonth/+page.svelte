@@ -162,6 +162,7 @@
   let weeklyCompletedByStatusKey = $state<Record<string, string[]>>({});
   let localMonthCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
   let localFlexibleInstances = $state<PersistedPeriodTaskInstance[]>([]);
+  let isDragging = $state(false);
   let generatingMonth = $state(false);
 
   const generatedMonthlyInstances = $derived(
@@ -308,6 +309,7 @@
   });
 
   $effect(() => {
+    if (isDragging) return;
     const board = buildMonthlyPlanBoardFromInstances(monthlyPeriodInstances);
     const nextCells: Record<string, PersistedPeriodTaskInstance[]> = {};
 
@@ -510,6 +512,7 @@
     day: string,
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
+    isDragging = true;
     updateCellItems(week, day, event.detail.items);
   }
 
@@ -518,11 +521,13 @@
     day: string,
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
+    isDragging = false;
     updateCellItems(week, day, event.detail.items);
     await persistMonthlyInstances();
   }
 
   function handleFlexibleConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
+    isDragging = true;
     localFlexibleInstances = event.detail.items.map((instance) => ({
       ...instance,
       preferred_week_of_month: null,
@@ -531,6 +536,7 @@
   }
 
   async function handleFlexibleFinalize(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
+    isDragging = false;
     handleFlexibleConsider(event);
     await persistMonthlyInstances();
   }
