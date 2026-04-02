@@ -14,6 +14,7 @@
     createMonthlyPeriodInstances,
     getMonthlyInstanceStatusStorageKey,
     getMonthlyInstancesStorageKey,
+    getWeeklyInstanceStatusStorageKey,
     parsePersistedPeriodInstanceStatus,
     parsePersistedPeriodInstances,
     updateCompletedInstanceKeys,
@@ -135,8 +136,30 @@
     enabled: browser && !isPastMonth
   }));
 
+  const weeklyInstanceStatusQuery = createQuery(() => ({
+    queryKey: ['period_instance_status', 'weekly', currentMonthKey] as const,
+    queryFn: async () => {
+      const keys = MONTHLY_PLAN_WEEKS.map((w) =>
+        getWeeklyInstanceStatusStorageKey(getMonthWeekKey(currentMonthKey, w))
+      );
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('key, value')
+        .in('key', keys);
+      if (error) throw error;
+      const map: Record<string, string[]> = {};
+      for (const row of (data ?? []) as { key: string; value: unknown }[]) {
+        const parsed = parsePersistedPeriodInstanceStatus(row.value);
+        if (parsed) map[row.key] = parsed.completedInstanceKeys;
+      }
+      return map;
+    },
+    enabled: browser && !isPastMonth
+  }));
+
   let monthlyPeriodInstances = $state<PersistedPeriodTaskInstance[]>([]);
   let monthlyCompletedInstanceKeys = $state<string[]>([]);
+  let weeklyCompletedByStatusKey = $state<Record<string, string[]>>({});
   let localMonthCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
   let localFlexibleInstances = $state<PersistedPeriodTaskInstance[]>([]);
   let generatingMonth = $state(false);
@@ -182,6 +205,43 @@
 
   function isInstanceCompleted(instanceKey: string): boolean {
     return monthlyCompletedInstanceKeys.includes(instanceKey);
+  }
+
+  function isWeeklyInstanceCompleted(instanceKey: string): boolean {
+    const weekKey = instanceKey.split(':')[2];
+    const statusKey = getWeeklyInstanceStatusStorageKey(weekKey);
+    return (weeklyCompletedByStatusKey[statusKey] ?? []).includes(instanceKey);
+  }
+
+  async function toggleWeeklyInstance(instanceKey: string) {
+    if (isPastMonth) return;
+    const weekKey = instanceKey.split(':')[2];
+    const statusKey = getWeeklyInstanceStatusStorageKey(weekKey);
+    const currentCompleted = weeklyCompletedByStatusKey[statusKey] ?? [];
+    const nowCompleted = !currentCompleted.includes(instanceKey);
+    const nextCompleted = updateCompletedInstanceKeys(currentCompleted, instanceKey, nowCompleted);
+    const updatedAt = new Date().toISOString();
+
+    const { error } = await supabase.from('user_preferences').upsert(
+      {
+        key: statusKey,
+        value: { completedInstanceKeys: nextCompleted, updatedAt },
+        updated_at: updatedAt
+      },
+      { onConflict: 'key' }
+    );
+
+    if (error) {
+      toast.error('Failed to update weekly status');
+      return;
+    }
+
+    weeklyCompletedByStatusKey = { ...weeklyCompletedByStatusKey, [statusKey]: nextCompleted };
+    await syncScheduleBlocksForInstance(instanceKey, nowCompleted);
+    queryClient.setQueryData(
+      ['period_instance_status', 'weekly', currentMonthKey],
+      { ...weeklyCompletedByStatusKey, [statusKey]: nextCompleted }
+    );
   }
 
   function hasCarryover(instance: unknown): boolean {
@@ -268,6 +328,14 @@
 
     const persisted = parsePersistedPeriodInstanceStatus(monthlyInstanceStatusQuery.data);
     monthlyCompletedInstanceKeys = persisted?.completedInstanceKeys ?? [];
+  });
+
+  $effect(() => {
+    if (isPastMonth) {
+      weeklyCompletedByStatusKey = {};
+      return;
+    }
+    weeklyCompletedByStatusKey = weeklyInstanceStatusQuery.data ?? {};
   });
 
   $effect(() => {
@@ -751,10 +819,27 @@
                     {#if weeklyTasks.length > 0}
                       <div class="mt-1 flex flex-col gap-1">
                         {#each weeklyTasks as wInstance (wInstance.instance_key)}
-                          <div class="rounded-[12px] border border-violet-200/80 bg-violet-50/70 px-3 py-1.5 dark:border-violet-500/20 dark:bg-violet-950/18">
-                            <div class="text-xs font-medium text-violet-800 dark:text-violet-300">{wInstance.title}</div>
-                            <div class="text-[10px] text-violet-500 dark:text-violet-400">{wInstance.estimated_hours ?? 1}h · weekly</div>
-                          </div>
+                          <button
+                            onclick={() => toggleWeeklyInstance(wInstance.instance_key)}
+                            class={`w-full rounded-[12px] border px-3 py-1.5 text-left transition-colors ${
+                              isWeeklyInstanceCompleted(wInstance.instance_key)
+                                ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-950/20'
+                                : 'border-violet-200/80 bg-violet-50/70 dark:border-violet-500/20 dark:bg-violet-950/18'
+                            }`}
+                          >
+                            <div
+                              class={`text-xs font-medium ${
+                                isWeeklyInstanceCompleted(wInstance.instance_key)
+                                  ? 'text-zinc-400 line-through'
+                                  : 'text-violet-800 dark:text-violet-300'
+                              }`}
+                            >
+                              {wInstance.title}
+                            </div>
+                            <div class="text-[10px] text-violet-500 dark:text-violet-400">
+                              {wInstance.estimated_hours ?? 1}h · weekly
+                            </div>
+                          </button>
                         {/each}
                       </div>
                     {/if}
