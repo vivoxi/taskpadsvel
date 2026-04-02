@@ -20,10 +20,10 @@
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
+    { href: '/thisweek', label: 'This Week', icon: LayoutDashboard },
     { href: '/weekly', label: 'Weekly Tasks', icon: CalendarDays },
     { href: '/monthly', label: 'Monthly Tasks', icon: Calendar },
-    { href: '/random', label: 'Random Tasks', icon: Shuffle },
-    { href: '/thisweek', label: 'This Week', icon: LayoutDashboard }
+    { href: '/random', label: 'Random Tasks', icon: Shuffle }
   ] as const;
 </script>
 

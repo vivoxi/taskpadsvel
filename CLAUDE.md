@@ -60,6 +60,20 @@ Kisa repo notu. Uzun tutulmadi.
 - `AI_PROVIDER=openai-compatible`
 - Runtime env uzerinden okunur
 
+## API
+- Task mutation (toggle, title, notes) `PATCH /api/task/[taskId]` uzerinden gider, dogrudan Supabase degil
+- Auth header: `Authorization: Bearer ${password}`
+
+## User Preferences (Supabase)
+- Task sirasi ve random kategori sirasi `user_preferences` tablosunda tutuluyor (key/value jsonb)
+- localStorage hala cache olarak kullaniliyor (anlik fallback), Supabase asil kaynak
+- Repo icinde migration yok; fresh ortamda `user_preferences` tablosu manuel olusturulmali ya da ayri migration eklenmeli
+
+## Schedule Bloklari
+- Manuel block ekleme: her gun altinda "+ Add block" formu var
+- Manuel block silme: hover'da Trash2 ikonu gorunur
+- Dashboard metric kartlari tiklanabilir link (`<a>` tag, ilgili sayfaya gider)
+
 ## Not
 - `npm run check`
 - `npm test`

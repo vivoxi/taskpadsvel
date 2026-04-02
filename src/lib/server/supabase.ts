@@ -1,4 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_SERVICE_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
-export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const supabaseUrl = env.SUPABASE_URL?.trim();
+const supabaseServiceKey = env.SUPABASE_SERVICE_KEY?.trim();
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY are required');
+}
+
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);

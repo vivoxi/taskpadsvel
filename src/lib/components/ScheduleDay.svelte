@@ -23,7 +23,7 @@
     blocks: ScheduleBlock[];
     weekKey: string;
     readonly?: boolean;
-    onBlocksReordered: (day: string, reordered: ScheduleBlock[]) => void;
+    onBlocksReordered: (day: string, reordered: ScheduleBlock[]) => Promise<void> | void;
     onMoveBlockDay: (block: ScheduleBlock, targetDay: string) => Promise<void> | void;
     onBlockUpdated: (updated: ScheduleBlock) => void;
     onDeleteBlock?: (id: string) => void;
@@ -46,18 +46,38 @@
   });
 
   function handleDndConsider(e: CustomEvent<DndEvent<ScheduleBlock>>) {
-    localBlocks = e.detail.items;
+    const { items } = e.detail;
+    localBlocks = items;
   }
 
   async function handleDndFinalize(e: CustomEvent<DndEvent<ScheduleBlock>>) {
-    localBlocks = e.detail.items;
-    onBlocksReordered(day, localBlocks);
+    const { items } = e.detail;
 
-    // Persist sort_order
-    const updates = localBlocks.map((b, i) =>
-      supabase.from('weekly_schedule').update({ sort_order: i }).eq('id', b.id)
+    // Check if any block was moved from another day
+    const movedFromAnotherDay = items.find(item =>
+      item.day !== day && blocks.every(b => b.id !== item.id)
     );
-    await Promise.all(updates);
+
+    if (movedFromAnotherDay && onMoveBlockDay) {
+      // A block was dropped from another day onto this day
+      await onMoveBlockDay(movedFromAnotherDay, day);
+      // Don't update localBlocks here - let the query invalidation handle it
+      return;
+    }
+
+    // Check if a block was dragged out to another day
+    const removedBlock = blocks.find(b =>
+      items.every(item => item.id !== b.id)
+    );
+
+    if (removedBlock) {
+      // Block was dragged out, but we'll let moveBlockToDay handle the update
+      return;
+    }
+
+    // Normal reorder within the same day
+    localBlocks = items;
+    await onBlocksReordered(day, localBlocks);
   }
 
   function onUpdate(updated: ScheduleBlock) {
@@ -105,10 +125,15 @@
     </div>
   {:else}
     <div
-      use:dndzone={{ items: localBlocks, flipDurationMs: 150 }}
+      use:dndzone={{
+        items: localBlocks,
+        flipDurationMs: 150,
+        dropTargetStyle: { outline: '2px dashed rgba(249, 115, 22, 0.5)', outlineOffset: '2px' },
+        type: 'schedule-block'
+      }}
       onconsider={handleDndConsider}
       onfinalize={handleDndFinalize}
-      class="flex flex-col gap-1.5 min-h-[20px]"
+      class="flex flex-col gap-1.5 min-h-[60px] rounded-lg p-1 transition-colors"
     >
       {#each localBlocks as block (block.id)}
         <div class="cursor-grab active:cursor-grabbing">

@@ -1,42 +1,116 @@
-# sv
+# Taskpad Svelte
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Taskpad Svelte is a SvelteKit planner for recurring weekly/monthly work, categorized random tasks, and generated weekly schedules.
 
-## Creating a project
+## Stack
 
-If you're seeing this, you've probably already done this step. Congrats!
+- SvelteKit 2
+- Svelte 5
+- Tailwind 4
+- TanStack Query
+- Supabase
+
+## Main Pages
+
+- `/dashboard`: completion metrics and archive summaries
+- `/weekly`: recurring weekly tasks
+- `/monthly`: recurring monthly tasks and month archive
+- `/random`: categorized free-form task board
+- `/thisweek`: planner notes, generated schedule, and week archive
+
+## Key Behaviors
+
+- Weekly tasks reset at the start of a new week.
+- Monthly tasks reset at the start of a new month.
+- A snapshot is captured before reset so completed vs missed work stays visible in archives.
+- Generated schedule blocks can sync completion and attachments with linked weekly/monthly tasks.
+- Schedule generation supports both rule-based mode and AI mode.
+- Work hours are fixed at `10:00-17:00` with a break at `13:00-14:00`.
+
+## Development
 
 ```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.13.0 create --template minimal --types ts --install npm .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
-
-To create a production version of your app:
+## Quality Checks
 
 ```sh
+npm run check
+npm test
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+## Environment
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Copy `.env.example` to `.env` and fill the required values.
+
+Required app values:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_KEY`
+- `ADMIN_PASSWORD`
+
+Optional AI values:
+
+- `AI_PROVIDER=anthropic`
+- `ANTHROPIC_API_KEY`
+- `ANTHROPIC_MODEL`
+- `AI_PROVIDER=openai-compatible`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_API_URL`
+
+## Supabase Notes
+
+This repo does not currently ship Supabase migrations. The following tables are expected to exist in your project:
+
+- `tasks`
+- `weekly_plan`
+- `weekly_schedule`
+- `history_snapshots`
+- `task_attachments`
+- `reset_log`
+- `user_preferences`
+
+`user_preferences` is used for task ordering and random category preferences. If you are setting up a fresh Supabase project, create that table manually or add your own migration before running the app.
+
+## Dokploy Deployment
+
+This repo is ready to deploy on Dokploy with the `Dockerfile` build type.
+
+Recommended Dokploy settings:
+
+- Build Type: `Dockerfile`
+- Dockerfile Path: `Dockerfile`
+- Docker Context Path: `.`
+- Port: `3000`
+- Persistent Volume: mount a volume to `/app/uploads`
+- Health Check URL: `/api/health`
+
+Build-time arguments required in Dokploy:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `PUBLIC_AUTH_REQUIRED` (optional, defaults to `false`)
+
+Runtime environment variables required in Dokploy:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_KEY`
+- `ADMIN_PASSWORD`
+- `UPLOADS_DIR=/app/uploads`
+
+Optional runtime AI variables:
+
+- `AI_PROVIDER`
+- `ANTHROPIC_API_KEY`
+- `ANTHROPIC_MODEL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_API_URL`
+
+If you use Dokploy rollback or health checks, point them to `http://localhost:3000/api/health`.

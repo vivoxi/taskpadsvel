@@ -1,11 +1,12 @@
 node_modules
 .svelte-kit
 build
+uploads
+.git
+.DS_Store
 .env
 .env.*
-*.local
-.git
-.gitignore
-README.md
+!.env.example
+.claude
 docs
-tests
+coverage

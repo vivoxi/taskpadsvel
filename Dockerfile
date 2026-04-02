@@ -2,6 +2,14 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG PUBLIC_AUTH_REQUIRED=false
+
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV PUBLIC_AUTH_REQUIRED=$PUBLIC_AUTH_REQUIRED
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -13,6 +21,9 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV UPLOADS_DIR=/app/uploads
 
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package.json ./package.json
@@ -23,5 +34,8 @@ RUN npm ci --omit=dev
 RUN mkdir -p /app/uploads
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then((res)=>process.exit(res.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "build"]

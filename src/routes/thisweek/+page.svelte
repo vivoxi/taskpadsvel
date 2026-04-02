@@ -6,6 +6,7 @@
   import AttachmentChip from '$lib/components/AttachmentChip.svelte';
   import DayCard from '$lib/components/DayCard.svelte';
   import ScheduleDay from '$lib/components/ScheduleDay.svelte';
+  import { normalizeScheduleDayBlocks } from '$lib/scheduleLayout';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import { supabase } from '$lib/supabase';
   import { weekOffset, generatedWeeks, authPassword } from '$lib/stores';
@@ -236,16 +237,44 @@
     return taskId ? getPastAttachmentsForTask(taskId) : [];
   }
 
-  function onBlocksReordered(day: string, reordered: ScheduleBlock[]) {
-    queryClient.setQueryData<ScheduleBlock[]>(
-      ['weekly_schedule', currentWeekKey],
-      (prev) => {
-        if (!prev) return reordered;
-        return [...prev.filter((b) => b.day !== day), ...reordered].sort(
-          (a, b) => a.sort_order - b.sort_order
-        );
-      }
+  async function persistBlocks(blocks: ScheduleBlock[]) {
+    await Promise.all(
+      blocks.map((block) =>
+        supabase
+          .from('weekly_schedule')
+          .update({
+            day: block.day,
+            start_time: block.start_time,
+            end_time: block.end_time,
+            sort_order: block.sort_order
+          })
+          .eq('id', block.id)
+      )
     );
+  }
+
+  async function onBlocksReordered(day: string, reordered: ScheduleBlock[]) {
+    const normalizedBlocks = normalizeScheduleDayBlocks(day, reordered);
+    if (!normalizedBlocks) {
+      toast.error('Blocks no longer fit into work hours');
+      queryClient.invalidateQueries({ queryKey: ['weekly_schedule', currentWeekKey] });
+      return;
+    }
+
+    const currentBlocks = (queryClient.getQueryData(['weekly_schedule', currentWeekKey]) ??
+      scheduleQuery.data ??
+      []) as ScheduleBlock[];
+
+    const nextBlocks = [...currentBlocks.filter((b) => b.day !== day), ...normalizedBlocks];
+    queryClient.setQueryData<ScheduleBlock[]>(['weekly_schedule', currentWeekKey], nextBlocks);
+
+    try {
+      await persistBlocks(normalizedBlocks);
+    } catch (err) {
+      queryClient.invalidateQueries({ queryKey: ['weekly_schedule', currentWeekKey] });
+      toast.error('Failed to update schedule times');
+      console.error(err);
+    }
   }
 
   function onBlockUpdated(updated: ScheduleBlock) {
@@ -280,38 +309,37 @@
 
     const sourceDayBlocks = currentBlocks
       .filter((item) => item.day === block.day && item.id !== block.id)
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((item, index) => ({ ...item, sort_order: index }));
+      .sort((a, b) => a.sort_order - b.sort_order);
 
     const targetDayBlocks = currentBlocks
       .filter((item) => item.day === targetDay)
       .sort((a, b) => a.sort_order - b.sort_order);
 
     const movedBlock = { ...block, day: targetDay, sort_order: targetDayBlocks.length };
-    const nextTargetDayBlocks = [...targetDayBlocks, movedBlock].map((item, index) => ({
-      ...item,
-      sort_order: index
-    }));
+    const normalizedSourceDayBlocks = normalizeScheduleDayBlocks(block.day, sourceDayBlocks);
+    const normalizedTargetDayBlocks = normalizeScheduleDayBlocks(targetDay, [
+      ...targetDayBlocks,
+      movedBlock
+    ]);
+
+    if (!normalizedSourceDayBlocks || !normalizedTargetDayBlocks) {
+      toast.error('Target day has no free work slot for this block');
+      queryClient.invalidateQueries({ queryKey: ['weekly_schedule', currentWeekKey] });
+      return;
+    }
 
     const untouchedBlocks = currentBlocks.filter(
       (item) => item.day !== block.day && item.day !== targetDay && item.id !== block.id
     );
 
-    const nextBlocks = [...untouchedBlocks, ...sourceDayBlocks, ...nextTargetDayBlocks].sort(
+    const nextBlocks = [...untouchedBlocks, ...normalizedSourceDayBlocks, ...normalizedTargetDayBlocks].sort(
       (a, b) => a.sort_order - b.sort_order
     );
 
     queryClient.setQueryData<ScheduleBlock[]>(['weekly_schedule', currentWeekKey], nextBlocks);
 
     try {
-      const updates = [...sourceDayBlocks, ...nextTargetDayBlocks].map((item) =>
-        supabase
-          .from('weekly_schedule')
-          .update({ day: item.day, sort_order: item.sort_order })
-          .eq('id', item.id)
-      );
-
-      await Promise.all(updates);
+      await persistBlocks([...normalizedSourceDayBlocks, ...normalizedTargetDayBlocks]);
     } catch (err) {
       queryClient.invalidateQueries({ queryKey: ['weekly_schedule', currentWeekKey] });
       toast.error('Failed to move schedule item');
