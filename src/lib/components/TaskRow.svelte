@@ -21,6 +21,7 @@
     attachments = [],
     randomCategories = [],
     readonly = false,
+    showCompletionToggle = true,
     weekKey = '',
     onToggle,
     onTitleUpdate,
@@ -32,6 +33,7 @@
     attachments?: TaskAttachment[];
     randomCategories?: string[];
     readonly?: boolean;
+    showCompletionToggle?: boolean;
     weekKey?: string;
     onToggle: (id: string, completed: boolean) => void;
     onTitleUpdate: (id: string, title: string) => Promise<void> | void;
@@ -190,22 +192,24 @@
     <Accordion.Item value={task.id} class="border-none">
       <div class="flex items-center gap-3 px-1">
         <!-- Circular checkbox -->
-        <button
-          onclick={() => !readonly && onToggle(task.id, !task.completed)}
-          disabled={readonly}
-          class="shrink-0 h-5 w-5 rounded-full border-2 transition-colors flex items-center justify-center
-            {task.completed
-              ? 'bg-orange-500 border-orange-500 dark:bg-orange-400 dark:border-orange-400'
-              : 'border-zinc-400 dark:border-zinc-600 hover:border-zinc-600 dark:hover:border-zinc-400'}
-            {readonly ? 'cursor-default' : 'cursor-pointer'}"
-          aria-label="{task.completed ? 'Mark incomplete' : 'Mark complete'}"
-        >
-          {#if task.completed}
-            <svg viewBox="0 0 10 10" class="w-3 h-3" fill="none">
-              <path d="M2 5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          {/if}
-        </button>
+        {#if showCompletionToggle}
+          <button
+            onclick={() => !readonly && onToggle(task.id, !task.completed)}
+            disabled={readonly}
+            class="shrink-0 h-5 w-5 rounded-full border-2 transition-colors flex items-center justify-center
+              {task.completed
+                ? 'bg-orange-500 border-orange-500 dark:bg-orange-400 dark:border-orange-400'
+                : 'border-zinc-400 dark:border-zinc-600 hover:border-zinc-600 dark:hover:border-zinc-400'}
+              {readonly ? 'cursor-default' : 'cursor-pointer'}"
+            aria-label="{task.completed ? 'Mark incomplete' : 'Mark complete'}"
+          >
+            {#if task.completed}
+              <svg viewBox="0 0 10 10" class="w-3 h-3" fill="none">
+                <path d="M2 5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            {/if}
+          </button>
+        {/if}
 
         {#if editingTitle}
           <input

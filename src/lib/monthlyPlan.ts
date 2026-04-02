@@ -6,18 +6,20 @@ import type { Task } from './types';
 export const MONTHLY_PLAN_WEEKS = [1, 2, 3, 4] as const;
 export const MONTHLY_PLAN_DAYS = PREFERRED_DAY_OPTIONS.slice(0, 5);
 
+type MonthlyPlanTask = MaterializedTaskInstance | PersistedPeriodTaskInstance;
+
 export type MonthlyPlanCell = {
   week: number;
   day: string;
-  tasks: MaterializedTaskInstance[];
+  tasks: MonthlyPlanTask[];
 };
 
 export type MonthlyPlanBoard = {
   cells: MonthlyPlanCell[];
-  flexibleTasks: MaterializedTaskInstance[];
+  flexibleTasks: MonthlyPlanTask[];
 };
 
-function sortTasks(tasks: MaterializedTaskInstance[]): MaterializedTaskInstance[] {
+function sortTasks<T extends MonthlyPlanTask>(tasks: T[]): T[] {
   return [...tasks].sort((a, b) => {
     const aHours = a.estimated_hours ?? 0;
     const bHours = b.estimated_hours ?? 0;

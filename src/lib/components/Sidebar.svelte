@@ -23,6 +23,7 @@
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
     { href: '/thisweek', label: 'This Week', icon: LayoutDashboard },
+    { href: '/thismonth', label: 'This Month', icon: Calendar },
     { href: '/pomodoro', label: 'Pomodoro', icon: TimerReset },
     { href: '/notes', label: 'Notes', icon: NotebookPen },
     { href: '/weekly', label: 'Weekly Tasks', icon: CalendarDays },

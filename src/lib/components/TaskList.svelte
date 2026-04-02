@@ -27,10 +27,12 @@
 
   let {
     type,
-    showResetButton = false
+    showResetButton = false,
+    templateMode = false
   }: {
     type: TaskType;
     showResetButton?: boolean;
+    templateMode?: boolean;
   } = $props();
 
   const queryClient = useQueryClient();
@@ -88,7 +90,7 @@
       if (error) throw error;
       return data?.value ?? null;
     },
-    enabled: type !== 'random'
+    enabled: !templateMode && type !== 'random'
   }));
 
   let taskOrder = $state<string[]>([]);
@@ -154,6 +156,8 @@
     localTasks = orderedTasks;
   });
 
+  const completionToggleEnabled = $derived(!templateMode);
+
   const completedInstanceKeys = $derived(
     parsePersistedPeriodInstanceStatus(instanceStatusQuery.data)?.completedInstanceKeys ?? []
   );
@@ -166,7 +170,7 @@
 
   const displayTasks = $derived(
     localTasks.map((task) => {
-      if (task.type === 'random') return task;
+      if (!completionToggleEnabled || task.type === 'random') return task;
       const instanceKey = getInstanceKeyForTask(task);
       if (!instanceKey) return task;
       return {
@@ -338,6 +342,8 @@
     const task = (tasksQuery.data ?? []).find((entry) => entry.id === id);
     if (!task) return;
 
+    if (!completionToggleEnabled) return;
+
     if (task.type !== 'random') {
       if (!instanceStatusStorageKey) return;
 
@@ -463,12 +469,14 @@
 
 <div class="flex flex-col gap-4 max-w-2xl mx-auto">
   <!-- Progress bar -->
-  <div class="flex items-center gap-3">
-    <Progress value={progressValue} class="flex-1 h-2" />
-    <span class="text-sm text-zinc-500 dark:text-zinc-400 shrink-0">
-      {completedCount}/{totalCount}
-    </span>
-  </div>
+  {#if completionToggleEnabled}
+    <div class="flex items-center gap-3">
+      <Progress value={progressValue} class="flex-1 h-2" />
+      <span class="text-sm text-zinc-500 dark:text-zinc-400 shrink-0">
+        {completedCount}/{totalCount}
+      </span>
+    </div>
+  {/if}
 
   <!-- Task list -->
   {#if tasksQuery.isLoading}
@@ -493,6 +501,7 @@
             <TaskRow
               {task}
               attachments={getAttachmentsForTask(task.id)}
+              showCompletionToggle={completionToggleEnabled}
               {weekKey}
               onToggle={toggleTask}
               onTitleUpdate={updateTaskTitle}
