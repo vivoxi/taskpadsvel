@@ -387,6 +387,10 @@
   <!-- Task list -->
   {#if tasksQuery.isLoading}
     <div class="text-sm text-zinc-400 py-4 text-center">Loading…</div>
+  {:else if tasksQuery.error}
+    <div class="text-sm text-red-500 py-4 text-center">
+      Failed to load tasks.
+    </div>
   {:else}
     <div
       use:dndzone={{ items: localTasks, flipDurationMs: 150 }}

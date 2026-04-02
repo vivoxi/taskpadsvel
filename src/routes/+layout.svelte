@@ -5,7 +5,7 @@
   import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
   import { Toaster } from 'svelte-sonner';
   import { browser } from '$app/environment';
-  import { PUBLIC_AUTH_REQUIRED } from '$env/static/public';
+  import { env } from '$env/dynamic/public';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import PasswordModal from '$lib/components/PasswordModal.svelte';
   import { initializeTheme } from '$lib/stores/theme';
@@ -26,6 +26,8 @@
   onMount(() => {
     initializeTheme();
   });
+
+  const authRequired = $derived(env.PUBLIC_AUTH_REQUIRED === 'true');
 </script>
 
 <svelte:head>
@@ -90,7 +92,7 @@
     </div>
   {/if}
 
-  {#if PUBLIC_AUTH_REQUIRED === 'true'}
+  {#if authRequired}
     <PasswordModal />
   {/if}
 

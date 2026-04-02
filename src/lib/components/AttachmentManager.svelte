@@ -49,7 +49,8 @@
     });
 
     if (!response.ok) {
-      toast.error('Upload failed');
+      const message = (await response.text().catch(() => '')).slice(0, 180);
+      toast.error(message || 'Upload failed');
       if (fileInput) fileInput.value = '';
       return;
     }
@@ -70,7 +71,8 @@
     });
 
     if (!response.ok) {
-      toast.error('Delete failed');
+      const message = (await response.text().catch(() => '')).slice(0, 180);
+      toast.error(message || 'Delete failed');
       return;
     }
 
