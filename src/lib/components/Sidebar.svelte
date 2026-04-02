@@ -6,7 +6,9 @@
     CalendarDays,
     Calendar,
     Shuffle,
-    LayoutDashboard
+    LayoutDashboard,
+    TimerReset,
+    NotebookPen
   } from 'lucide-svelte';
   import { themeMode, toggleTheme } from '$lib/stores/theme';
 
@@ -21,6 +23,8 @@
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
     { href: '/thisweek', label: 'This Week', icon: LayoutDashboard },
+    { href: '/pomodoro', label: 'Pomodoro', icon: TimerReset },
+    { href: '/notes', label: 'Notes', icon: NotebookPen },
     { href: '/weekly', label: 'Weekly Tasks', icon: CalendarDays },
     { href: '/monthly', label: 'Monthly Tasks', icon: Calendar },
     { href: '/random', label: 'Random Tasks', icon: Shuffle }
