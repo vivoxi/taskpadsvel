@@ -40,6 +40,8 @@ describe('monthlyPlan helpers', () => {
     expect(
       board.cells.find((cell) => cell.week === 3 && cell.day === 'Friday')?.tasks[0]?.title
     ).toBe('Cari mutabakat');
-    expect(board.flexibleTasks.map((task) => task.title)).toEqual(['Flexible task']);
+    // No fixed placement → auto-placed in first available cell (Week 1 / Monday)
+    expect(board.flexibleTasks).toHaveLength(0);
+    expect(board.cells.find((cell) => cell.week === 1 && cell.day === 'Monday')?.tasks[0]?.title).toBe('Flexible task');
   });
 });

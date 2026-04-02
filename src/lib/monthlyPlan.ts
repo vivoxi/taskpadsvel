@@ -31,30 +31,55 @@ export function buildMonthlyPlanBoard(tasks: Task[], monthKey: string): MonthlyP
 export function buildMonthlyPlanBoardFromInstances(
   instances: Array<MaterializedTaskInstance | PersistedPeriodTaskInstance>
 ): MonthlyPlanBoard {
-  const cells: MonthlyPlanCell[] = [];
-
+  const cellMap = new Map<string, MonthlyPlanCell>();
   for (const week of MONTHLY_PLAN_WEEKS) {
     for (const day of MONTHLY_PLAN_DAYS) {
-      cells.push({
-        week,
-        day,
-        tasks: copyTasks(
-          instances.filter(
-            (task) => task.preferred_week_of_month === week && task.preferred_day === day
-          )
-        )
-      });
+      cellMap.set(`${week}:${day}`, { week, day, tasks: [] });
     }
   }
 
-  const flexibleTasks = copyTasks(
-    instances.filter(
-      (task) =>
-        task.preferred_week_of_month === null ||
-        task.preferred_day === null ||
-        !MONTHLY_PLAN_DAYS.includes(task.preferred_day)
-    )
-  );
+  const weekOnly = new Map<number, MonthlyPlanTask[]>();
+  const dayOnly = new Map<string, MonthlyPlanTask[]>();
+  const fullyUnplaced: MonthlyPlanTask[] = [];
 
-  return { cells, flexibleTasks };
+  for (const task of instances) {
+    const weekOk =
+      task.preferred_week_of_month !== null &&
+      (MONTHLY_PLAN_WEEKS as readonly number[]).includes(task.preferred_week_of_month);
+    const dayOk =
+      task.preferred_day !== null && MONTHLY_PLAN_DAYS.includes(task.preferred_day);
+
+    if (weekOk && dayOk) {
+      cellMap.get(`${task.preferred_week_of_month}:${task.preferred_day}`)?.tasks.push(task);
+    } else if (weekOk) {
+      const w = task.preferred_week_of_month!;
+      if (!weekOnly.has(w)) weekOnly.set(w, []);
+      weekOnly.get(w)!.push(task);
+    } else if (dayOk) {
+      const d = task.preferred_day!;
+      if (!dayOnly.has(d)) dayOnly.set(d, []);
+      dayOnly.get(d)!.push(task);
+    } else {
+      fullyUnplaced.push(task);
+    }
+  }
+
+  for (const [week, tasks] of weekOnly) {
+    tasks.forEach((task, i) => {
+      cellMap.get(`${week}:${MONTHLY_PLAN_DAYS[i % MONTHLY_PLAN_DAYS.length]}`)?.tasks.push(task);
+    });
+  }
+
+  for (const [day, tasks] of dayOnly) {
+    tasks.forEach((task, i) => {
+      cellMap.get(`${MONTHLY_PLAN_WEEKS[i % MONTHLY_PLAN_WEEKS.length]}:${day}`)?.tasks.push(task);
+    });
+  }
+
+  const allCells = [...cellMap.values()];
+  fullyUnplaced.forEach((task, i) => {
+    allCells[i % allCells.length].tasks.push(task);
+  });
+
+  return { cells: allCells, flexibleTasks: [] };
 }
