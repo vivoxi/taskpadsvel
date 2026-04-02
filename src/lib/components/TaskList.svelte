@@ -212,7 +212,7 @@
   const resetCacheKey = $derived(`${type}:${currentPeriodKey}`);
 
   $effect(() => {
-    if (type === 'random' || resetChecked) return;
+    if (type === 'random' || templateMode || resetChecked) return;
     if (checkedResetPeriods.has(resetCacheKey) || resetInFlightPeriods.has(resetCacheKey)) {
       resetChecked = true;
       return;
