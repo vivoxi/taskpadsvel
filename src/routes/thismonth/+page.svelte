@@ -34,6 +34,7 @@
     getWeekDays,
     monthLabel
   } from '$lib/weekUtils';
+  import { materializeWeeklyTaskInstances, type MaterializedTaskInstance } from '$lib/recurringTasks';
   import type { HistorySnapshot, ScheduleBlock, Task } from '$lib/types';
 
   const queryClient = useQueryClient();
@@ -147,6 +148,22 @@
       previousMonthlySnapshot: previousSnapshotQuery.data
     })
   );
+
+  const weeklyInstancesByCell = $derived.by(() => {
+    const byCell = new Map<string, MaterializedTaskInstance[]>();
+    for (const weekNum of MONTHLY_PLAN_WEEKS) {
+      const weekKey = getMonthWeekKey(currentMonthKey, weekNum);
+      const instances = materializeWeeklyTaskInstances(weeklyTasksQuery.data ?? [], weekKey);
+      instances.forEach((instance, i) => {
+        const day = instance.preferred_day ?? MONTHLY_PLAN_DAYS[i % MONTHLY_PLAN_DAYS.length];
+        if (!(MONTHLY_PLAN_DAYS as readonly string[]).includes(day)) return;
+        const key = getCellKey(weekNum, day);
+        if (!byCell.has(key)) byCell.set(key, []);
+        byCell.get(key)!.push(instance);
+      });
+    }
+    return byCell;
+  });
 
   const monthlyPlanBoard = $derived(buildMonthlyPlanBoardFromInstances(monthlyPeriodInstances));
   const monthlyInstanceSummary = $derived(
@@ -679,6 +696,7 @@
                 {#each MONTHLY_PLAN_DAYS as day}
                   {@const cellKey = getCellKey(week, day)}
                   {@const cellTasks = localMonthCells[cellKey] ?? []}
+                  {@const weeklyTasks = weeklyInstancesByCell.get(cellKey) ?? []}
                   <div class="min-h-[120px] rounded-[18px] border border-zinc-200 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
                     <div class="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-400">
                       {getMonthCellDateLabel(week, day)}
@@ -697,7 +715,7 @@
                       onfinalize={(event) => handleCellFinalize(week, day, event)}
                       class="flex min-h-[76px] flex-col gap-2"
                     >
-                      {#if cellTasks.length === 0}
+                      {#if cellTasks.length === 0 && weeklyTasks.length === 0}
                         <div class="text-xs italic text-zinc-400">No fixed task</div>
                       {:else}
                         {#each cellTasks as instance (instance.instance_key)}
@@ -730,6 +748,16 @@
                         {/each}
                       {/if}
                     </div>
+                    {#if weeklyTasks.length > 0}
+                      <div class="mt-1 flex flex-col gap-1">
+                        {#each weeklyTasks as wInstance (wInstance.instance_key)}
+                          <div class="rounded-[12px] border border-violet-200/80 bg-violet-50/70 px-3 py-1.5 dark:border-violet-500/20 dark:bg-violet-950/18">
+                            <div class="text-xs font-medium text-violet-800 dark:text-violet-300">{wInstance.title}</div>
+                            <div class="text-[10px] text-violet-500 dark:text-violet-400">{wInstance.estimated_hours ?? 1}h · weekly</div>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
                   </div>
                 {/each}
               {/each}
