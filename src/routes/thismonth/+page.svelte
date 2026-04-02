@@ -15,6 +15,7 @@
     getMonthlyInstanceStatusStorageKey,
     getMonthlyInstancesStorageKey,
     getWeeklyInstanceStatusStorageKey,
+    getWeeklyInstancesStorageKey,
     parsePersistedPeriodInstanceStatus,
     parsePersistedPeriodInstances,
     updateCompletedInstanceKeys,
@@ -35,7 +36,7 @@
     getWeekDays,
     monthLabel
   } from '$lib/weekUtils';
-  import { materializeWeeklyTaskInstances, type MaterializedTaskInstance } from '$lib/recurringTasks';
+  import { materializeWeeklyTaskInstances } from '$lib/recurringTasks';
   import type { HistorySnapshot, ScheduleBlock, Task } from '$lib/types';
 
   const queryClient = useQueryClient();
@@ -157,10 +158,36 @@
     enabled: browser && !isPastMonth
   }));
 
+  const weeklyInstancesQuery = createQuery(() => ({
+    queryKey: ['thismonth_page', 'weekly_period_instances', currentMonthKey] as const,
+    queryFn: async () => {
+      const keys = MONTHLY_PLAN_WEEKS.map((week) =>
+        getWeeklyInstancesStorageKey(getMonthWeekKey(currentMonthKey, week))
+      );
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('key, value')
+        .in('key', keys);
+      if (error) throw error;
+
+      const map: Record<string, PersistedPeriodTaskInstance[]> = {};
+      for (const row of (data ?? []) as { key: string; value: unknown }[]) {
+        const parsed = parsePersistedPeriodInstances(row.value);
+        const periodKey = row.key.replace('period_instances:weekly:', '');
+        if (parsed) map[periodKey] = parsed.instances;
+      }
+
+      return map;
+    },
+    enabled: browser && !isPastMonth
+  }));
+
   let monthlyPeriodInstances = $state<PersistedPeriodTaskInstance[]>([]);
+  let weeklyPeriodInstancesByWeek = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
   let monthlyCompletedInstanceKeys = $state<string[]>([]);
   let weeklyCompletedByStatusKey = $state<Record<string, string[]>>({});
   let localMonthCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
+  let localWeeklyCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
   let localFlexibleInstances = $state<PersistedPeriodTaskInstance[]>([]);
   let isDragging = $state(false);
   let generatingMonth = $state(false);
@@ -173,20 +200,22 @@
     })
   );
 
-  const weeklyInstancesByCell = $derived.by(() => {
-    const byCell = new Map<string, MaterializedTaskInstance[]>();
+  const generatedWeeklyInstancesByWeek = $derived.by(() => {
+    const byWeek: Record<string, PersistedPeriodTaskInstance[]> = {};
+
     for (const weekNum of MONTHLY_PLAN_WEEKS) {
       const weekKey = getMonthWeekKey(currentMonthKey, weekNum);
-      const instances = materializeWeeklyTaskInstances(weeklyTasksQuery.data ?? [], weekKey);
-      instances.forEach((instance, i) => {
-        const day = instance.preferred_day ?? MONTHLY_PLAN_DAYS[i % MONTHLY_PLAN_DAYS.length];
-        if (!(MONTHLY_PLAN_DAYS as readonly string[]).includes(day)) return;
-        const key = getCellKey(weekNum, day);
-        if (!byCell.has(key)) byCell.set(key, []);
-        byCell.get(key)!.push(instance);
-      });
+      byWeek[weekKey] = materializeWeeklyTaskInstances(weeklyTasksQuery.data ?? [], weekKey).map(
+        (instance) => ({
+          ...instance,
+          id: instance.instance_key,
+          carryover: false,
+          carryover_source_period_key: null
+        })
+      );
     }
-    return byCell;
+
+    return byWeek;
   });
 
   const monthlyPlanBoard = $derived(buildMonthlyPlanBoardFromInstances(monthlyPeriodInstances));
@@ -296,6 +325,33 @@
     ];
   }
 
+  function mergeWeeklyInstances(
+    persistedInstances: PersistedPeriodTaskInstance[],
+    templateInstances: PersistedPeriodTaskInstance[]
+  ): PersistedPeriodTaskInstance[] {
+    const templateByKey = new Map(
+      templateInstances.map((instance) => [instance.instance_key, instance])
+    );
+
+    const mergedInstances = persistedInstances
+      .filter((instance) => templateByKey.has(instance.instance_key))
+      .map((instance) => {
+        const templateInstance = templateByKey.get(instance.instance_key);
+        if (!templateInstance) return instance;
+
+        return {
+          ...templateInstance,
+          preferred_day: instance.preferred_day ?? templateInstance.preferred_day
+        };
+      });
+
+    const mergedKeys = new Set(mergedInstances.map((instance) => instance.instance_key));
+    return [
+      ...mergedInstances,
+      ...templateInstances.filter((instance) => !mergedKeys.has(instance.instance_key))
+    ];
+  }
+
   $effect(() => {
     if (isPastMonth) {
       monthlyPeriodInstances = [];
@@ -306,6 +362,26 @@
     monthlyPeriodInstances = persisted?.instances.length
       ? mergeMonthlyInstances(persisted.instances, generatedMonthlyInstances)
       : generatedMonthlyInstances;
+  });
+
+  $effect(() => {
+    if (isPastMonth) {
+      weeklyPeriodInstancesByWeek = {};
+      return;
+    }
+
+    const persistedByWeek = weeklyInstancesQuery.data ?? {};
+    const nextByWeek: Record<string, PersistedPeriodTaskInstance[]> = {};
+
+    for (const week of MONTHLY_PLAN_WEEKS) {
+      const weekKey = getMonthWeekKey(currentMonthKey, week);
+      const persistedInstances = persistedByWeek[weekKey] ?? [];
+      nextByWeek[weekKey] = persistedInstances.length
+        ? mergeWeeklyInstances(persistedInstances, generatedWeeklyInstancesByWeek[weekKey] ?? [])
+        : (generatedWeeklyInstancesByWeek[weekKey] ?? []);
+    }
+
+    weeklyPeriodInstancesByWeek = nextByWeek;
   });
 
   $effect(() => {
@@ -320,6 +396,30 @@
 
     localMonthCells = nextCells;
     localFlexibleInstances = board.flexibleTasks as PersistedPeriodTaskInstance[];
+  });
+
+  $effect(() => {
+    if (isDragging) return;
+
+    const nextWeeklyCells: Record<string, PersistedPeriodTaskInstance[]> = {};
+
+    for (const week of MONTHLY_PLAN_WEEKS) {
+      const weekKey = getMonthWeekKey(currentMonthKey, week);
+      const weekInstances = weeklyPeriodInstancesByWeek[weekKey] ?? [];
+
+      weekInstances.forEach((instance, index) => {
+        const day = instance.preferred_day ?? MONTHLY_PLAN_DAYS[index % MONTHLY_PLAN_DAYS.length];
+        if (!(MONTHLY_PLAN_DAYS as readonly string[]).includes(day)) return;
+        const cellKey = getCellKey(week, day);
+        if (!nextWeeklyCells[cellKey]) nextWeeklyCells[cellKey] = [];
+        nextWeeklyCells[cellKey].push({
+          ...instance,
+          preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
+        });
+      });
+    }
+
+    localWeeklyCells = nextWeeklyCells;
   });
 
   $effect(() => {
@@ -474,6 +574,20 @@
     };
   }
 
+  function updateWeeklyCellItems(
+    week: number,
+    day: string,
+    items: PersistedPeriodTaskInstance[]
+  ) {
+    localWeeklyCells = {
+      ...localWeeklyCells,
+      [getCellKey(week, day)]: items.map((instance) => ({
+        ...instance,
+        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
+      }))
+    };
+  }
+
   async function persistMonthlyInstances() {
     const nextInstances = [
       ...MONTHLY_PLAN_WEEKS.flatMap((week) =>
@@ -507,6 +621,45 @@
     });
   }
 
+  async function persistWeeklyInstances(week: number) {
+    const weekKey = getMonthWeekKey(currentMonthKey, week);
+    const nextWeekInstances = MONTHLY_PLAN_DAYS.flatMap(
+      (day) => localWeeklyCells[getCellKey(week, day)] ?? []
+    ).map((instance) => ({
+      ...instance,
+      id: `weekly:${instance.template_id}:${weekKey}`,
+      period_key: weekKey,
+      instance_key: `weekly:${instance.template_id}:${weekKey}`
+    }));
+    const updatedAt = new Date().toISOString();
+    weeklyPeriodInstancesByWeek = {
+      ...weeklyPeriodInstancesByWeek,
+      [weekKey]: nextWeekInstances
+    };
+
+    const { error } = await supabase.from('user_preferences').upsert(
+      {
+        key: getWeeklyInstancesStorageKey(weekKey),
+        value: {
+          instances: nextWeekInstances,
+          updatedAt
+        },
+        updated_at: updatedAt
+      },
+      { onConflict: 'key' }
+    );
+
+    if (error) {
+      toast.error('Failed to save weekly board order');
+      return;
+    }
+
+    queryClient.setQueryData(['thismonth_page', 'weekly_period_instances', currentMonthKey], {
+      ...(weeklyInstancesQuery.data ?? {}),
+      [weekKey]: nextWeekInstances
+    });
+  }
+
   function handleCellConsider(
     week: number,
     day: string,
@@ -524,6 +677,25 @@
     isDragging = false;
     updateCellItems(week, day, event.detail.items);
     await persistMonthlyInstances();
+  }
+
+  function handleWeeklyCellConsider(
+    week: number,
+    day: string,
+    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
+  ) {
+    isDragging = true;
+    updateWeeklyCellItems(week, day, event.detail.items);
+  }
+
+  async function handleWeeklyCellFinalize(
+    week: number,
+    day: string,
+    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
+  ) {
+    isDragging = false;
+    updateWeeklyCellItems(week, day, event.detail.items);
+    await persistWeeklyInstances(week);
   }
 
   function handleFlexibleConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
@@ -567,6 +739,7 @@
             weekOfMonth: week,
             plannerNotes: {},
             weeklyTasks: weeklyTasksQuery.data,
+            weeklyInstances: weeklyPeriodInstancesByWeek[getMonthWeekKey(currentMonthKey, week)] ?? [],
             monthlyInstances: monthlyPeriodInstances
           })
         });
@@ -770,7 +943,7 @@
                 {#each MONTHLY_PLAN_DAYS as day}
                   {@const cellKey = getCellKey(week, day)}
                   {@const cellTasks = localMonthCells[cellKey] ?? []}
-                  {@const weeklyTasks = weeklyInstancesByCell.get(cellKey) ?? []}
+                  {@const weeklyTasks = localWeeklyCells[cellKey] ?? []}
                   <div class="min-h-[120px] rounded-[18px] border border-zinc-200 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
                     <div class="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-400">
                       {getMonthCellDateLabel(week, day)}
@@ -822,9 +995,25 @@
                         {/each}
                       {/if}
                     </div>
-                    {#if weeklyTasks.length > 0}
-                      <div class="mt-1 flex flex-col gap-1">
-                        {#each weeklyTasks as wInstance (wInstance.instance_key)}
+                    <div
+                      use:dndzone={{
+                        items: weeklyTasks,
+                        flipDurationMs: 150,
+                        type: `weekly-instance-${week}`,
+                        dropTargetStyle: {
+                          outline: '2px dashed rgba(139, 92, 246, 0.45)',
+                          outlineOffset: '2px'
+                        }
+                      }}
+                      onconsider={(event) => handleWeeklyCellConsider(week, day, event)}
+                      onfinalize={(event) => handleWeeklyCellFinalize(week, day, event)}
+                      class="mt-1 flex min-h-[8px] flex-col gap-1"
+                    >
+                      {#each weeklyTasks as wInstance (wInstance.instance_key)}
+                        <div class="group flex items-start gap-2">
+                          <div class="mt-2 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
+                            <GripVertical size={12} />
+                          </div>
                           <button
                             onclick={() => toggleWeeklyInstance(wInstance.instance_key)}
                             class={`w-full rounded-[12px] border px-3 py-1.5 text-left transition-colors ${
@@ -846,9 +1035,9 @@
                               {wInstance.estimated_hours ?? 1}h · weekly
                             </div>
                           </button>
-                        {/each}
-                      </div>
-                    {/if}
+                        </div>
+                      {/each}
+                    </div>
                   </div>
                 {/each}
               {/each}

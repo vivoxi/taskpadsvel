@@ -184,6 +184,7 @@ export function generateRuleBasedSchedule(input: {
   weekOfMonth?: number;
   plannerNotes?: Record<string, string>;
   weeklyTasks: Task[];
+  weeklyInstances?: MaterializedTaskInstance[];
   monthlyTasks?: Task[];
   monthlyInstances?: MaterializedTaskInstance[];
   carryoverTaskTitles?: string[];
@@ -191,7 +192,8 @@ export function generateRuleBasedSchedule(input: {
   const plannerNotes = input.plannerNotes ?? {};
   const weekOfMonth = input.weekOfMonth ?? 1;
   const carryoverTitles = new Set((input.carryoverTaskTitles ?? []).map((title) => normalizeText(title)));
-  const weeklyInstances = materializeWeeklyTaskInstances(input.weeklyTasks, input.weekKey);
+  const weeklyInstances =
+    input.weeklyInstances ?? materializeWeeklyTaskInstances(input.weeklyTasks, input.weekKey);
   const monthlyInstances =
     input.monthlyInstances ?? materializeMonthlyTaskInstances(input.monthlyTasks ?? [], input.monthKey);
   const selectedMonthlyInstances = filterMonthlyInstancesForWeek(monthlyInstances, weekOfMonth);

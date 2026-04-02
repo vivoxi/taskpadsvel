@@ -11,10 +11,10 @@ Kisa repo notu. Uzun tutulmadi.
 ## Ana Sayfalar
 - `/dashboard`: weekly/monthly/random/schedule yuzdeleri
 - `/weekly`: recurring weekly tasks (template katman, templateMode=true)
-- `/monthly`: recurring monthly tasks + gecmis ay arsivi (template katman)
+- `/monthly`: recurring monthly tasks (template katman, templateMode=true)
 - `/random`: kategorili serbest task board
-- `/thisweek`: planner + AI/rule based weekly schedule + gecmis hafta arsivi
-- `/thismonth`: monthly task grid (4hf x 5gun) + weekly task chip'leri, drag-drop
+- `/thisweek`: planner + haftalik schedule + gecmis hafta arsivi
+- `/thismonth`: monthly task grid (4hf x 5gun) + generate month + drag-drop + gecmis ay arsivi
 
 ## Onemli Davranislar
 - Weekly taskler yeni haftada reset olur
@@ -23,16 +23,16 @@ Kisa repo notu. Uzun tutulmadi.
 - Gecmis weekly/monthly arsiv gorunumu var
 - Gecmis weekly arsivde attachment ve schedule block durumu da gorunur
 - Template katman (`/weekly`, `/monthly`): `templateMode=true` → `checkAndReset` calismaz
-- `/thismonth` weekly chip'leri: `period_instance_status:weekly:{weekKey}` uzerinden toggle + schedule block sync
+- `/thismonth` monthly instance checkbox -> ayni instance'a bagli `/thisweek` block'lariyla 2-way sync
+- `/weekly` ve `/monthly` template sayfalarinda completion/progress yok
 
 ## Schedule
 - `Generate`: AI'siz rules scheduler
-- `Generate with AI`: provider bazli AI scheduler
+- Generate sadece `/thismonth` icinden calisir, `/thisweek` generate etmez
 - Calisma saatleri: `10:00-17:00`
 - Mola: `13:00-14:00`
 - Random taskler schedule'a girmez
 - Schedule block checkbox ile weekly/monthly task completion senkron
-- Ters yon de var: weekly/monthly task checkbox schedule blocklari gunceller
 - Generate sonrasi `period_instances:weekly:{weekKey}` `user_preferences`'a upsert edilir
 
 ## Task Metadata
@@ -58,11 +58,6 @@ Kisa repo notu. Uzun tutulmadi.
 - Light mode / dark mode toggle var
 - Mobil drawer navigation var
 - Weekly / monthly / random sayfa iskeletleri benzerlestirildi
-
-## AI
-- `AI_PROVIDER=anthropic`
-- `AI_PROVIDER=openai-compatible`
-- Runtime env uzerinden okunur
 
 ## API
 - Task mutation (toggle, title, notes) `PATCH /api/task/[taskId]` uzerinden gider, dogrudan Supabase degil

@@ -31,6 +31,7 @@ export const POST: RequestHandler = async ({ request }) => {
     weekOfMonth,
     plannerNotes,
     weeklyTasks,
+    weeklyInstances,
     monthlyTasks,
     monthlyInstances
   }: {
@@ -38,6 +39,7 @@ export const POST: RequestHandler = async ({ request }) => {
     weekOfMonth?: number;
     plannerNotes?: Record<string, string>;
     weeklyTasks: Task[];
+    weeklyInstances?: MaterializedTaskInstance[];
     monthlyTasks?: Task[];
     monthlyInstances?: MaterializedTaskInstance[];
   } = body;
@@ -79,6 +81,7 @@ export const POST: RequestHandler = async ({ request }) => {
     weekOfMonth,
     plannerNotes,
     weeklyTasks,
+    weeklyInstances,
     monthlyTasks,
     monthlyInstances,
     carryoverTaskTitles
@@ -115,17 +118,28 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (insertError) throw error(500, insertError.message);
 
-  const weeklyInstances = materializeWeeklyTaskInstances(weeklyTasks, weekKey).map((instance) => ({
-    ...instance,
-    carryover: false,
-    carryover_source_period_key: null
-  }));
+  const nextWeeklyInstances = (weeklyInstances ?? materializeWeeklyTaskInstances(weeklyTasks, weekKey))
+    .map((instance) => ({
+      ...instance,
+      id: `weekly:${instance.template_id}:${weekKey}`,
+      period_key: weekKey,
+      instance_key: `weekly:${instance.template_id}:${weekKey}`,
+      carryover:
+        'carryover' in instance && typeof instance.carryover === 'boolean'
+          ? instance.carryover
+          : false,
+      carryover_source_period_key:
+        'carryover_source_period_key' in instance &&
+        typeof instance.carryover_source_period_key === 'string'
+          ? instance.carryover_source_period_key
+          : null
+    }));
 
   const updatedAt = new Date().toISOString();
   const { error: instancesError } = await supabaseAdmin.from('user_preferences').upsert(
     {
       key: getWeeklyInstancesStorageKey(weekKey),
-      value: { instances: weeklyInstances, updatedAt },
+      value: { instances: nextWeeklyInstances, updatedAt },
       updated_at: updatedAt
     },
     { onConflict: 'key' }
