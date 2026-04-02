@@ -9,7 +9,7 @@ import {
   parsePersistedPomodoroState,
   parsePomodoroHistory,
   parsePomodoroSnapshot,
-  POMODORO_HISTORY_LIMIT
+  POMODORO_HISTORY_RETENTION_DAYS
 } from '../src/lib/pomodoro';
 
 describe('pomodoro helpers', () => {
@@ -35,26 +35,37 @@ describe('pomodoro helpers', () => {
     expect(getPomodoroModeLabel('long')).toBe('Long Reset');
   });
 
-  it('keeps pomodoro history capped', () => {
+  it('keeps pomodoro history to the last month window', () => {
+    const nowMs = Date.parse('2026-04-02T12:00:00.000Z');
     const next = appendPomodoroHistory(
-      Array.from({ length: POMODORO_HISTORY_LIMIT }, (_, index) => ({
-        id: `old-${index}`,
-        mode: 'focus' as const,
-        label: '',
-        completedAt: `2026-04-02T10:${String(index).padStart(2, '0')}:00.000Z`,
-        durationSeconds: 1500
-      })),
+      [
+        {
+          id: 'recent',
+          mode: 'focus' as const,
+          label: 'Recent',
+          completedAt: '2026-03-15T10:00:00.000Z',
+          durationSeconds: 1500
+        },
+        {
+          id: 'too-old',
+          mode: 'focus' as const,
+          label: 'Old',
+          completedAt: '2026-02-01T10:00:00.000Z',
+          durationSeconds: 1500
+        }
+      ],
       {
         id: 'new',
         mode: 'short',
         label: 'Break',
         completedAt: '2026-04-02T12:00:00.000Z',
         durationSeconds: 300
-      }
+      },
+      nowMs
     );
 
-    expect(next).toHaveLength(POMODORO_HISTORY_LIMIT);
-    expect(next[0]?.id).toBe('new');
+    expect(next.map((entry) => entry.id)).toEqual(['new', 'recent']);
+    expect(POMODORO_HISTORY_RETENTION_DAYS).toBe(31);
   });
 
   it('parses saved pomodoro snapshot safely', () => {
@@ -109,7 +120,8 @@ describe('pomodoro helpers', () => {
             completedAt: null,
             durationSeconds: 'bad'
           }
-        ])
+        ]),
+        Date.parse('2026-04-02T12:00:00.000Z')
       )
     ).toEqual([
       {
@@ -119,42 +131,38 @@ describe('pomodoro helpers', () => {
         completedAt: '2026-04-02T10:00:00.000Z',
         durationSeconds: 1500
       },
-      {
-        id: '2',
-        mode: 'focus',
-        label: '',
-        completedAt: '1970-01-01T00:00:00.000Z',
-        durationSeconds: 0
-      }
     ]);
   });
 
   it('parses wrapped persisted pomodoro state safely', () => {
     expect(
-      parsePersistedPomodoroState({
-        snapshot: {
-          mode: 'short',
-          remainingSeconds: 240,
-          isRunning: false,
-          targetEpochMs: null,
-          focusLabel: 'Inbox',
-          completedFocusCount: 3,
-          completedFocusToday: 2,
-          completedBreakToday: 2,
-          focusMinutesToday: 50,
-          dayKey: '2026-04-02'
+      parsePersistedPomodoroState(
+        {
+          snapshot: {
+            mode: 'short',
+            remainingSeconds: 240,
+            isRunning: false,
+            targetEpochMs: null,
+            focusLabel: 'Inbox',
+            completedFocusCount: 3,
+            completedFocusToday: 2,
+            completedBreakToday: 2,
+            focusMinutesToday: 50,
+            dayKey: '2026-04-02'
+          },
+          history: [
+            {
+              id: 'h1',
+              mode: 'focus',
+              label: 'Inbox',
+              completedAt: '2026-04-02T10:00:00.000Z',
+              durationSeconds: 1500
+            }
+          ],
+          updatedAt: '2026-04-02T11:00:00.000Z'
         },
-        history: [
-          {
-            id: 'h1',
-            mode: 'focus',
-            label: 'Inbox',
-            completedAt: '2026-04-02T10:00:00.000Z',
-            durationSeconds: 1500
-          }
-        ],
-        updatedAt: '2026-04-02T11:00:00.000Z'
-      })
+        Date.parse('2026-04-02T12:00:00.000Z')
+      )
     ).toEqual({
       snapshot: {
         mode: 'short',

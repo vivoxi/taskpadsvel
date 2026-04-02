@@ -6,8 +6,10 @@
   import { Toaster } from 'svelte-sonner';
   import { browser } from '$app/environment';
   import { env } from '$env/dynamic/public';
+  import PomodoroFloatingWidget from '$lib/components/PomodoroFloatingWidget.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import PasswordModal from '$lib/components/PasswordModal.svelte';
+  import { initializePomodoroTimer } from '$lib/stores/pomodoroTimer';
   import { initializeTheme } from '$lib/stores/theme';
   import type { Snippet } from 'svelte';
 
@@ -25,6 +27,7 @@
 
   onMount(() => {
     initializeTheme();
+    initializePomodoroTimer();
   });
 
   const authRequired = $derived(env.PUBLIC_AUTH_REQUIRED === 'true');
@@ -97,4 +100,5 @@
   {/if}
 
   <Toaster richColors position="bottom-right" />
+  <PomodoroFloatingWidget />
 </QueryClientProvider>

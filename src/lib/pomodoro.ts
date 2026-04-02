@@ -31,7 +31,8 @@ export const POMODORO_PRESETS: Record<PomodoroMode, number> = {
   short: 5 * 60,
   long: 15 * 60
 };
-export const POMODORO_HISTORY_LIMIT = 24;
+export const POMODORO_HISTORY_RETENTION_DAYS = 31;
+export const POMODORO_HISTORY_LIMIT = 1000;
 export const POMODORO_STORAGE_KEY = 'taskpad:pomodoro:v1';
 export const POMODORO_HISTORY_STORAGE_KEY = 'taskpad:pomodoro-history:v1';
 export const POMODORO_SUPABASE_KEY = 'pomodoro:v1';
@@ -63,9 +64,10 @@ export function getPomodoroModeLabel(mode: PomodoroMode): string {
 
 export function appendPomodoroHistory(
   history: PomodoroHistoryEntry[],
-  entry: PomodoroHistoryEntry
+  entry: PomodoroHistoryEntry,
+  nowMs = Date.now()
 ): PomodoroHistoryEntry[] {
-  return [entry, ...history].slice(0, POMODORO_HISTORY_LIMIT);
+  return prunePomodoroHistory([entry, ...history], nowMs);
 }
 
 export function createDefaultPomodoroSnapshot(): PomodoroSnapshot {
@@ -142,6 +144,20 @@ function normalizePomodoroSnapshot(value: unknown): PomodoroSnapshot {
   };
 }
 
+function prunePomodoroHistory(
+  history: PomodoroHistoryEntry[],
+  nowMs = Date.now()
+): PomodoroHistoryEntry[] {
+  const cutoffMs = nowMs - POMODORO_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+  return history
+    .filter((entry) => {
+      const completedAtMs = Date.parse(entry.completedAt);
+      return Number.isFinite(completedAtMs) && completedAtMs >= cutoffMs;
+    })
+    .slice(0, POMODORO_HISTORY_LIMIT);
+}
+
 export function parsePomodoroSnapshot(raw: string | null | undefined): PomodoroSnapshot {
   if (!raw) return createDefaultPomodoroSnapshot();
 
@@ -152,22 +168,30 @@ export function parsePomodoroSnapshot(raw: string | null | undefined): PomodoroS
   }
 }
 
-export function parsePomodoroHistory(raw: string | null | undefined): PomodoroHistoryEntry[] {
+export function parsePomodoroHistory(
+  raw: string | null | undefined,
+  nowMs = Date.now()
+): PomodoroHistoryEntry[] {
   if (!raw) return [];
 
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    return prunePomodoroHistory(
+      parsed
       .map(normalizePomodoroHistoryEntry)
-      .filter((entry): entry is PomodoroHistoryEntry => entry !== null)
-      .slice(0, POMODORO_HISTORY_LIMIT);
+        .filter((entry): entry is PomodoroHistoryEntry => entry !== null),
+      nowMs
+    );
   } catch {
     return [];
   }
 }
 
-export function parsePersistedPomodoroState(value: unknown): PersistedPomodoroState | null {
+export function parsePersistedPomodoroState(
+  value: unknown,
+  nowMs = Date.now()
+): PersistedPomodoroState | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 
   const parsed = value as Record<string, unknown>;
@@ -179,10 +203,12 @@ export function parsePersistedPomodoroState(value: unknown): PersistedPomodoroSt
 
   return {
     snapshot: normalizePomodoroSnapshot(snapshotSource),
-    history: historySource
-      .map(normalizePomodoroHistoryEntry)
-      .filter((entry): entry is PomodoroHistoryEntry => entry !== null)
-      .slice(0, POMODORO_HISTORY_LIMIT),
+    history: prunePomodoroHistory(
+      historySource
+        .map(normalizePomodoroHistoryEntry)
+        .filter((entry): entry is PomodoroHistoryEntry => entry !== null),
+      nowMs
+    ),
     updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null
   };
 }
