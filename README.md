@@ -91,14 +91,14 @@ Recommended Dokploy settings:
 - Persistent Volume: mount a volume to `/app/uploads`
 - Health Check URL: `/api/health`
 
-Build-time arguments required in Dokploy:
+Build-time arguments:
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
 - `PUBLIC_AUTH_REQUIRED` (optional, defaults to `false`)
 
 Runtime environment variables required in Dokploy:
 
+- `PUBLIC_SUPABASE_URL`
+- `PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
 - `ADMIN_PASSWORD`
