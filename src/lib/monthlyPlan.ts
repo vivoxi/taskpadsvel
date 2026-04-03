@@ -77,9 +77,6 @@ export function buildMonthlyPlanBoardFromInstances(
   }
 
   const allCells = [...cellMap.values()];
-  fullyUnplaced.forEach((task, i) => {
-    allCells[i % allCells.length].tasks.push(task);
-  });
 
-  return { cells: allCells, flexibleTasks: [] };
+  return { cells: allCells, flexibleTasks: fullyUnplaced };
 }

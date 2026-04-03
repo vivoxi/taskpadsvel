@@ -312,8 +312,13 @@
         return {
           ...templateInstance,
           preferred_week_of_month:
-            instance.preferred_week_of_month ?? templateInstance.preferred_week_of_month,
-          preferred_day: instance.preferred_day ?? templateInstance.preferred_day,
+            instance.preferred_week_of_month != null
+              ? instance.preferred_week_of_month
+              : templateInstance.preferred_week_of_month,
+          preferred_day:
+            instance.preferred_day != null
+              ? instance.preferred_day
+              : templateInstance.preferred_day,
           carryover: templateInstance.carryover,
           carryover_source_period_key: templateInstance.carryover_source_period_key
         };
@@ -342,7 +347,8 @@
 
         return {
           ...templateInstance,
-          preferred_day: instance.preferred_day ?? templateInstance.preferred_day
+          preferred_day:
+            instance.preferred_day != null ? instance.preferred_day : templateInstance.preferred_day
         };
       });
 
