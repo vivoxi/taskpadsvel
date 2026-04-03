@@ -629,8 +629,8 @@
       class="flex min-h-12 flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
     >
       {#each visibleTasks as task (task.id)}
-        <div class="flex items-start gap-2 group">
-          <div class="group/task-handle relative pt-2">
+        <div class="group flex items-start gap-2">
+          <div class="relative pt-2">
             <button
               type="button"
               use:dragHandle
@@ -644,7 +644,7 @@
               <GripVertical size={14} />
             </button>
             <div
-              class="pointer-events-none absolute left-7 top-1 z-20 opacity-0 transition-opacity group-hover/task-handle:pointer-events-auto group-hover/task-handle:opacity-100"
+              class="pointer-events-none absolute left-5 top-1 z-20 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
             >
               <button
                 type="button"
