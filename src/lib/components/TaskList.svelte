@@ -9,7 +9,7 @@
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
-  import { GripVertical } from 'lucide-svelte';
+  import { CheckSquare2, Filter, GripVertical, ListTodo, Square, Trash2 } from 'lucide-svelte';
   import { Progress } from '$lib/components/ui/progress/index.js';
   import TaskRow from './TaskRow.svelte';
   import {
@@ -19,6 +19,7 @@
     updateCompletedInstanceKeys
   } from '$lib/periodInstances';
   import { parseScheduleBlockDetails, serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
+  import { parseTaskDetails, serializeTaskDetails } from '$lib/taskDetails';
   import { supabase } from '$lib/supabase';
   import { authPassword } from '$lib/stores';
   import { getWeekKey, getMonthKey } from '$lib/weekUtils';
@@ -96,6 +97,8 @@
   let taskOrder = $state<string[]>([]);
   let taskOrderLoaded = $state(false);
   let localTasks = $state<Task[]>([]);
+  let taskFilter = $state<'all' | 'active' | 'completed'>('all');
+  let autoEditTaskId = $state<string | null>(null);
 
   $effect(() => {
     if (!browser || taskOrderLoaded) return;
@@ -180,6 +183,14 @@
     })
   );
 
+  function isTaskVisible(task: Task): boolean {
+    if (taskFilter === 'active') return !task.completed;
+    if (taskFilter === 'completed') return task.completed;
+    return true;
+  }
+
+  const visibleTasks = $derived(displayTasks.filter((task) => isTaskVisible(task)));
+
   $effect(() => {
     if (!browser || !taskOrderLoaded) return;
     localStorage.setItem(taskOrderStorageKey, JSON.stringify(taskOrder));
@@ -204,6 +215,37 @@
   function handleTaskOrderFinalize(event: CustomEvent<DndEvent<Task>>) {
     localTasks = event.detail.items;
     taskOrder = localTasks.map((task) => task.id);
+  }
+
+  async function addTaskBelow(
+    anchorTaskId: string,
+    indentLevel: number,
+    category: string | null
+  ) {
+    const payload = serializeTaskDetails('', null, null, null, category, indentLevel);
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({
+        title: '',
+        type,
+        completed: false,
+        notes: payload
+      })
+      .select('id')
+      .single();
+
+    if (error || !data?.id) {
+      toast.error('Failed to add task');
+      return;
+    }
+
+    taskOrder = [
+      ...taskOrder.flatMap((taskId) => (taskId === anchorTaskId ? [taskId, data.id] : [taskId])),
+      ...(taskOrder.includes(anchorTaskId) ? [] : [data.id])
+    ];
+    taskFilter = 'all';
+    autoEditTaskId = data.id;
+    queryClient.invalidateQueries({ queryKey: ['tasks', type] });
   }
 
   // --- Auto-reset on mount (Weekly/Monthly only) ---
@@ -277,6 +319,61 @@
       return;
     }
     queryClient.invalidateQueries({ queryKey: ['tasks', type] });
+  }
+
+  async function setAllTasksCompleted(completed: boolean) {
+    if (!completionToggleEnabled || totalCount === 0) return;
+
+    if (type === 'random') {
+      const { error } = await supabase.from('tasks').update({ completed }).eq('type', type);
+      if (error) {
+        toast.error('Failed to update tasks');
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ['tasks', type] });
+      return;
+    }
+
+    if (!instanceStatusStorageKey) return;
+    const nextCompletedInstanceKeys = completed
+      ? displayTasks
+          .map((task) => getInstanceKeyForTask(task))
+          .filter((item): item is string => Boolean(item))
+      : [];
+    const updatedAt = new Date().toISOString();
+
+    const { error } = await supabase.from('user_preferences').upsert(
+      {
+        key: instanceStatusStorageKey,
+        value: {
+          completedInstanceKeys: nextCompletedInstanceKeys,
+          updatedAt
+        },
+        updated_at: updatedAt
+      },
+      { onConflict: 'key' }
+    );
+
+    if (error) {
+      toast.error('Failed to update tasks');
+      return;
+    }
+
+    queryClient.setQueryData(['period_instance_status', type, instanceStatusStorageKey], {
+      completedInstanceKeys: nextCompletedInstanceKeys,
+      updatedAt
+    });
+  }
+
+  async function clearCompletedTasks() {
+    if (!completionToggleEnabled) return;
+    const completedTasks = displayTasks.filter((task) => task.completed);
+    if (completedTasks.length === 0) return;
+    if (!confirm(`Delete ${completedTasks.length} completed task(s)?`)) return;
+
+    for (const task of completedTasks) {
+      await deleteTask(task.id);
+    }
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -470,11 +567,50 @@
 <div class="flex flex-col gap-4 max-w-2xl mx-auto">
   <!-- Progress bar -->
   {#if completionToggleEnabled}
-    <div class="flex items-center gap-3">
-      <Progress value={progressValue} class="flex-1 h-2" />
-      <span class="text-sm text-zinc-500 dark:text-zinc-400 shrink-0">
-        {completedCount}/{totalCount}
-      </span>
+    <div class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+          <ListTodo size={15} />
+          {completedCount} of {totalCount} complete
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            onclick={() => setAllTasksCompleted(completedCount !== totalCount)}
+            class="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-300 dark:hover:text-zinc-100"
+          >
+            {#if completedCount === totalCount && totalCount > 0}
+              <Square size={13} />
+              Uncheck all
+            {:else}
+              <CheckSquare2 size={13} />
+              Check all
+            {/if}
+          </button>
+          <button
+            onclick={clearCompletedTasks}
+            class="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-300"
+          >
+            <Trash2 size={13} />
+            Clear completed
+          </button>
+        </div>
+      </div>
+      <Progress value={progressValue} class="h-2 w-full" />
+      <div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+        <Filter size={12} />
+        {#each ['all', 'active', 'completed'] as filterOption}
+          <button
+            onclick={() => (taskFilter = filterOption as typeof taskFilter)}
+            class={`rounded-full px-3 py-1 transition-colors ${
+              taskFilter === filterOption
+                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                : 'bg-white text-zinc-500 hover:text-zinc-900 dark:bg-zinc-900/50 dark:text-zinc-400 dark:hover:text-zinc-100'
+            }`}
+          >
+            {filterOption}
+          </button>
+        {/each}
+      </div>
     </div>
   {/if}
 
@@ -487,25 +623,36 @@
     </div>
   {:else}
     <div
-      use:dndzone={{ items: localTasks, flipDurationMs: 150 }}
+      use:dndzone={{ items: visibleTasks, flipDurationMs: 150, dragDisabled: taskFilter !== 'all' }}
       onconsider={handleTaskOrderConsider}
       onfinalize={handleTaskOrderFinalize}
-      class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
+      class="flex min-h-12 flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
     >
-      {#each displayTasks as task (task.id)}
+      {#each visibleTasks as task (task.id)}
         <div class="flex items-start gap-2 group">
-          <div class="pt-3 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+          <div
+            class={`pt-3 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ${
+              taskFilter === 'all'
+                ? 'cursor-grab active:cursor-grabbing'
+                : 'cursor-not-allowed'
+            }`}
+          >
             <GripVertical size={14} />
           </div>
           <div class="min-w-0 flex-1">
             <TaskRow
               {task}
               attachments={getAttachmentsForTask(task.id)}
+              autoEditTitle={autoEditTaskId === task.id}
               showCompletionToggle={completionToggleEnabled}
               {weekKey}
               onToggle={toggleTask}
               onTitleUpdate={updateTaskTitle}
               onDeleteTask={deleteTask}
+              onInsertTaskBelow={addTaskBelow}
+              onAutoEditConsumed={() => {
+                autoEditTaskId = null;
+              }}
               {onAttachmentAdded}
               {onAttachmentDeleted}
             />
@@ -513,6 +660,12 @@
         </div>
       {/each}
     </div>
+
+    {#if visibleTasks.length === 0}
+      <div class="rounded-xl border border-dashed border-zinc-200 px-4 py-6 text-center text-sm text-zinc-400 dark:border-zinc-800">
+        No tasks in this view.
+      </div>
+    {/if}
   {/if}
 
   <!-- Add task input -->

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
-  import { Check, Pencil, Trash2, X } from 'lucide-svelte';
+  import { Check, ChevronDown, Pencil, X } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import * as Accordion from '$lib/components/ui/accordion/index.js';
   import AttachmentManager from './AttachmentManager.svelte';
@@ -21,11 +21,14 @@
     attachments = [],
     randomCategories = [],
     readonly = false,
+    autoEditTitle = false,
     showCompletionToggle = true,
     weekKey = '',
     onToggle,
     onTitleUpdate,
     onDeleteTask,
+    onInsertTaskBelow,
+    onAutoEditConsumed,
     onAttachmentAdded,
     onAttachmentDeleted
   }: {
@@ -33,11 +36,18 @@
     attachments?: TaskAttachment[];
     randomCategories?: string[];
     readonly?: boolean;
+    autoEditTitle?: boolean;
     showCompletionToggle?: boolean;
     weekKey?: string;
     onToggle: (id: string, completed: boolean) => void;
     onTitleUpdate: (id: string, title: string) => Promise<void> | void;
     onDeleteTask: (id: string) => Promise<void> | void;
+    onInsertTaskBelow?: (
+      taskId: string,
+      indentLevel: number,
+      category: string | null
+    ) => Promise<void> | void;
+    onAutoEditConsumed?: (taskId: string) => void;
     onAttachmentAdded: (attachment: TaskAttachment) => void;
     onAttachmentDeleted: (id: string) => void;
   } = $props();
@@ -49,6 +59,7 @@
   let preferredWeekOfMonth = $state('');
   let preferredDay = $state('');
   let category = $state('');
+  let indentLevel = $state(0);
   let editingTitle = $state(false);
   let titleValue = $state('');
 
@@ -60,9 +71,17 @@
       details.preferredWeekOfMonth === null ? '' : String(details.preferredWeekOfMonth);
     preferredDay = details.preferredDay ?? '';
     category = details.category ?? '';
+    indentLevel = details.indentLevel;
     if (!editingTitle) {
       titleValue = task.title;
     }
+  });
+
+  $effect(() => {
+    if (!autoEditTitle || readonly || editingTitle) return;
+    titleValue = task.title;
+    editingTitle = true;
+    onAutoEditConsumed?.(task.id);
   });
 
   $effect(() => {
@@ -84,14 +103,16 @@
       nextHours: string,
       nextPreferredWeekOfMonth: string,
       nextPreferredDay: string,
-      nextCategory: string
+      nextCategory: string,
+      nextIndentLevel: number
     ) => {
       const payload = serializeTaskDetails(
         nextNotes,
         parseEstimatedHoursInput(nextHours),
         parsePreferredWeekOfMonthInput(nextPreferredWeekOfMonth),
         (nextPreferredDay || null) as PreferredDay | null,
-        nextCategory || null
+        nextCategory || null,
+        nextIndentLevel
       );
 
       let password = '';
@@ -120,27 +141,67 @@
 
   function onNotesInput(e: Event) {
     notes = (e.target as HTMLTextAreaElement).value;
-    saveTaskDetails(task.id, notes, estimatedHours, preferredWeekOfMonth, preferredDay, category);
+    saveTaskDetails(
+      task.id,
+      notes,
+      estimatedHours,
+      preferredWeekOfMonth,
+      preferredDay,
+      category,
+      indentLevel
+    );
   }
 
   function onEstimatedHoursInput(e: Event) {
     estimatedHours = (e.target as HTMLInputElement).value;
-    saveTaskDetails(task.id, notes, estimatedHours, preferredWeekOfMonth, preferredDay, category);
+    saveTaskDetails(
+      task.id,
+      notes,
+      estimatedHours,
+      preferredWeekOfMonth,
+      preferredDay,
+      category,
+      indentLevel
+    );
   }
 
   function onPreferredWeekInput(e: Event) {
     preferredWeekOfMonth = (e.target as HTMLSelectElement).value;
-    saveTaskDetails(task.id, notes, estimatedHours, preferredWeekOfMonth, preferredDay, category);
+    saveTaskDetails(
+      task.id,
+      notes,
+      estimatedHours,
+      preferredWeekOfMonth,
+      preferredDay,
+      category,
+      indentLevel
+    );
   }
 
   function onPreferredDayInput(e: Event) {
     preferredDay = (e.target as HTMLSelectElement).value;
-    saveTaskDetails(task.id, notes, estimatedHours, preferredWeekOfMonth, preferredDay, category);
+    saveTaskDetails(
+      task.id,
+      notes,
+      estimatedHours,
+      preferredWeekOfMonth,
+      preferredDay,
+      category,
+      indentLevel
+    );
   }
 
   function onCategoryInput(e: Event) {
     category = (e.target as HTMLSelectElement).value;
-    saveTaskDetails(task.id, notes, estimatedHours, preferredWeekOfMonth, preferredDay, category);
+    saveTaskDetails(
+      task.id,
+      notes,
+      estimatedHours,
+      preferredWeekOfMonth,
+      preferredDay,
+      category,
+      indentLevel
+    );
   }
 
   function startTitleEdit() {
@@ -154,29 +215,61 @@
     titleValue = task.title;
   }
 
-  async function commitTitleEdit() {
+  async function commitTitleEdit(): Promise<boolean> {
     const nextTitle = titleValue.trim();
     editingTitle = false;
 
     if (!nextTitle) {
       titleValue = task.title;
       toast.error('Task title cannot be empty');
-      return;
+      return false;
     }
 
-    if (nextTitle === task.title) return;
+    if (nextTitle === task.title) return true;
     await onTitleUpdate(task.id, nextTitle);
+    return true;
   }
 
   function onTitleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
-      commitTitleEdit();
+      void (async () => {
+        const committed = await commitTitleEdit();
+        if (committed) {
+          await onInsertTaskBelow?.(task.id, indentLevel, category || null);
+        }
+      })();
+      return;
     }
 
     if (e.key === 'Escape') {
       e.preventDefault();
       cancelTitleEdit();
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const nextIndentLevel = Math.max(
+        0,
+        Math.min(6, indentLevel + (e.shiftKey ? -1 : 1))
+      );
+      indentLevel = nextIndentLevel;
+      saveTaskDetails(
+        task.id,
+        notes,
+        estimatedHours,
+        preferredWeekOfMonth,
+        preferredDay,
+        category,
+        nextIndentLevel
+      );
+      return;
+    }
+
+    if (e.key === 'Backspace' && titleValue.trim() === '') {
+      e.preventDefault();
+      void confirmDeleteTask();
     }
   }
 
@@ -187,25 +280,40 @@
 
 </script>
 
-<div class="group py-1">
+<div
+  class="group py-1 transition-[margin] duration-150"
+  style:margin-left={`${indentLevel * 1.35}rem`}
+>
   <Accordion.Root type="single">
     <Accordion.Item value={task.id} class="border-none">
-      <div class="flex items-center gap-3 px-1">
+      <div
+        class={`flex items-center gap-3 rounded-xl px-2 py-1 transition-colors duration-200 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 ${
+          indentLevel > 0
+            ? 'border-l-2 border-zinc-200 pl-3 dark:border-zinc-800'
+            : ''
+        }`}
+      >
         <!-- Circular checkbox -->
         {#if showCompletionToggle}
           <button
             onclick={() => !readonly && onToggle(task.id, !task.completed)}
             disabled={readonly}
-            class="shrink-0 h-5 w-5 rounded-full border-2 transition-colors flex items-center justify-center
+            class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200
               {task.completed
                 ? 'bg-orange-500 border-orange-500 dark:bg-orange-400 dark:border-orange-400'
-                : 'border-zinc-400 dark:border-zinc-600 hover:border-zinc-600 dark:hover:border-zinc-400'}
+                : 'border-zinc-300 hover:border-orange-400 dark:border-zinc-700 dark:hover:border-orange-300'}
               {readonly ? 'cursor-default' : 'cursor-pointer'}"
             aria-label="{task.completed ? 'Mark incomplete' : 'Mark complete'}"
           >
             {#if task.completed}
-              <svg viewBox="0 0 10 10" class="w-3 h-3" fill="none">
-                <path d="M2 5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg viewBox="0 0 10 10" class="h-3 w-3 animate-[pop-in_160ms_ease-out]" fill="none">
+                <path
+                  d="M2 5l2.5 2.5 3.5-4"
+                  stroke="white"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             {/if}
           </button>
@@ -242,12 +350,22 @@
             </button>
           </div>
         {:else}
-          <Accordion.Trigger class="flex-1 text-left text-sm py-1 hover:no-underline
-            {task.completed ? 'line-through text-zinc-400 dark:text-zinc-600' : 'text-zinc-900 dark:text-zinc-100'}">
-            {task.title}
-          </Accordion.Trigger>
+          <button
+            onclick={startTitleEdit}
+            class="flex-1 truncate py-1 text-left text-sm transition-colors duration-200 {task.completed
+              ? 'text-zinc-400 line-through dark:text-zinc-600'
+              : 'text-zinc-900 dark:text-zinc-100'}"
+          >
+            {task.title.trim() || 'Untitled task'}
+          </button>
           {#if !readonly}
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Accordion.Trigger
+                class="!flex-none !px-1 !py-1 !text-zinc-400 hover:!no-underline dark:!text-zinc-600"
+                aria-label="Toggle task details"
+              >
+                <ChevronDown size={14} class="opacity-0" />
+              </Accordion.Trigger>
               <button
                 onclick={(event) => {
                   event.stopPropagation();
@@ -266,9 +384,16 @@
                 class="rounded p-1 text-zinc-400 hover:text-red-500 transition-colors"
                 aria-label="Delete task"
               >
-                <Trash2 size={14} />
+                <X size={16} />
               </button>
             </div>
+          {:else}
+            <Accordion.Trigger
+              class="!flex-none !px-1 !py-1 !text-zinc-400 hover:!no-underline dark:!text-zinc-600"
+              aria-label="Toggle task details"
+            >
+              <ChevronDown size={14} class="opacity-0" />
+            </Accordion.Trigger>
           {/if}
         {/if}
       </div>
@@ -391,3 +516,17 @@
     </Accordion.Item>
   </Accordion.Root>
 </div>
+
+<style>
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+</style>

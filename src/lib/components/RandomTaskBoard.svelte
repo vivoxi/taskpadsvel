@@ -8,7 +8,18 @@
   import { browser } from '$app/environment';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
-  import { Check, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-svelte';
+  import {
+    Check,
+    CheckSquare2,
+    Filter,
+    GripVertical,
+    ListTodo,
+    Pencil,
+    Plus,
+    Square,
+    Trash2,
+    X
+  } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import TaskRow from './TaskRow.svelte';
   import { parseTaskDetails, serializeTaskDetails } from '$lib/taskDetails';
@@ -59,6 +70,8 @@
   let editingCategory = $state<string | null>(null);
   let categoryDraft = $state('');
   let categoryInput = $state<HTMLInputElement | null>(null);
+  let taskFilter = $state<'all' | 'active' | 'completed'>('all');
+  let autoEditTaskId = $state<string | null>(null);
 
   $effect(() => {
     if (!browser || categoryStateLoaded) return;
@@ -202,6 +215,13 @@
 
   const totalCount = $derived((tasksQuery.data ?? []).length);
   const completedCount = $derived((tasksQuery.data ?? []).filter((task) => task.completed).length);
+  const progressValue = $derived(totalCount > 0 ? (completedCount / totalCount) * 100 : 0);
+
+  function isTaskVisible(task: Task): boolean {
+    if (taskFilter === 'active') return !task.completed;
+    if (taskFilter === 'completed') return task.completed;
+    return true;
+  }
 
   function getAttachmentsForTask(taskId: string): TaskAttachment[] {
     return (attachmentsQuery.data ?? []).filter((attachment) => attachment.task_id === taskId);
@@ -249,7 +269,8 @@
           details.estimatedHours,
           details.preferredWeekOfMonth,
           details.preferredDay,
-          nextCategory === DEFAULT_CATEGORY ? null : nextCategory
+          nextCategory === DEFAULT_CATEGORY ? null : nextCategory,
+          details.indentLevel
         );
 
         const { error } = await supabase.from('tasks').update({ notes: payload }).eq('id', task.id);
@@ -291,7 +312,8 @@
           details.estimatedHours,
           details.preferredWeekOfMonth,
           details.preferredDay,
-          targetCategory === DEFAULT_CATEGORY ? null : targetCategory
+          targetCategory === DEFAULT_CATEGORY ? null : targetCategory,
+          details.indentLevel
         );
 
         const { error } = await supabase.from('tasks').update({ notes: payload }).eq('id', task.id);
@@ -330,7 +352,14 @@
     if (!title) return;
     categoryDrafts = { ...categoryDrafts, [category]: '' };
 
-    const payload = serializeTaskDetails('', null, null, null, category === DEFAULT_CATEGORY ? null : category);
+    const payload = serializeTaskDetails(
+      '',
+      null,
+      null,
+      null,
+      category === DEFAULT_CATEGORY ? null : category,
+      0
+    );
     const { error } = await supabase
       .from('tasks')
       .insert({ title, type: 'random', completed: false, notes: payload });
@@ -340,6 +369,42 @@
       return;
     }
 
+    queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
+  }
+
+  async function addTaskBelow(anchorTaskId: string, indentLevel: number, taskCategory: string | null) {
+    const category = taskCategory || DEFAULT_CATEGORY;
+    const payload = serializeTaskDetails(
+      '',
+      null,
+      null,
+      null,
+      category === DEFAULT_CATEGORY ? null : category,
+      indentLevel
+    );
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({ title: '', type: 'random', completed: false, notes: payload })
+      .select('id')
+      .single();
+
+    if (error || !data?.id) {
+      toast.error('Failed to add task');
+      return;
+    }
+
+    categoryOrderMap = {
+      ...categoryOrderMap,
+      [category]: [
+        ...(categoryOrderMap[category] ?? []).flatMap((taskId) =>
+          taskId === anchorTaskId ? [taskId, data.id] : [taskId]
+        ),
+        ...((categoryOrderMap[category] ?? []).includes(anchorTaskId) ? [] : [data.id])
+      ]
+    };
+    taskFilter = 'all';
+    autoEditTaskId = data.id;
     queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
   }
 
@@ -407,6 +472,27 @@
     toast.success('All tasks reset');
   }
 
+  async function setAllRandomTasksCompleted(completed: boolean) {
+    const { error } = await supabase.from('tasks').update({ completed }).eq('type', 'random');
+    if (error) {
+      toast.error('Failed to update tasks');
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['tasks_all'] });
+  }
+
+  async function clearCompletedTasks() {
+    const completedTasks = (tasksQuery.data ?? []).filter((task) => task.completed);
+    if (completedTasks.length === 0) return;
+    if (!confirm(`Delete ${completedTasks.length} completed task(s)?`)) return;
+
+    for (const task of completedTasks) {
+      await deleteTask(task.id);
+    }
+  }
+
   function onAttachmentAdded(_: TaskAttachment) {
     queryClient.invalidateQueries({ queryKey: ['attachments', 'random'] });
   }
@@ -427,7 +513,8 @@
             details.estimatedHours,
             details.preferredWeekOfMonth,
             details.preferredDay,
-            category === DEFAULT_CATEGORY ? null : category
+            category === DEFAULT_CATEGORY ? null : category,
+            details.indentLevel
           )
         };
       })
@@ -445,7 +532,8 @@
         details.estimatedHours,
         details.preferredWeekOfMonth,
         details.preferredDay,
-        category === DEFAULT_CATEGORY ? null : category
+        category === DEFAULT_CATEGORY ? null : category,
+        details.indentLevel
       );
 
       const { error } = await supabase.from('tasks').update({ notes: payload }).eq('id', task.id);
@@ -479,24 +567,69 @@
 </script>
 
 <div class="mx-auto flex max-w-2xl flex-col gap-6">
-  <div class="flex items-center justify-between gap-3">
-    <div class="text-sm text-zinc-500 dark:text-zinc-400">
-      {completedCount}/{totalCount} completed
+  <div class="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+        <ListTodo size={15} />
+        {completedCount} of {totalCount} complete
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          onclick={addCategory}
+          class="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-300 dark:hover:text-zinc-100"
+        >
+          <Plus size={13} />
+          New category
+        </button>
+        <button
+          onclick={() => setAllRandomTasksCompleted(completedCount !== totalCount)}
+          class="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-300 dark:hover:text-zinc-100"
+        >
+          {#if completedCount === totalCount && totalCount > 0}
+            <Square size={13} />
+            Uncheck all
+          {:else}
+            <CheckSquare2 size={13} />
+            Check all
+          {/if}
+        </button>
+        <button
+          onclick={clearCompletedTasks}
+          class="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-300"
+        >
+          <Trash2 size={13} />
+          Clear completed
+        </button>
+        <button
+          onclick={resetAll}
+          class="text-xs text-zinc-400 transition-colors hover:text-red-500"
+        >
+          Reset all
+        </button>
+      </div>
     </div>
-    <div class="flex items-center gap-2">
-      <button
-        onclick={addCategory}
-        class="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-      >
-        <Plus size={12} />
-        New category
-      </button>
-      <button
-        onclick={resetAll}
-        class="text-xs text-zinc-400 transition-colors hover:text-red-500"
-      >
-        Reset all
-      </button>
+
+    <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-zinc-200/60 dark:bg-zinc-800">
+      <div
+        class="h-full rounded-full bg-orange-500 transition-all duration-300 dark:bg-orange-400"
+        style:width={`${progressValue}%`}
+      ></div>
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+      <Filter size={12} />
+      {#each ['all', 'active', 'completed'] as filterOption}
+        <button
+          onclick={() => (taskFilter = filterOption as typeof taskFilter)}
+          class={`rounded-full px-3 py-1 transition-colors ${
+            taskFilter === filterOption
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+              : 'bg-white text-zinc-500 hover:text-zinc-900 dark:bg-zinc-900/50 dark:text-zinc-400 dark:hover:text-zinc-100'
+          }`}
+        >
+          {filterOption}
+        </button>
+      {/each}
     </div>
   </div>
 
@@ -575,9 +708,10 @@
 
           <div
             use:dndzone={{
-              items: localCategoryTasks[category] ?? [],
+              items: (localCategoryTasks[category] ?? []).filter((task) => isTaskVisible(task)),
               flipDurationMs: 150,
               type: 'random-tasks',
+              dragDisabled: taskFilter !== 'all',
               dropTargetStyle: {
                 outline: '2px dashed rgba(249, 115, 22, 0.4)',
                 outlineOffset: '2px'
@@ -587,9 +721,13 @@
             onfinalize={(event) => handleCategoryOrderFinalize(category, event)}
             class="flex min-h-10 flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
           >
-            {#each localCategoryTasks[category] ?? [] as task (task.id)}
+            {#each (localCategoryTasks[category] ?? []).filter((task) => isTaskVisible(task)) as task (task.id)}
               <div class="group flex items-start gap-2">
-                <div class="cursor-grab px-1 pt-3 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
+                <div class={`px-1 pt-3 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600 ${
+                  taskFilter === 'all'
+                    ? 'cursor-grab active:cursor-grabbing'
+                    : 'cursor-not-allowed'
+                }`}>
                   <GripVertical size={14} />
                 </div>
                 <div class="min-w-0 flex-1">
@@ -597,10 +735,15 @@
                     {task}
                     attachments={getAttachmentsForTask(task.id)}
                     randomCategories={categories}
+                    autoEditTitle={autoEditTaskId === task.id}
                     {weekKey}
                     onToggle={toggleTask}
                     onTitleUpdate={updateTaskTitle}
                     onDeleteTask={deleteTask}
+                    onInsertTaskBelow={addTaskBelow}
+                    onAutoEditConsumed={() => {
+                      autoEditTaskId = null;
+                    }}
                     {onAttachmentAdded}
                     {onAttachmentDeleted}
                   />
@@ -609,8 +752,12 @@
             {/each}
           </div>
 
-          {#if (localCategoryTasks[category] ?? []).length === 0}
-            <div class="py-2 text-sm italic text-zinc-400">No tasks in this category yet.</div>
+          {#if (localCategoryTasks[category] ?? []).filter((task) => isTaskVisible(task)).length === 0}
+            <div class="py-2 text-sm italic text-zinc-400">
+              {taskFilter === 'all'
+                ? 'No tasks in this category yet.'
+                : 'No tasks in this filter.'}
+            </div>
           {/if}
 
           <input

@@ -19,6 +19,7 @@ export interface ParsedTaskDetails {
   preferredWeekOfMonth: number | null;
   preferredDay: PreferredDay | null;
   category: string | null;
+  indentLevel: number;
 }
 
 export interface SchedulableTask extends Task {
@@ -38,7 +39,8 @@ export function parseTaskDetails(rawNotes: string | null | undefined): ParsedTas
       estimatedHours: null,
       preferredWeekOfMonth: null,
       preferredDay: null,
-      category: null
+      category: null,
+      indentLevel: 0
     };
   }
 
@@ -52,6 +54,7 @@ export function parseTaskDetails(rawNotes: string | null | undefined): ParsedTas
       preferredWeekOfMonth?: number | null;
       preferredDay?: string | null;
       category?: string | null;
+      indentLevel?: number | null;
     };
 
     return {
@@ -74,7 +77,14 @@ export function parseTaskDetails(rawNotes: string | null | undefined): ParsedTas
           : null,
       category: typeof metadata.category === 'string' && metadata.category.trim()
         ? metadata.category.trim()
-        : null
+        : null,
+      indentLevel:
+        typeof metadata.indentLevel === 'number' &&
+        Number.isInteger(metadata.indentLevel) &&
+        metadata.indentLevel >= 0 &&
+        metadata.indentLevel <= 6
+          ? metadata.indentLevel
+          : 0
     };
   } catch {
     return {
@@ -82,7 +92,8 @@ export function parseTaskDetails(rawNotes: string | null | undefined): ParsedTas
       estimatedHours: null,
       preferredWeekOfMonth: null,
       preferredDay: null,
-      category: null
+      category: null,
+      indentLevel: 0
     };
   }
 }
@@ -92,7 +103,8 @@ export function serializeTaskDetails(
   estimatedHours: number | null,
   preferredWeekOfMonth: number | null = null,
   preferredDay: PreferredDay | null = null,
-  category: string | null = null
+  category: string | null = null,
+  indentLevel = 0
 ): string {
   const normalizedNotes = notes.trimEnd();
   const normalizedHours =
@@ -110,12 +122,17 @@ export function serializeTaskDetails(
     ? preferredDay
     : null;
   const normalizedCategory = typeof category === 'string' && category.trim() ? category.trim() : null;
+  const normalizedIndentLevel =
+    Number.isInteger(indentLevel) && indentLevel > 0
+      ? Math.min(6, Math.max(0, indentLevel))
+      : 0;
 
   if (
     normalizedHours === null &&
     normalizedPreferredWeek === null &&
     normalizedPreferredDay === null &&
-    normalizedCategory === null
+    normalizedCategory === null &&
+    normalizedIndentLevel === 0
   ) {
     return normalizedNotes;
   }
@@ -124,7 +141,8 @@ export function serializeTaskDetails(
     estimatedHours: normalizedHours,
     preferredWeekOfMonth: normalizedPreferredWeek,
     preferredDay: normalizedPreferredDay,
-    category: normalizedCategory
+    category: normalizedCategory,
+    indentLevel: normalizedIndentLevel
   })}`;
   return normalizedNotes ? `${metadata}\n${normalizedNotes}` : metadata;
 }

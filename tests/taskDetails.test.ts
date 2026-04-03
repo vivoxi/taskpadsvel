@@ -13,7 +13,8 @@ describe('taskDetails helpers', () => {
       estimatedHours: null,
       preferredWeekOfMonth: null,
       preferredDay: null,
-      category: null
+      category: null,
+      indentLevel: 0
     });
   });
 
@@ -25,7 +26,8 @@ describe('taskDetails helpers', () => {
       estimatedHours: 2.5,
       preferredWeekOfMonth: null,
       preferredDay: null,
-      category: null
+      category: null,
+      indentLevel: 0
     });
   });
 
@@ -37,7 +39,8 @@ describe('taskDetails helpers', () => {
       estimatedHours: 3,
       preferredWeekOfMonth: 4,
       preferredDay: 'Friday',
-      category: null
+      category: null,
+      indentLevel: 0
     });
   });
 
@@ -49,7 +52,21 @@ describe('taskDetails helpers', () => {
       estimatedHours: null,
       preferredWeekOfMonth: null,
       preferredDay: null,
-      category: 'Ramazan C'
+      category: 'Ramazan C',
+      indentLevel: 0
+    });
+  });
+
+  it('stores and restores task indentation depth', () => {
+    const serialized = serializeTaskDetails('Sub item', null, null, null, null, 2);
+
+    expect(parseTaskDetails(serialized)).toEqual({
+      notes: 'Sub item',
+      estimatedHours: null,
+      preferredWeekOfMonth: null,
+      preferredDay: null,
+      category: null,
+      indentLevel: 2
     });
   });
 
