@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
-  import { Check, ChevronDown, Pencil, X } from 'lucide-svelte';
+  import { Check, ChevronDown, X } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import * as Accordion from '$lib/components/ui/accordion/index.js';
   import AttachmentManager from './AttachmentManager.svelte';
@@ -358,43 +358,12 @@
           >
             {task.title.trim() || 'Untitled task'}
           </button>
-          {#if !readonly}
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Accordion.Trigger
-                class="!flex-none !px-1 !py-1 !text-zinc-400 hover:!no-underline dark:!text-zinc-600"
-                aria-label="Toggle task details"
-              >
-                <ChevronDown size={14} class="opacity-0" />
-              </Accordion.Trigger>
-              <button
-                onclick={(event) => {
-                  event.stopPropagation();
-                  startTitleEdit();
-                }}
-                class="rounded p-1 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-                aria-label="Edit task title"
-              >
-                <Pencil size={14} />
-              </button>
-              <button
-                onclick={(event) => {
-                  event.stopPropagation();
-                  confirmDeleteTask();
-                }}
-                class="rounded p-1 text-zinc-400 hover:text-red-500 transition-colors"
-                aria-label="Delete task"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          {:else}
-            <Accordion.Trigger
-              class="!flex-none !px-1 !py-1 !text-zinc-400 hover:!no-underline dark:!text-zinc-600"
-              aria-label="Toggle task details"
-            >
-              <ChevronDown size={14} class="opacity-0" />
-            </Accordion.Trigger>
-          {/if}
+          <Accordion.Trigger
+            class="!flex-none !px-1 !py-1 !text-zinc-400 !opacity-0 transition-opacity hover:!no-underline group-hover:!opacity-100 dark:!text-zinc-600"
+            aria-label="Toggle task details"
+          >
+            <ChevronDown size={14} />
+          </Accordion.Trigger>
         {/if}
       </div>
 

@@ -7,7 +7,7 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { dndzone, type DndEvent } from 'svelte-dnd-action';
+  import { dndzone, dragHandle, dragHandleZone, type DndEvent } from 'svelte-dnd-action';
   import {
     Check,
     CheckSquare2,
@@ -707,7 +707,7 @@
           </div>
 
           <div
-            use:dndzone={{
+            use:dragHandleZone={{
               items: (localCategoryTasks[category] ?? []).filter((task) => isTaskVisible(task)),
               flipDurationMs: 150,
               type: 'random-tasks',
@@ -723,12 +723,31 @@
           >
             {#each (localCategoryTasks[category] ?? []).filter((task) => isTaskVisible(task)) as task (task.id)}
               <div class="group flex items-start gap-2">
-                <div class={`px-1 pt-3 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600 ${
-                  taskFilter === 'all'
-                    ? 'cursor-grab active:cursor-grabbing'
-                    : 'cursor-not-allowed'
-                }`}>
-                  <GripVertical size={14} />
+                <div class="group/task-handle relative pt-2">
+                  <button
+                    type="button"
+                    use:dragHandle
+                    class={`rounded-md px-1 py-1 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600 ${
+                      taskFilter === 'all'
+                        ? 'cursor-grab active:cursor-grabbing'
+                        : 'cursor-not-allowed'
+                    }`}
+                    aria-label="Task actions and drag handle"
+                  >
+                    <GripVertical size={14} />
+                  </button>
+                  <div
+                    class="pointer-events-none absolute left-7 top-1 z-20 opacity-0 transition-opacity group-hover/task-handle:pointer-events-auto group-hover/task-handle:opacity-100"
+                  >
+                    <button
+                      type="button"
+                      onclick={() => deleteTask(task.id)}
+                      class="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                    >
+                      <Trash2 size={13} />
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <div class="min-w-0 flex-1">
                   <TaskRow

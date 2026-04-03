@@ -8,7 +8,7 @@
   import { toast } from 'svelte-sonner';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
-  import { dndzone, type DndEvent } from 'svelte-dnd-action';
+  import { dragHandle, dragHandleZone, type DndEvent } from 'svelte-dnd-action';
   import { CheckSquare2, Filter, GripVertical, ListTodo, Square, Trash2 } from 'lucide-svelte';
   import { Progress } from '$lib/components/ui/progress/index.js';
   import TaskRow from './TaskRow.svelte';
@@ -623,21 +623,38 @@
     </div>
   {:else}
     <div
-      use:dndzone={{ items: visibleTasks, flipDurationMs: 150, dragDisabled: taskFilter !== 'all' }}
+      use:dragHandleZone={{ items: visibleTasks, flipDurationMs: 150, dragDisabled: taskFilter !== 'all' }}
       onconsider={handleTaskOrderConsider}
       onfinalize={handleTaskOrderFinalize}
       class="flex min-h-12 flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
     >
       {#each visibleTasks as task (task.id)}
         <div class="flex items-start gap-2 group">
-          <div
-            class={`pt-3 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ${
+          <div class="group/task-handle relative pt-2">
+            <button
+              type="button"
+              use:dragHandle
+              class={`rounded-md px-1 py-1 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600 ${
               taskFilter === 'all'
                 ? 'cursor-grab active:cursor-grabbing'
                 : 'cursor-not-allowed'
-            }`}
-          >
-            <GripVertical size={14} />
+              }`}
+              aria-label="Task actions and drag handle"
+            >
+              <GripVertical size={14} />
+            </button>
+            <div
+              class="pointer-events-none absolute left-7 top-1 z-20 opacity-0 transition-opacity group-hover/task-handle:pointer-events-auto group-hover/task-handle:opacity-100"
+            >
+              <button
+                type="button"
+                onclick={() => deleteTask(task.id)}
+                class="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+              >
+                <Trash2 size={13} />
+                Delete
+              </button>
+            </div>
           </div>
           <div class="min-w-0 flex-1">
             <TaskRow
