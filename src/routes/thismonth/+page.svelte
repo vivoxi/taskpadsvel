@@ -2,7 +2,7 @@
   import { browser } from '$app/environment';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { format } from 'date-fns';
-  import { dndzone, type DndEvent } from 'svelte-dnd-action';
+  import { TRIGGERS, dndzone, type DndEvent } from 'svelte-dnd-action';
   import { ChevronLeft, ChevronRight, GripVertical, RefreshCw } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import {
@@ -676,6 +676,11 @@
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
     updateCellItems(week, day, event.detail.items);
+
+    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+      return;
+    }
+
     try {
       await persistMonthlyInstances();
     } finally {
@@ -698,6 +703,11 @@
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
     updateWeeklyCellItems(week, day, event.detail.items);
+
+    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+      return;
+    }
+
     try {
       await persistWeeklyInstances(week);
     } finally {
@@ -716,6 +726,11 @@
 
   async function handleFlexibleFinalize(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
     handleFlexibleConsider(event);
+
+    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+      return;
+    }
+
     try {
       await persistMonthlyInstances();
     } finally {
