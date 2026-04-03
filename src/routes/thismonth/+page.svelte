@@ -3,7 +3,7 @@
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { format } from 'date-fns';
   import { TRIGGERS, dndzone, type DndEvent } from 'svelte-dnd-action';
-  import { ChevronLeft, ChevronRight, GripVertical, RefreshCw } from 'lucide-svelte';
+  import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import {
     MONTHLY_PLAN_DAYS,
@@ -37,7 +37,10 @@
     monthLabel
   } from '$lib/weekUtils';
   import TaskList from '$lib/components/TaskList.svelte';
-  import { materializeWeeklyTaskInstances } from '$lib/recurringTasks';
+  import {
+    materializeMonthlyTaskInstances,
+    materializeWeeklyTaskInstances
+  } from '$lib/recurringTasks';
   import type { HistorySnapshot, ScheduleBlock, Task } from '$lib/types';
 
   const queryClient = useQueryClient();
@@ -190,8 +193,20 @@
   let localMonthCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
   let localWeeklyCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
   let localFlexibleInstances = $state<PersistedPeriodTaskInstance[]>([]);
+  let monthlyTemplateSourceItems = $state<PersistedPeriodTaskInstance[]>([]);
+  let weeklyTemplateSourceItemsByWeek =
+    $state<Record<number, PersistedPeriodTaskInstance[]>>({});
   let isDragging = $state(false);
-  let generatingMonth = $state(false);
+
+  const monthlyTemplateInstances = $derived(
+    materializeMonthlyTaskInstances(tasksQuery.data ?? [], currentMonthKey).map((instance) => ({
+      ...instance,
+      id: `monthly-source:${instance.template_id}`,
+      instance_key: `monthly-source:${instance.template_id}`,
+      carryover: false,
+      carryover_source_period_key: null
+    }))
+  );
 
   const generatedMonthlyInstances = $derived(
     createMonthlyPeriodInstances({
@@ -201,15 +216,16 @@
     })
   );
 
-  const generatedWeeklyInstancesByWeek = $derived.by(() => {
-    const byWeek: Record<string, PersistedPeriodTaskInstance[]> = {};
+  const weeklyTemplateInstancesByWeek = $derived.by(() => {
+    const byWeek: Record<number, PersistedPeriodTaskInstance[]> = {};
 
     for (const weekNum of MONTHLY_PLAN_WEEKS) {
       const weekKey = getMonthWeekKey(currentMonthKey, weekNum);
-      byWeek[weekKey] = materializeWeeklyTaskInstances(weeklyTasksQuery.data ?? [], weekKey).map(
+      byWeek[weekNum] = materializeWeeklyTaskInstances(weeklyTasksQuery.data ?? [], weekKey).map(
         (instance) => ({
           ...instance,
-          id: instance.instance_key,
+          id: `weekly-source:${weekNum}:${instance.template_id}`,
+          instance_key: `weekly-source:${weekNum}:${instance.template_id}`,
           carryover: false,
           carryover_source_period_key: null
         })
@@ -225,6 +241,161 @@
   );
   const previousMonthlySummary = $derived(summarizeSnapshot(previousSnapshotQuery.data));
   const monthlyCarryoverTasks = $derived((previousSnapshotQuery.data?.missed_tasks ?? []) as Task[]);
+
+  function getPlannedMonthInstances(): PersistedPeriodTaskInstance[] {
+    return [
+      ...MONTHLY_PLAN_WEEKS.flatMap((week) =>
+        MONTHLY_PLAN_DAYS.flatMap((day) => localMonthCells[getCellKey(week, day)] ?? [])
+      ),
+      ...localFlexibleInstances
+    ].filter((instance) => !instance.instance_key.startsWith('monthly-source:'));
+  }
+
+  function getPlannedWeekInstances(week: number): PersistedPeriodTaskInstance[] {
+    return MONTHLY_PLAN_DAYS.flatMap(
+      (day) => localWeeklyCells[getCellKey(week, day)] ?? []
+    ).filter((instance) => !instance.instance_key.startsWith('weekly-source:'));
+  }
+
+  function getMonthlyTemplateHourLimit(templateId: string): number {
+    return monthlyTemplateInstances.find((instance) => instance.template_id === templateId)
+      ?.estimated_hours ?? 1;
+  }
+
+  function getWeeklyTemplateHourLimit(week: number, templateId: string): number {
+    return weeklyTemplateInstancesByWeek[week]?.find(
+      (instance) => instance.template_id === templateId
+    )?.estimated_hours ?? 1;
+  }
+
+  function getMonthlyAllocatedHours(templateId: string): number {
+    return getPlannedMonthInstances()
+      .filter((instance) => instance.template_id === templateId)
+      .reduce((sum, instance) => sum + (instance.estimated_hours ?? 1), 0);
+  }
+
+  function getWeeklyAllocatedHours(week: number, templateId: string): number {
+    return getPlannedWeekInstances(week)
+      .filter((instance) => instance.template_id === templateId)
+      .reduce((sum, instance) => sum + (instance.estimated_hours ?? 1), 0);
+  }
+
+  function createInstanceCopyId(kind: 'weekly' | 'monthly', templateId: string, periodKey: string): string {
+    return `${kind}:${templateId}:${periodKey}:${crypto.randomUUID()}`;
+  }
+
+  function createMonthlyInstanceCopy(
+    source: PersistedPeriodTaskInstance,
+    week: number,
+    day: string
+  ): PersistedPeriodTaskInstance | null {
+    const unitHours = Math.min(1, source.estimated_hours ?? 1);
+    if (getMonthlyAllocatedHours(source.template_id) + unitHours > getMonthlyTemplateHourLimit(source.template_id)) {
+      toast.error(`"${source.title}" monthly hour limit reached`);
+      return null;
+    }
+
+    const instanceKey = createInstanceCopyId('monthly', source.template_id, currentMonthKey);
+    return {
+      ...source,
+      id: instanceKey,
+      instance_key: instanceKey,
+      period_key: currentMonthKey,
+      period_type: 'monthly',
+      estimated_hours: unitHours,
+      preferred_week_of_month: week,
+      preferred_day: day as PersistedPeriodTaskInstance['preferred_day'],
+      completed: false,
+      carryover: false,
+      carryover_source_period_key: null
+    };
+  }
+
+  function createWeeklyInstanceCopy(
+    source: PersistedPeriodTaskInstance,
+    week: number,
+    day: string
+  ): PersistedPeriodTaskInstance | null {
+    const weekKey = getMonthWeekKey(currentMonthKey, week);
+    const unitHours = Math.min(1, source.estimated_hours ?? 1);
+    if (
+      getWeeklyAllocatedHours(week, source.template_id) + unitHours >
+      getWeeklyTemplateHourLimit(week, source.template_id)
+    ) {
+      toast.error(`"${source.title}" weekly hour limit reached`);
+      return null;
+    }
+
+    const instanceKey = createInstanceCopyId('weekly', source.template_id, weekKey);
+    return {
+      ...source,
+      id: instanceKey,
+      instance_key: instanceKey,
+      period_key: weekKey,
+      period_type: 'weekly',
+      estimated_hours: unitHours,
+      preferred_week_of_month: week,
+      preferred_day: day as PersistedPeriodTaskInstance['preferred_day'],
+      completed: false,
+      carryover: false,
+      carryover_source_period_key: null
+    };
+  }
+
+  function normalizeMonthDropItems(
+    week: number,
+    day: string,
+    items: PersistedPeriodTaskInstance[]
+  ): PersistedPeriodTaskInstance[] {
+    const nextItems: PersistedPeriodTaskInstance[] = [];
+
+    for (const instance of items) {
+      if (instance.instance_key.startsWith('monthly-source:')) {
+        const copy = createMonthlyInstanceCopy(instance, week, day);
+        if (copy) nextItems.push(copy);
+        continue;
+      }
+
+      nextItems.push({
+        ...instance,
+        preferred_week_of_month: week,
+        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
+      });
+    }
+
+    return nextItems;
+  }
+
+  function normalizeWeeklyDropItems(
+    week: number,
+    day: string,
+    items: PersistedPeriodTaskInstance[]
+  ): PersistedPeriodTaskInstance[] {
+    const weekKey = getMonthWeekKey(currentMonthKey, week);
+    const nextItems: PersistedPeriodTaskInstance[] = [];
+
+    for (const instance of items) {
+      if (instance.instance_key.startsWith('weekly-source:')) {
+        const copy = createWeeklyInstanceCopy(instance, week, day);
+        if (copy) nextItems.push(copy);
+        continue;
+      }
+
+      if (instance.period_key !== weekKey) {
+        toast.error('Weekly tasks can only move inside their own week');
+        continue;
+      }
+
+      nextItems.push({
+        ...instance,
+        id: instance.instance_key,
+        period_key: weekKey,
+        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
+      });
+    }
+
+    return nextItems;
+  }
 
   function getPastCompletedTasks(): Task[] {
     return (snapshotQuery.data?.completed_tasks ?? []) as Task[];
@@ -299,18 +470,22 @@
     persistedInstances: PersistedPeriodTaskInstance[],
     templateInstances: PersistedPeriodTaskInstance[]
   ): PersistedPeriodTaskInstance[] {
-    const templateByKey = new Map(
-      templateInstances.map((instance) => [instance.instance_key, instance])
+    const templateById = new Map(
+      templateInstances.map((instance) => [instance.template_id, instance])
     );
 
-    const mergedInstances = persistedInstances
-      .filter((instance) => templateByKey.has(instance.instance_key))
+    return persistedInstances
+      .filter((instance) => templateById.has(instance.template_id))
       .map((instance) => {
-        const templateInstance = templateByKey.get(instance.instance_key);
+        const templateInstance = templateById.get(instance.template_id);
         if (!templateInstance) return instance;
 
         return {
           ...templateInstance,
+          ...instance,
+          title: templateInstance.title,
+          notes: templateInstance.notes,
+          estimated_hours: instance.estimated_hours ?? Math.min(1, templateInstance.estimated_hours ?? 1),
           preferred_week_of_month:
             instance.preferred_week_of_month != null
               ? instance.preferred_week_of_month
@@ -323,40 +498,32 @@
           carryover_source_period_key: templateInstance.carryover_source_period_key
         };
       });
-
-    const mergedKeys = new Set(mergedInstances.map((instance) => instance.instance_key));
-    return [
-      ...mergedInstances,
-      ...templateInstances.filter((instance) => !mergedKeys.has(instance.instance_key))
-    ];
   }
 
   function mergeWeeklyInstances(
     persistedInstances: PersistedPeriodTaskInstance[],
     templateInstances: PersistedPeriodTaskInstance[]
   ): PersistedPeriodTaskInstance[] {
-    const templateByKey = new Map(
-      templateInstances.map((instance) => [instance.instance_key, instance])
+    const templateById = new Map(
+      templateInstances.map((instance) => [instance.template_id, instance])
     );
 
-    const mergedInstances = persistedInstances
-      .filter((instance) => templateByKey.has(instance.instance_key))
+    return persistedInstances
+      .filter((instance) => templateById.has(instance.template_id))
       .map((instance) => {
-        const templateInstance = templateByKey.get(instance.instance_key);
+        const templateInstance = templateById.get(instance.template_id);
         if (!templateInstance) return instance;
 
         return {
           ...templateInstance,
+          ...instance,
+          title: templateInstance.title,
+          notes: templateInstance.notes,
+          estimated_hours: instance.estimated_hours ?? Math.min(1, templateInstance.estimated_hours ?? 1),
           preferred_day:
             instance.preferred_day != null ? instance.preferred_day : templateInstance.preferred_day
         };
       });
-
-    const mergedKeys = new Set(mergedInstances.map((instance) => instance.instance_key));
-    return [
-      ...mergedInstances,
-      ...templateInstances.filter((instance) => !mergedKeys.has(instance.instance_key))
-    ];
   }
 
   $effect(() => {
@@ -368,7 +535,7 @@
     const persisted = parsePersistedPeriodInstances(monthlyInstancesQuery.data);
     monthlyPeriodInstances = persisted?.instances.length
       ? mergeMonthlyInstances(persisted.instances, generatedMonthlyInstances)
-      : generatedMonthlyInstances;
+      : [];
   });
 
   $effect(() => {
@@ -384,8 +551,8 @@
       const weekKey = getMonthWeekKey(currentMonthKey, week);
       const persistedInstances = persistedByWeek[weekKey] ?? [];
       nextByWeek[weekKey] = persistedInstances.length
-        ? mergeWeeklyInstances(persistedInstances, generatedWeeklyInstancesByWeek[weekKey] ?? [])
-        : (generatedWeeklyInstancesByWeek[weekKey] ?? []);
+        ? mergeWeeklyInstances(persistedInstances, weeklyTemplateInstancesByWeek[week] ?? [])
+        : [];
     }
 
     weeklyPeriodInstancesByWeek = nextByWeek;
@@ -430,6 +597,22 @@
   });
 
   $effect(() => {
+    if (isPastMonth || isDragging) {
+      return;
+    }
+
+    monthlyTemplateSourceItems = monthlyTemplateInstances;
+  });
+
+  $effect(() => {
+    if (isPastMonth || isDragging) {
+      return;
+    }
+
+    weeklyTemplateSourceItemsByWeek = weeklyTemplateInstancesByWeek;
+  });
+
+  $effect(() => {
     if (isPastMonth) {
       monthlyCompletedInstanceKeys = [];
       return;
@@ -445,45 +628,6 @@
       return;
     }
     weeklyCompletedByStatusKey = weeklyInstanceStatusQuery.data ?? {};
-  });
-
-  $effect(() => {
-    if (
-      !browser ||
-      isPastMonth ||
-      !tasksQuery.isSuccess ||
-      !previousSnapshotQuery.isSuccess ||
-      !monthlyInstancesQuery.isSuccess
-    ) {
-      return;
-    }
-
-    const persisted = parsePersistedPeriodInstances(monthlyInstancesQuery.data);
-    const nextInstances = persisted?.instances.length
-      ? mergeMonthlyInstances(persisted.instances, generatedMonthlyInstances)
-      : generatedMonthlyInstances;
-    const nextValue = {
-      instances: nextInstances,
-      updatedAt: new Date().toISOString()
-    };
-
-    if (JSON.stringify(persisted?.instances ?? []) === JSON.stringify(nextValue.instances)) {
-      return;
-    }
-
-    supabase
-      .from('user_preferences')
-      .upsert(
-        {
-          key: monthlyInstancesStorageKey,
-          value: nextValue,
-          updated_at: nextValue.updatedAt
-        },
-        { onConflict: 'key' }
-      )
-      .then(({ error }) => {
-        if (error) console.error('Failed to save monthly period instances', error);
-      });
   });
 
   async function toggleInstance(instanceKey: string) {
@@ -573,11 +717,7 @@
   function updateCellItems(week: number, day: string, items: PersistedPeriodTaskInstance[]) {
     localMonthCells = {
       ...localMonthCells,
-      [getCellKey(week, day)]: items.map((instance) => ({
-        ...instance,
-        preferred_week_of_month: week,
-        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
-      }))
+      [getCellKey(week, day)]: normalizeMonthDropItems(week, day, items)
     };
   }
 
@@ -588,20 +728,12 @@
   ) {
     localWeeklyCells = {
       ...localWeeklyCells,
-      [getCellKey(week, day)]: items.map((instance) => ({
-        ...instance,
-        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
-      }))
+      [getCellKey(week, day)]: normalizeWeeklyDropItems(week, day, items)
     };
   }
 
   async function persistMonthlyInstances() {
-    const nextInstances = [
-      ...MONTHLY_PLAN_WEEKS.flatMap((week) =>
-        MONTHLY_PLAN_DAYS.flatMap((day) => localMonthCells[getCellKey(week, day)] ?? [])
-      ),
-      ...localFlexibleInstances
-    ];
+    const nextInstances = getPlannedMonthInstances();
     const updatedAt = new Date().toISOString();
     monthlyPeriodInstances = nextInstances;
 
@@ -630,13 +762,10 @@
 
   async function persistWeeklyInstances(week: number) {
     const weekKey = getMonthWeekKey(currentMonthKey, week);
-    const nextWeekInstances = MONTHLY_PLAN_DAYS.flatMap(
-      (day) => localWeeklyCells[getCellKey(week, day)] ?? []
-    ).map((instance) => ({
+    const nextWeekInstances = getPlannedWeekInstances(week).map((instance) => ({
       ...instance,
-      id: `weekly:${instance.template_id}:${weekKey}`,
-      period_key: weekKey,
-      instance_key: `weekly:${instance.template_id}:${weekKey}`
+      id: instance.instance_key,
+      period_key: weekKey
     }));
     const updatedAt = new Date().toISOString();
     weeklyPeriodInstancesByWeek = {
@@ -691,6 +820,7 @@
       await persistMonthlyInstances();
     } finally {
       isDragging = false;
+      monthlyTemplateSourceItems = monthlyTemplateInstances;
     }
   }
 
@@ -718,6 +848,7 @@
       await persistWeeklyInstances(week);
     } finally {
       isDragging = false;
+      weeklyTemplateSourceItemsByWeek = weeklyTemplateInstancesByWeek;
     }
   }
 
@@ -741,54 +872,37 @@
       await persistMonthlyInstances();
     } finally {
       isDragging = false;
+      monthlyTemplateSourceItems = monthlyTemplateInstances;
     }
   }
 
-  async function generateMonthSchedule() {
-    if (isPastMonth || generatingMonth) return;
-    if (!weeklyTasksQuery.data) {
-      toast.error('Weekly templates are still loading');
-      return;
-    }
+  function handleMonthlySourceConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
+    isDragging = true;
+    monthlyTemplateSourceItems = event.detail.items;
+  }
 
-    generatingMonth = true;
+  function handleMonthlySourceFinalize() {
+    isDragging = false;
+    monthlyTemplateSourceItems = monthlyTemplateInstances;
+  }
 
-    let password = '';
-    const unsubscribe = authPassword.subscribe((value) => (password = value));
-    unsubscribe();
+  function handleWeeklySourceConsider(
+    week: number,
+    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
+  ) {
+    isDragging = true;
+    weeklyTemplateSourceItemsByWeek = {
+      ...weeklyTemplateSourceItemsByWeek,
+      [week]: event.detail.items
+    };
+  }
 
-    try {
-      for (const week of MONTHLY_PLAN_WEEKS) {
-        const response = await fetch('/api/schedule/generate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(password ? { Authorization: `Bearer ${password}` } : {})
-          },
-          body: JSON.stringify({
-            weekKey: getMonthWeekKey(currentMonthKey, week),
-            weekOfMonth: week,
-            plannerNotes: {},
-            weeklyTasks: weeklyTasksQuery.data,
-            weeklyInstances: weeklyPeriodInstancesByWeek[getMonthWeekKey(currentMonthKey, week)] ?? [],
-            monthlyInstances: monthlyPeriodInstances
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['weekly_schedule'] });
-      toast.success('Month schedule generated');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to generate month schedule';
-      toast.error(message.slice(0, 180));
-      console.error(err);
-    } finally {
-      generatingMonth = false;
-    }
+  function handleWeeklySourceFinalize(week: number) {
+    isDragging = false;
+    weeklyTemplateSourceItemsByWeek = {
+      ...weeklyTemplateSourceItemsByWeek,
+      [week]: weeklyTemplateInstancesByWeek[week] ?? []
+    };
   }
 </script>
 
@@ -836,16 +950,6 @@
                 class="text-xs text-blue-600 hover:underline dark:text-blue-400"
               >
                 Current month
-              </button>
-            {/if}
-            {#if !isPastMonth}
-              <button
-                onclick={generateMonthSchedule}
-                disabled={generatingMonth}
-                class="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                <RefreshCw size={12} class={generatingMonth ? 'animate-spin' : ''} />
-                {generatingMonth ? 'Generating…' : 'Generate Month'}
               </button>
             {/if}
           </div>
@@ -952,7 +1056,7 @@
             <div class="mb-5">
               <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Weekly Templates</div>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
-                Her hafta tekrar eden işler
+                Her hafta tekrar eden işler. Kopya atmak için aşağıdaki haftalık chip'leri ilgili haftanın günlerine sürükle.
               </div>
             </div>
             <TaskList type="weekly" templateMode={true} />
@@ -962,10 +1066,36 @@
             <div class="mb-5">
               <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Monthly Templates</div>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
-                Ay içine yayılacak recurring işler
+                Ay içine yayılacak recurring işler. Aşağıdaki chip'lerden calendar'a sürükleyerek manuel kopya oluştur.
               </div>
             </div>
             <TaskList type="monthly" templateMode={true} />
+
+            <div class="mt-6 rounded-[20px] border border-sky-100 bg-sky-50/40 p-4 dark:border-sky-500/10 dark:bg-sky-950/10">
+              <div class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">
+                Drag Monthly Copies
+              </div>
+              <div
+                use:dndzone={{
+                  items: monthlyTemplateSourceItems,
+                  flipDurationMs: 150,
+                  type: 'monthly-instance'
+                }}
+                onconsider={handleMonthlySourceConsider}
+                onfinalize={handleMonthlySourceFinalize}
+                class="mt-3 flex min-h-[44px] flex-wrap gap-2"
+              >
+                {#each monthlyTemplateSourceItems as sourceItem (sourceItem.instance_key)}
+                  <div class="inline-flex cursor-grab items-center gap-2 rounded-full border border-sky-200 bg-white/90 px-3 py-1.5 text-xs text-sky-800 active:cursor-grabbing dark:border-sky-500/20 dark:bg-zinc-950/60 dark:text-sky-200">
+                    <GripVertical size={12} />
+                    {sourceItem.title}
+                    <span class="text-sky-500 dark:text-sky-400">
+                      max {sourceItem.estimated_hours ?? 1}h
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            </div>
           </section>
         </div>
 
@@ -991,6 +1121,26 @@
               {#each MONTHLY_PLAN_WEEKS as week}
                 <div class="rounded-[18px] border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
                   Week {week}
+                  <div
+                    use:dndzone={{
+                      items: weeklyTemplateSourceItemsByWeek[week] ?? [],
+                      flipDurationMs: 150,
+                      type: `weekly-instance-${week}`
+                    }}
+                    onconsider={(event) => handleWeeklySourceConsider(week, event)}
+                    onfinalize={() => handleWeeklySourceFinalize(week)}
+                    class="mt-3 flex min-h-[36px] flex-col gap-1"
+                  >
+                    {#each weeklyTemplateSourceItemsByWeek[week] ?? [] as sourceItem (sourceItem.instance_key)}
+                      <div class="inline-flex cursor-grab items-center gap-1.5 rounded-full border border-violet-200 bg-white/90 px-2 py-1 text-[10px] font-medium text-violet-800 active:cursor-grabbing dark:border-violet-500/20 dark:bg-zinc-950/60 dark:text-violet-200">
+                        <GripVertical size={10} />
+                        <span class="line-clamp-1">{sourceItem.title}</span>
+                        <span class="text-violet-500 dark:text-violet-400">
+                          {sourceItem.estimated_hours ?? 1}h
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
                 </div>
                 {#each MONTHLY_PLAN_DAYS as day}
                   {@const cellKey = getCellKey(week, day)}

@@ -7,11 +7,29 @@
   import AttachmentChip from '$lib/components/AttachmentChip.svelte';
   import DayCard from '$lib/components/DayCard.svelte';
   import ScheduleDay from '$lib/components/ScheduleDay.svelte';
+  import {
+    getMonthlyInstanceStatusStorageKey,
+    getMonthlyInstancesStorageKey,
+    getWeeklyInstanceStatusStorageKey,
+    getWeeklyInstancesStorageKey,
+    parsePersistedPeriodInstanceStatus,
+    parsePersistedPeriodInstances,
+    updateCompletedInstanceKeys,
+    type PersistedPeriodTaskInstance
+  } from '$lib/periodInstances';
   import { normalizeScheduleDayBlocks } from '$lib/scheduleLayout';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import { supabase } from '$lib/supabase';
   import { weekOffset } from '$lib/stores';
-  import { getWeekKey, getWeekDays, weekLabel, addWeeks, DAY_NAMES } from '$lib/weekUtils';
+  import {
+    DAY_NAMES,
+    addWeeks,
+    getMonthKey,
+    getWeekDays,
+    getWeekKey,
+    getWeekOfMonth,
+    weekLabel
+  } from '$lib/weekUtils';
   import type { ScheduleBlock, WeeklyPlan, HistorySnapshot, Task, TaskAttachment, TaskType } from '$lib/types';
 
   const queryClient = useQueryClient();
@@ -19,6 +37,14 @@
   const currentWeekKey = $derived(getWeekKey(addWeeks(today, $weekOffset)));
   const isPastWeek = $derived($weekOffset < 0);
   const weekDays = $derived(getWeekDays(currentWeekKey));
+  const currentMonthKey = $derived(getMonthKey(weekDays[2] ?? addWeeks(today, $weekOffset)));
+  const currentWeekOfMonth = $derived(getWeekOfMonth(currentWeekKey));
+  const weeklyInstanceStatusStorageKey = $derived(
+    getWeeklyInstanceStatusStorageKey(currentWeekKey)
+  );
+  const monthlyInstanceStatusStorageKey = $derived(
+    getMonthlyInstanceStatusStorageKey(currentMonthKey)
+  );
 
   function isToday(dayIndex: number): boolean {
     if ($weekOffset !== 0) return false;
@@ -62,8 +88,151 @@
     enabled: browser
   }));
 
+  const weeklyInstancesQuery = createQuery(() => ({
+    queryKey: ['thisweek_period_instances', 'weekly', currentWeekKey] as const,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('value')
+        .eq('key', getWeeklyInstancesStorageKey(currentWeekKey))
+        .maybeSingle();
+      if (error) throw error;
+      return parsePersistedPeriodInstances(data?.value)?.instances ?? [];
+    },
+    enabled: browser && !isPastWeek
+  }));
+
+  const monthlyInstancesQuery = createQuery(() => ({
+    queryKey: ['thisweek_period_instances', 'monthly', currentMonthKey] as const,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('value')
+        .eq('key', getMonthlyInstancesStorageKey(currentMonthKey))
+        .maybeSingle();
+      if (error) throw error;
+      return (parsePersistedPeriodInstances(data?.value)?.instances ?? []).filter(
+        (instance) => instance.preferred_week_of_month === currentWeekOfMonth
+      );
+    },
+    enabled: browser && !isPastWeek
+  }));
+
+  const weeklyInstanceStatusQuery = createQuery(() => ({
+    queryKey: ['period_instance_status', 'weekly', weeklyInstanceStatusStorageKey] as const,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('value')
+        .eq('key', weeklyInstanceStatusStorageKey)
+        .maybeSingle();
+      if (error) throw error;
+      return parsePersistedPeriodInstanceStatus(data?.value)?.completedInstanceKeys ?? [];
+    },
+    enabled: browser && !isPastWeek
+  }));
+
+  const monthlyInstanceStatusQuery = createQuery(() => ({
+    queryKey: ['period_instance_status', 'monthly', monthlyInstanceStatusStorageKey] as const,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('value')
+        .eq('key', monthlyInstanceStatusStorageKey)
+        .maybeSingle();
+      if (error) throw error;
+      return parsePersistedPeriodInstanceStatus(data?.value)?.completedInstanceKeys ?? [];
+    },
+    enabled: browser && !isPastWeek
+  }));
+
+  const currentInstanceTemplateIds = $derived(
+    Array.from(
+      new Set(
+        [
+          ...(weeklyInstancesQuery.data ?? []),
+          ...(monthlyInstancesQuery.data ?? [])
+        ].map((instance) => instance.template_id)
+      )
+    )
+  );
+  const currentInstanceTemplateIdsKey = $derived(currentInstanceTemplateIds.join(','));
+
+  const currentInstanceAttachmentsQuery = createQuery(() => ({
+    queryKey: ['thisweek_instance_attachments', currentWeekKey, currentInstanceTemplateIdsKey] as const,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('task_attachments')
+        .select('*')
+        .in('task_id', currentInstanceTemplateIds);
+      if (error) throw error;
+      return (data ?? []) as TaskAttachment[];
+    },
+    enabled: browser && !isPastWeek && currentInstanceTemplateIds.length > 0
+  }));
+
   function getBlocksForDay(day: string): ScheduleBlock[] {
     return (scheduleQuery.data ?? []).filter((b) => b.day === day);
+  }
+
+  function getCurrentInstancesForDay(day: string): PersistedPeriodTaskInstance[] {
+    return [
+      ...(weeklyInstancesQuery.data ?? []).filter((instance) => instance.preferred_day === day),
+      ...(monthlyInstancesQuery.data ?? []).filter((instance) => instance.preferred_day === day)
+    ];
+  }
+
+  function getCurrentAttachmentsForInstance(instance: PersistedPeriodTaskInstance): TaskAttachment[] {
+    return (currentInstanceAttachmentsQuery.data ?? []).filter(
+      (attachment) => attachment.task_id === instance.template_id
+    );
+  }
+
+  function isCurrentInstanceCompleted(instance: PersistedPeriodTaskInstance): boolean {
+    if (instance.period_type === 'monthly') {
+      return (monthlyInstanceStatusQuery.data ?? []).includes(instance.instance_key);
+    }
+    return (weeklyInstanceStatusQuery.data ?? []).includes(instance.instance_key);
+  }
+
+  async function toggleCurrentInstance(instance: PersistedPeriodTaskInstance) {
+    const statusStorageKey =
+      instance.period_type === 'monthly'
+        ? monthlyInstanceStatusStorageKey
+        : weeklyInstanceStatusStorageKey;
+    const currentKeys =
+      instance.period_type === 'monthly'
+        ? (monthlyInstanceStatusQuery.data ?? [])
+        : (weeklyInstanceStatusQuery.data ?? []);
+    const nextKeys = updateCompletedInstanceKeys(
+      currentKeys,
+      instance.instance_key,
+      !currentKeys.includes(instance.instance_key)
+    );
+    const updatedAt = new Date().toISOString();
+
+    const { error } = await supabase.from('user_preferences').upsert(
+      {
+        key: statusStorageKey,
+        value: {
+          completedInstanceKeys: nextKeys,
+          updatedAt
+        },
+        updated_at: updatedAt
+      },
+      { onConflict: 'key' }
+    );
+
+    if (error) {
+      toast.error('Failed to update task');
+      return;
+    }
+
+    queryClient.setQueryData(
+      ['period_instance_status', instance.period_type, statusStorageKey],
+      nextKeys
+    );
+    queryClient.invalidateQueries({ queryKey: ['period_instance_status', instance.period_type] });
   }
 
   const tasksQuery = createQuery(() => ({
@@ -568,32 +737,85 @@
           <h3 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
             Weekly Schedule
           </h3>
-          {#if scheduleQuery.isLoading}
+          {#if weeklyInstancesQuery.isLoading || monthlyInstancesQuery.isLoading}
             <div class="text-sm text-zinc-400">Loading…</div>
-          {:else if (scheduleQuery.data ?? []).length === 0}
+          {:else if [...(weeklyInstancesQuery.data ?? []), ...(monthlyInstancesQuery.data ?? [])].length === 0}
             <div class="text-sm text-zinc-400 italic py-4">
-              No schedule yet. Open This Month and generate the monthly plan.
+              No schedule yet. Open This Month and drag template copies into the board.
             </div>
           {:else}
             <div class="flex flex-col gap-6">
               {#each DAY_NAMES as day}
-                {#if getBlocksForDay(day).length > 0}
-                  <ScheduleDay
-                    {day}
-                    dateLabel={getDayDateLabel(day)}
-                    blocks={getBlocksForDay(day)}
-                    weekKey={currentWeekKey}
-                    readonly={false}
-                    {onBlocksReordered}
-                    onMoveBlockDay={moveBlockToDay}
-                    {onBlockUpdated}
-                    onDeleteBlock={deleteBlock}
-                    onAddBlock={addBlockToDay}
-                    {getLinkedTaskForBlock}
-                    {getAttachmentsForBlock}
-                    onAttachmentAdded={onScheduleAttachmentAdded}
-                    onAttachmentDeleted={onScheduleAttachmentDeleted}
-                  />
+                {#if getCurrentInstancesForDay(day).length > 0}
+                  <div class="flex flex-col gap-2">
+                    <div class="flex items-center gap-2">
+                      <h4 class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        {day}
+                      </h4>
+                      <span class="text-xs text-zinc-400 dark:text-zinc-500">
+                        {getDayDateLabel(day)}
+                      </span>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                      {#each getCurrentInstancesForDay(day) as instance (instance.instance_key)}
+                        <button
+                          type="button"
+                          onclick={() => toggleCurrentInstance(instance)}
+                          class={`flex items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
+                            isCurrentInstanceCompleted(instance)
+                              ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-950/15'
+                              : instance.period_type === 'monthly'
+                                ? 'border-sky-200 bg-sky-50/70 dark:border-sky-500/20 dark:bg-sky-950/15'
+                                : 'border-violet-200 bg-violet-50/70 dark:border-violet-500/20 dark:bg-violet-950/15'
+                          }`}
+                        >
+                          <span
+                            class={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                              isCurrentInstanceCompleted(instance)
+                                ? 'border-orange-500 bg-orange-500 dark:border-orange-400 dark:bg-orange-400'
+                                : 'border-zinc-300 dark:border-zinc-600'
+                            }`}
+                          >
+                            {#if isCurrentInstanceCompleted(instance)}
+                              <svg viewBox="0 0 10 10" class="h-3 w-3" fill="none">
+                                <path d="M2 5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                              </svg>
+                            {/if}
+                          </span>
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                              <span class="font-mono text-[10px] uppercase text-zinc-400">
+                                [{instance.period_type}]
+                              </span>
+                              <span
+                                class={`text-sm font-medium ${
+                                  isCurrentInstanceCompleted(instance)
+                                    ? 'text-zinc-400 line-through'
+                                    : 'text-zinc-900 dark:text-zinc-100'
+                                }`}
+                              >
+                                {instance.title}
+                              </span>
+                            </div>
+                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                              {instance.estimated_hours ?? 1}h
+                            </div>
+                            {#if getCurrentAttachmentsForInstance(instance).length > 0}
+                              <div class="mt-2 flex flex-wrap gap-2">
+                                {#each getCurrentAttachmentsForInstance(instance) as attachment (attachment.id)}
+                                  <AttachmentChip
+                                    {attachment}
+                                    readonly={true}
+                                    onDelete={() => {}}
+                                  />
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
                 {/if}
               {/each}
             </div>
