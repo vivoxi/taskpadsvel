@@ -372,7 +372,7 @@
     if (!confirm(`Delete ${completedTasks.length} completed task(s)?`)) return;
 
     for (const task of completedTasks) {
-      await deleteTask(task.id);
+      await deleteTask(task.id, false);
     }
   }
 
@@ -526,7 +526,10 @@
     queryClient.invalidateQueries({ queryKey: ['tasks', type] });
   }
 
-  async function deleteTask(id: string) {
+  async function deleteTask(id: string, askConfirmation = true) {
+    const task = displayTasks.find((entry) => entry.id === id);
+    if (askConfirmation && !confirm(`Delete "${task?.title || 'this task'}"?`)) return;
+
     let password = '';
     const unsub = authPassword.subscribe((value) => (password = value));
     unsub();

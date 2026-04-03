@@ -274,7 +274,6 @@
   }
 
   async function confirmDeleteTask() {
-    if (!confirm(`Delete "${task.title}"?`)) return;
     await onDeleteTask(task.id);
   }
 
