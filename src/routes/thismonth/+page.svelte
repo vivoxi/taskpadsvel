@@ -812,10 +812,6 @@
   ) {
     updateCellItems(week, day, event.detail.items);
 
-    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-      return;
-    }
-
     try {
       await persistMonthlyInstances();
     } finally {
@@ -840,10 +836,6 @@
   ) {
     updateWeeklyCellItems(week, day, event.detail.items);
 
-    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-      return;
-    }
-
     try {
       await persistWeeklyInstances(week);
     } finally {
@@ -864,10 +856,6 @@
   async function handleFlexibleFinalize(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
     handleFlexibleConsider(event);
 
-    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-      return;
-    }
-
     try {
       await persistMonthlyInstances();
     } finally {
@@ -881,15 +869,17 @@
     monthlyTemplateSourceItems = event.detail.items;
   }
 
-  function handleMonthlySourceFinalize(
+  async function handleMonthlySourceFinalize(
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
-    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-      return;
+    try {
+      if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+        await persistMonthlyInstances();
+      }
+    } finally {
+      isDragging = false;
+      monthlyTemplateSourceItems = monthlyTemplateInstances;
     }
-
-    isDragging = false;
-    monthlyTemplateSourceItems = monthlyTemplateInstances;
   }
 
   function handleWeeklySourceConsider(
@@ -903,19 +893,21 @@
     };
   }
 
-  function handleWeeklySourceFinalize(
+  async function handleWeeklySourceFinalize(
     week: number,
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
-    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-      return;
+    try {
+      if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+        await persistWeeklyInstances(week);
+      }
+    } finally {
+      isDragging = false;
+      weeklyTemplateSourceItemsByWeek = {
+        ...weeklyTemplateSourceItemsByWeek,
+        [week]: weeklyTemplateInstancesByWeek[week] ?? []
+      };
     }
-
-    isDragging = false;
-    weeklyTemplateSourceItemsByWeek = {
-      ...weeklyTemplateSourceItemsByWeek,
-      [week]: weeklyTemplateInstancesByWeek[week] ?? []
-    };
   }
 </script>
 
