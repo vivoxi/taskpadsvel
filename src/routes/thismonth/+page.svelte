@@ -881,7 +881,13 @@
     monthlyTemplateSourceItems = event.detail.items;
   }
 
-  function handleMonthlySourceFinalize() {
+  function handleMonthlySourceFinalize(
+    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
+  ) {
+    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+      return;
+    }
+
     isDragging = false;
     monthlyTemplateSourceItems = monthlyTemplateInstances;
   }
@@ -897,7 +903,14 @@
     };
   }
 
-  function handleWeeklySourceFinalize(week: number) {
+  function handleWeeklySourceFinalize(
+    week: number,
+    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
+  ) {
+    if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+      return;
+    }
+
     isDragging = false;
     weeklyTemplateSourceItemsByWeek = {
       ...weeklyTemplateSourceItemsByWeek,
@@ -1128,7 +1141,7 @@
                       type: `weekly-instance-${week}`
                     }}
                     onconsider={(event) => handleWeeklySourceConsider(week, event)}
-                    onfinalize={() => handleWeeklySourceFinalize(week)}
+                    onfinalize={(event) => handleWeeklySourceFinalize(week, event)}
                     class="mt-3 flex min-h-[36px] flex-col gap-1"
                   >
                     {#each weeklyTemplateSourceItemsByWeek[week] ?? [] as sourceItem (sourceItem.instance_key)}
