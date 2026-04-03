@@ -275,6 +275,10 @@
   }
 
   async function deleteCategory(category: string) {
+    if (!confirm(`Delete "${category}" category? Tasks inside will move to another category.`)) {
+      return;
+    }
+
     const remainingCategories = categories.filter((entry) => entry !== category);
     const targetCategory = remainingCategories[0] ?? DEFAULT_CATEGORY;
     const tasksToMove = (tasksQuery.data ?? []).filter((task) => getTaskCategory(task) === category);
@@ -396,6 +400,8 @@
   }
 
   async function resetAll() {
+    if (!confirm('Reset all random tasks?')) return;
+
     await supabase.from('tasks').update({ completed: false }).eq('type', 'random');
     queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
     toast.success('All tasks reset');
@@ -412,19 +418,54 @@
   function handleCategoryOrderConsider(category: string, event: CustomEvent<DndEvent<Task>>) {
     localCategoryTasks = {
       ...localCategoryTasks,
-      [category]: event.detail.items
+      [category]: event.detail.items.map((task) => {
+        const details = parseTaskDetails(task.notes);
+        return {
+          ...task,
+          notes: serializeTaskDetails(
+            details.notes,
+            details.estimatedHours,
+            details.preferredWeekOfMonth,
+            details.preferredDay,
+            category === DEFAULT_CATEGORY ? null : category
+          )
+        };
+      })
     };
   }
 
-  function handleCategoryOrderFinalize(category: string, event: CustomEvent<DndEvent<Task>>) {
-    localCategoryTasks = {
-      ...localCategoryTasks,
-      [category]: event.detail.items
-    };
+  async function handleCategoryOrderFinalize(category: string, event: CustomEvent<DndEvent<Task>>) {
+    handleCategoryOrderConsider(category, event);
+
+    const movedTasks = event.detail.items.filter((task) => getTaskCategory(task) !== category);
+    for (const task of movedTasks) {
+      const details = parseTaskDetails(task.notes);
+      const payload = serializeTaskDetails(
+        details.notes,
+        details.estimatedHours,
+        details.preferredWeekOfMonth,
+        details.preferredDay,
+        category === DEFAULT_CATEGORY ? null : category
+      );
+
+      const { error } = await supabase.from('tasks').update({ notes: payload }).eq('id', task.id);
+      if (error) {
+        toast.error('Failed to move task');
+        queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
+        return;
+      }
+    }
+
     categoryOrderMap = {
       ...categoryOrderMap,
       [category]: event.detail.items.map((task) => task.id)
     };
+
+    if (movedTasks.length > 0) {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks_all'] });
+    }
   }
 
   function handleCategoryListConsider(event: CustomEvent<DndEvent<CategoryItem>>) {
@@ -533,36 +574,44 @@
           </div>
 
           <div
-            use:dndzone={{ items: localCategoryTasks[category] ?? [], flipDurationMs: 150, type: `tasks:${category}` }}
+            use:dndzone={{
+              items: localCategoryTasks[category] ?? [],
+              flipDurationMs: 150,
+              type: 'random-tasks',
+              dropTargetStyle: {
+                outline: '2px dashed rgba(249, 115, 22, 0.4)',
+                outlineOffset: '2px'
+              }
+            }}
             onconsider={(event) => handleCategoryOrderConsider(category, event)}
             onfinalize={(event) => handleCategoryOrderFinalize(category, event)}
-            class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
+            class="flex min-h-10 flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
           >
-            {#if (localCategoryTasks[category] ?? []).length === 0}
-              <div class="py-2 text-sm italic text-zinc-400">No tasks in this category yet.</div>
-            {:else}
-              {#each localCategoryTasks[category] ?? [] as task (task.id)}
-                <div class="group flex items-start gap-2">
-                  <div class="cursor-grab px-1 pt-3 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
-                    <GripVertical size={14} />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <TaskRow
-                      {task}
-                      attachments={getAttachmentsForTask(task.id)}
-                      randomCategories={categories}
-                      {weekKey}
-                      onToggle={toggleTask}
-                      onTitleUpdate={updateTaskTitle}
-                      onDeleteTask={deleteTask}
-                      {onAttachmentAdded}
-                      {onAttachmentDeleted}
-                    />
-                  </div>
+            {#each localCategoryTasks[category] ?? [] as task (task.id)}
+              <div class="group flex items-start gap-2">
+                <div class="cursor-grab px-1 pt-3 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
+                  <GripVertical size={14} />
                 </div>
-              {/each}
-            {/if}
+                <div class="min-w-0 flex-1">
+                  <TaskRow
+                    {task}
+                    attachments={getAttachmentsForTask(task.id)}
+                    randomCategories={categories}
+                    {weekKey}
+                    onToggle={toggleTask}
+                    onTitleUpdate={updateTaskTitle}
+                    onDeleteTask={deleteTask}
+                    {onAttachmentAdded}
+                    {onAttachmentDeleted}
+                  />
+                </div>
+              </div>
+            {/each}
           </div>
+
+          {#if (localCategoryTasks[category] ?? []).length === 0}
+            <div class="py-2 text-sm italic text-zinc-400">No tasks in this category yet.</div>
+          {/if}
 
           <input
             value={categoryDrafts[category] ?? ''}
