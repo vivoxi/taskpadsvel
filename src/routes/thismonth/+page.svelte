@@ -674,9 +674,12 @@
     day: string,
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
-    isDragging = false;
     updateCellItems(week, day, event.detail.items);
-    await persistMonthlyInstances();
+    try {
+      await persistMonthlyInstances();
+    } finally {
+      isDragging = false;
+    }
   }
 
   function handleWeeklyCellConsider(
@@ -693,9 +696,12 @@
     day: string,
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
-    isDragging = false;
     updateWeeklyCellItems(week, day, event.detail.items);
-    await persistWeeklyInstances(week);
+    try {
+      await persistWeeklyInstances(week);
+    } finally {
+      isDragging = false;
+    }
   }
 
   function handleFlexibleConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
@@ -708,9 +714,12 @@
   }
 
   async function handleFlexibleFinalize(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
-    isDragging = false;
     handleFlexibleConsider(event);
-    await persistMonthlyInstances();
+    try {
+      await persistMonthlyInstances();
+    } finally {
+      isDragging = false;
+    }
   }
 
   async function generateMonthSchedule() {
@@ -962,38 +971,34 @@
                       onfinalize={(event) => handleCellFinalize(week, day, event)}
                       class="flex min-h-[76px] flex-col gap-2"
                     >
-                      {#if cellTasks.length === 0 && weeklyTasks.length === 0}
-                        <div class="text-xs italic text-zinc-400">No fixed task</div>
-                      {:else}
-                        {#each cellTasks as instance (instance.instance_key)}
-                          <div class="group flex items-start gap-2">
-                            <div class="mt-3 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
-                              <GripVertical size={12} />
-                            </div>
-                            <button
-                              onclick={() => toggleInstance(instance.instance_key)}
-                              class={`w-full rounded-[14px] border px-3 py-2 text-left transition-colors ${
+                      {#each cellTasks as instance (instance.instance_key)}
+                        <div class="group flex items-start gap-2">
+                          <div class="mt-3 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
+                            <GripVertical size={12} />
+                          </div>
+                          <button
+                            onclick={() => toggleInstance(instance.instance_key)}
+                            class={`w-full rounded-[14px] border px-3 py-2 text-left transition-colors ${
+                              isInstanceCompleted(instance.instance_key)
+                                ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-950/20'
+                                : 'border-sky-200/80 bg-sky-50/80 dark:border-sky-500/20 dark:bg-sky-950/18'
+                            }`}
+                          >
+                            <div
+                              class={`text-sm font-medium ${
                                 isInstanceCompleted(instance.instance_key)
-                                  ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-950/20'
-                                  : 'border-sky-200/80 bg-sky-50/80 dark:border-sky-500/20 dark:bg-sky-950/18'
+                                  ? 'text-zinc-400 line-through'
+                                  : 'text-zinc-900 dark:text-zinc-100'
                               }`}
                             >
-                              <div
-                                class={`text-sm font-medium ${
-                                  isInstanceCompleted(instance.instance_key)
-                                    ? 'text-zinc-400 line-through'
-                                    : 'text-zinc-900 dark:text-zinc-100'
-                                }`}
-                              >
-                                {instance.title}
-                              </div>
-                              <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {instance.estimated_hours ?? 1}h{#if hasCarryover(instance)} · carry-over{/if}
-                              </div>
-                            </button>
-                          </div>
-                        {/each}
-                      {/if}
+                              {instance.title}
+                            </div>
+                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                              {instance.estimated_hours ?? 1}h{#if hasCarryover(instance)} · carry-over{/if}
+                            </div>
+                          </button>
+                        </div>
+                      {/each}
                     </div>
                     <div
                       use:dndzone={{
@@ -1038,6 +1043,9 @@
                         </div>
                       {/each}
                     </div>
+                    {#if cellTasks.length === 0 && weeklyTasks.length === 0}
+                      <div class="mt-2 text-xs italic text-zinc-400">No fixed task</div>
+                    {/if}
                   </div>
                 {/each}
               {/each}
@@ -1058,23 +1066,22 @@
               onfinalize={handleFlexibleFinalize}
               class="mt-3 flex min-h-[44px] flex-wrap gap-2"
             >
-              {#if localFlexibleInstances.length === 0}
-                <div class="text-xs italic text-zinc-400">No flexible task</div>
-              {:else}
-                {#each localFlexibleInstances as instance (instance.instance_key)}
-                  <button
-                    onclick={() => toggleInstance(instance.instance_key)}
-                    class={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                      isInstanceCompleted(instance.instance_key)
-                        ? 'border-emerald-200 bg-emerald-50 text-zinc-500 line-through dark:border-emerald-500/20 dark:bg-emerald-950/20'
-                        : 'border-amber-200 bg-white/80 text-zinc-700 dark:border-amber-500/20 dark:bg-zinc-950/60 dark:text-zinc-200'
-                    }`}
-                  >
-                    {instance.title} · {instance.estimated_hours ?? 1}h
-                  </button>
-                {/each}
-              {/if}
+              {#each localFlexibleInstances as instance (instance.instance_key)}
+                <button
+                  onclick={() => toggleInstance(instance.instance_key)}
+                  class={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    isInstanceCompleted(instance.instance_key)
+                      ? 'border-emerald-200 bg-emerald-50 text-zinc-500 line-through dark:border-emerald-500/20 dark:bg-emerald-950/20'
+                      : 'border-amber-200 bg-white/80 text-zinc-700 dark:border-amber-500/20 dark:bg-zinc-950/60 dark:text-zinc-200'
+                  }`}
+                >
+                  {instance.title} · {instance.estimated_hours ?? 1}h
+                </button>
+              {/each}
             </div>
+            {#if localFlexibleInstances.length === 0}
+              <div class="mt-3 text-xs italic text-zinc-400">No flexible task</div>
+            {/if}
           </div>
         </section>
       {/if}
