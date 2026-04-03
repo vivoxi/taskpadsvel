@@ -3,7 +3,6 @@
   import { Moon, Sun } from 'lucide-svelte';
   import {
     BarChart3,
-    CalendarDays,
     Calendar,
     Shuffle,
     LayoutDashboard,
@@ -26,8 +25,6 @@
     { href: '/thismonth', label: 'This Month', icon: Calendar },
     { href: '/pomodoro', label: 'Pomodoro', icon: TimerReset },
     { href: '/notes', label: 'Notes', icon: NotebookPen },
-    { href: '/weekly', label: 'Weekly Tasks', icon: CalendarDays },
-    { href: '/monthly', label: 'Monthly Tasks', icon: Calendar },
     { href: '/random', label: 'Random Tasks', icon: Shuffle }
   ] as const;
 </script>

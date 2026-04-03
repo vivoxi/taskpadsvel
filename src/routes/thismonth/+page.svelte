@@ -36,6 +36,7 @@
     getWeekDays,
     monthLabel
   } from '$lib/weekUtils';
+  import TaskList from '$lib/components/TaskList.svelte';
   import { materializeWeeklyTaskInstances } from '$lib/recurringTasks';
   import type { HistorySnapshot, ScheduleBlock, Task } from '$lib/types';
 
@@ -52,7 +53,7 @@
   );
 
   const tasksQuery = createQuery(() => ({
-    queryKey: ['thismonth_page', 'tasks'] as const,
+    queryKey: ['tasks', 'monthly'] as const,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
@@ -66,7 +67,7 @@
   }));
 
   const weeklyTasksQuery = createQuery(() => ({
-    queryKey: ['thismonth_page', 'weekly_tasks'] as const,
+    queryKey: ['tasks', 'weekly'] as const,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
@@ -803,9 +804,8 @@
               {monthLabel(currentMonthKey)}
             </span>
             <button
-              onclick={() => monthOffset = Math.min(monthOffset + 1, 0)}
-              disabled={monthOffset === 0}
-              class="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-40 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              onclick={() => monthOffset += 1}
+              class="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
               <ChevronRight size={16} />
             </button>
@@ -926,6 +926,28 @@
           </section>
         {/if}
       {:else}
+        <div class="grid gap-6 xl:grid-cols-2">
+          <section class="rounded-[28px] border border-zinc-200 bg-white/92 px-4 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] sm:px-6 dark:border-zinc-800 dark:bg-zinc-950/88">
+            <div class="mb-5">
+              <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Weekly Templates</div>
+              <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
+                Her hafta tekrar eden işler
+              </div>
+            </div>
+            <TaskList type="weekly" templateMode={true} />
+          </section>
+
+          <section class="rounded-[28px] border border-zinc-200 bg-white/92 px-4 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] sm:px-6 dark:border-zinc-800 dark:bg-zinc-950/88">
+            <div class="mb-5">
+              <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Monthly Templates</div>
+              <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
+                Ay içine yayılacak recurring işler
+              </div>
+            </div>
+            <TaskList type="monthly" templateMode={true} />
+          </section>
+        </div>
+
         <section class="rounded-[28px] border border-zinc-200 bg-white/92 px-4 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] sm:px-6 dark:border-zinc-800 dark:bg-zinc-950/88">
           <div class="flex items-center justify-between gap-3">
             <div>
