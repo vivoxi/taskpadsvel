@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { Moon, Sun } from 'lucide-svelte';
   import {
@@ -28,11 +27,6 @@
     { href: '/notes', label: 'Notes', icon: NotebookPen },
     { href: '/random', label: 'Random Tasks', icon: Shuffle }
   ] as const;
-
-  async function navigateTo(href: string) {
-    onNavigate();
-    await goto(href);
-  }
 </script>
 
 <nav
@@ -52,10 +46,9 @@
     {@const isActive = $page.url.pathname === item.href}
     <a
       href={item.href}
-      onclick={(event) => {
-        event.preventDefault();
-        void navigateTo(item.href);
-      }}
+      data-sveltekit-preload-data="hover"
+      aria-current={isActive ? 'page' : undefined}
+      onclick={onNavigate}
       class="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors
         {isActive
           ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-medium'
