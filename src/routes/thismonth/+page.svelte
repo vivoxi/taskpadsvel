@@ -23,6 +23,9 @@
   } from '$lib/periodInstances';
   import { summarizeInstances, summarizeSnapshot } from '$lib/periodSummary';
   import {
+    generateMonthlySpread
+  } from '$lib/monthlySpreadGenerate';
+  import {
     buildWeeklyCellMap,
     moveMonthlyInstance,
     moveWeeklyInstance
@@ -159,6 +162,7 @@
   let weeklyCompletedByStatusKey = $state<Record<string, string[]>>({});
   let activeDropZone = $state<string | null>(null);
   let activeDragPayload = $state<BoardDragPayload | null>(null);
+  let isAutoDistributing = $state(false);
 
   const monthlyTemplateInstances = $derived(
     materializeMonthlyTaskInstances(tasksQuery.data ?? [], currentMonthKey).map((instance) => ({
@@ -838,6 +842,111 @@
 
     await handleWeeklyCellDrop(week, day, event);
   }
+
+  async function handleAutoDistribute() {
+    if (isPastMonth || isAutoDistributing) return;
+
+    const hasExistingLayout =
+      monthlyPeriodInstances.length > 0 ||
+      Object.values(weeklyPeriodInstancesByWeek).some((instances) => instances.length > 0);
+
+    if (
+      hasExistingLayout &&
+      browser &&
+      !window.confirm('Auto Distribute mevcut monthly spread yerleşimini sıfırlayıp yeniden oluşturacak. Devam edilsin mi?')
+    ) {
+      return;
+    }
+
+    isAutoDistributing = true;
+
+    try {
+      const generated = generateMonthlySpread({
+        monthKey: currentMonthKey,
+        monthlyTemplateInstances: generatedMonthlyInstances,
+        weeklyTemplateInstancesByWeek
+      });
+      const updatedAt = new Date().toISOString();
+      const weeklyStatusMap = Object.fromEntries(
+        MONTHLY_PLAN_WEEKS.map((week) => [
+          getWeeklyInstanceStatusStorageKey(getMonthWeekKey(currentMonthKey, week)),
+          [] as string[]
+        ])
+      );
+
+      await Promise.all([
+        apiSendJson('/api/preferences', 'POST', {
+          key: monthlyInstancesStorageKey,
+          value: {
+            instances: generated.monthlyInstances,
+            updatedAt
+          },
+          updatedAt
+        }),
+        apiSendJson('/api/preferences', 'POST', {
+          key: monthlyInstanceStatusStorageKey,
+          value: {
+            completedInstanceKeys: [],
+            updatedAt
+          },
+          updatedAt
+        }),
+        ...MONTHLY_PLAN_WEEKS.flatMap((week) => {
+          const weekKey = getMonthWeekKey(currentMonthKey, week);
+          const weeklyStatusKey = getWeeklyInstanceStatusStorageKey(weekKey);
+          return [
+            apiSendJson('/api/preferences', 'POST', {
+              key: getWeeklyInstancesStorageKey(weekKey),
+              value: {
+                instances: generated.weeklyInstancesByWeek[weekKey] ?? [],
+                updatedAt
+              },
+              updatedAt
+            }),
+            apiSendJson('/api/preferences', 'POST', {
+              key: weeklyStatusKey,
+              value: {
+                completedInstanceKeys: [],
+                updatedAt
+              },
+              updatedAt
+            })
+          ];
+        })
+      ]);
+
+      monthlyPeriodInstances = generated.monthlyInstances;
+      weeklyPeriodInstancesByWeek = generated.weeklyInstancesByWeek;
+      monthlyCompletedInstanceKeys = [];
+      weeklyCompletedByStatusKey = weeklyStatusMap;
+
+      queryClient.setQueryData(['thismonth_page', 'period_instances', currentMonthKey], {
+        instances: generated.monthlyInstances,
+        updatedAt
+      });
+      queryClient.setQueryData(
+        ['period_instance_status', 'monthly', monthlyInstanceStatusStorageKey],
+        {
+          completedInstanceKeys: [],
+          updatedAt
+        }
+      );
+      queryClient.setQueryData(
+        ['thismonth_page', 'weekly_period_instances', currentMonthKey],
+        generated.weeklyInstancesByWeek
+      );
+      queryClient.setQueryData(
+        ['period_instance_status', 'weekly', currentMonthKey],
+        weeklyStatusMap
+      );
+
+      toast.success('Monthly spread otomatik dagitildi');
+    } catch {
+      toast.error('Auto distribute basarisiz oldu');
+    } finally {
+      isAutoDistributing = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -1043,6 +1152,14 @@
                 Bu ayın monthly instance'ları hafta/gün bazında
               </div>
             </div>
+            <button
+              type="button"
+              onclick={handleAutoDistribute}
+              disabled={isAutoDistributing}
+              class="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              {isAutoDistributing ? 'Distributing...' : 'Auto Distribute'}
+            </button>
           </div>
 
           <div class="mt-5 overflow-x-auto">
