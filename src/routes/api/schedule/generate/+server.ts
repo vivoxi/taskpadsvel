@@ -5,10 +5,10 @@ import { materializeWeeklyTaskInstances } from '$lib/recurringTasks';
 import { serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { getMonthKey, getPreviousMonthKey, getPreviousWeekKey, getWeekDays } from '$lib/weekUtils';
+import { getMonthKey, getWeekDays } from '$lib/weekUtils';
 import { getWeeklyInstancesStorageKey } from '$lib/periodInstances';
 import type { RequestHandler } from './$types';
-import type { HistorySnapshot, Task } from '$lib/types';
+import type { Task } from '$lib/types';
 
 type GeneratedBlock = {
   day: string;
@@ -48,32 +48,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const weekDays = getWeekDays(weekKey);
   const monthKey = getMonthKey(weekDays[2] ?? weekDays[0] ?? new Date());
-  const previousWeekKey = getPreviousWeekKey(weekKey);
-  const previousMonthKey = getPreviousMonthKey(monthKey);
-  const [previousWeeklySnapshotResult, previousMonthlySnapshotResult] = await Promise.all([
-    supabaseAdmin
-      .from('history_snapshots')
-      .select('*')
-      .eq('period_type', 'weekly')
-      .eq('period_key', previousWeekKey)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('history_snapshots')
-      .select('*')
-      .eq('period_type', 'monthly')
-      .eq('period_key', previousMonthKey)
-      .maybeSingle()
-  ]);
-
-  const previousWeeklySnapshot = previousWeeklySnapshotResult.data as HistorySnapshot | null;
-  const previousMonthlySnapshot = previousMonthlySnapshotResult.data as HistorySnapshot | null;
-  const weeklyCarryoverTitles = (previousWeeklySnapshot?.missed_tasks ?? [])
-    .map((task) => task.title)
-    .filter((title): title is string => Boolean(title));
-  const monthlyCarryoverTitles = (previousMonthlySnapshot?.missed_tasks ?? [])
-    .map((task) => task.title)
-    .filter((title): title is string => Boolean(title));
-  const carryoverTaskTitles = Array.from(new Set([...weeklyCarryoverTitles, ...monthlyCarryoverTitles]));
 
   const blocks = generateRuleBasedSchedule({
     weekKey,
@@ -83,8 +57,7 @@ export const POST: RequestHandler = async ({ request }) => {
     weeklyTasks,
     weeklyInstances,
     monthlyTasks,
-    monthlyInstances,
-    carryoverTaskTitles
+    monthlyInstances
   }) satisfies GeneratedBlock[];
 
   // Replace existing schedule for this week

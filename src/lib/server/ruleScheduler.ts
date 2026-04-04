@@ -187,11 +187,9 @@ export function generateRuleBasedSchedule(input: {
   weeklyInstances?: MaterializedTaskInstance[];
   monthlyTasks?: Task[];
   monthlyInstances?: MaterializedTaskInstance[];
-  carryoverTaskTitles?: string[];
 }): GeneratedScheduleBlock[] {
   const plannerNotes = input.plannerNotes ?? {};
   const weekOfMonth = input.weekOfMonth ?? 1;
-  const carryoverTitles = new Set((input.carryoverTaskTitles ?? []).map((title) => normalizeText(title)));
   const weeklyInstances =
     input.weeklyInstances ?? materializeWeeklyTaskInstances(input.weeklyTasks, input.weekKey);
   const monthlyInstances =
@@ -203,11 +201,7 @@ export function generateRuleBasedSchedule(input: {
       task,
       remainingMinutes: getTaskMinutes(task)
     }))
-    .sort((a, b) => {
-      const aCarryover = carryoverTitles.has(normalizeText(a.task.title)) ? 1 : 0;
-      const bCarryover = carryoverTitles.has(normalizeText(b.task.title)) ? 1 : 0;
-      return bCarryover - aCarryover || b.remainingMinutes - a.remainingMinutes;
-    });
+    .sort((a, b) => b.remainingMinutes - a.remainingMinutes);
 
   const freeWindows = new Map(
     DAY_NAMES.map((day) => [day, WORK_WINDOWS.map((window) => ({ ...window }))])
@@ -221,14 +215,12 @@ export function generateRuleBasedSchedule(input: {
       .filter((allocation) => allocation.remainingMinutes > 0)
       .map((allocation) => ({
         allocation,
-        score: getMatchingScore(allocation.task, slot.label),
-        carryoverBoost: carryoverTitles.has(normalizeText(allocation.task.title)) ? 1 : 0
+        score: getMatchingScore(allocation.task, slot.label)
       }))
       .filter((item) => item.score > 0)
       .sort(
         (a, b) =>
           b.score - a.score ||
-          b.carryoverBoost - a.carryoverBoost ||
           a.allocation.remainingMinutes - b.allocation.remainingMinutes
       );
 

@@ -46,18 +46,14 @@ export function getPeriodInstanceStatusStorageKey(
     : getMonthlyInstanceStatusStorageKey(periodKey);
 }
 
-function withCarryover(
+function toPersistedInstances(
   instances: MaterializedTaskInstance[],
-  previousSnapshot: HistorySnapshot | null | undefined
+  _previousSnapshot: HistorySnapshot | null | undefined
 ): PersistedPeriodTaskInstance[] {
-  const missedTitles = new Set((previousSnapshot?.missed_tasks ?? []).map((task) => task.title));
-
   return instances.map((instance) => ({
     ...instance,
-    carryover: missedTitles.has(instance.title),
-    carryover_source_period_key: missedTitles.has(instance.title)
-      ? previousSnapshot?.period_key ?? null
-      : null
+    carryover: false,
+    carryover_source_period_key: null
   }));
 }
 
@@ -66,7 +62,7 @@ export function createWeeklyPeriodInstances(input: {
   weeklyTasks: Task[];
   previousWeeklySnapshot?: HistorySnapshot | null;
 }): PersistedPeriodTaskInstance[] {
-  return withCarryover(
+  return toPersistedInstances(
     materializeWeeklyTaskInstances(input.weeklyTasks, input.weekKey),
     input.previousWeeklySnapshot
   );
@@ -77,7 +73,7 @@ export function createMonthlyPeriodInstances(input: {
   monthlyTasks: Task[];
   previousMonthlySnapshot?: HistorySnapshot | null;
 }): PersistedPeriodTaskInstance[] {
-  return withCarryover(
+  return toPersistedInstances(
     materializeMonthlyTaskInstances(input.monthlyTasks, input.monthKey),
     input.previousMonthlySnapshot
   );

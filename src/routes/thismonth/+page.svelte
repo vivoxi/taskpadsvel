@@ -39,7 +39,6 @@
     addMonths,
     getMonthKey,
     getMonthWeekKey,
-    getPreviousMonthKey,
     getWeekDays,
     monthLabel
   } from '$lib/weekUtils';
@@ -57,7 +56,6 @@
 
   const currentMonthKey = $derived(getMonthKey(addMonths(today, monthOffset)));
   const isPastMonth = $derived(monthOffset < 0);
-  const previousMonthKey = $derived(getPreviousMonthKey(currentMonthKey));
   const monthlyInstancesStorageKey = $derived(getMonthlyInstancesStorageKey(currentMonthKey));
   const monthlyInstanceStatusStorageKey = $derived(
     getMonthlyInstanceStatusStorageKey(currentMonthKey)
@@ -82,15 +80,6 @@
         `/api/snapshots?periodType=monthly&periodKey=${encodeURIComponent(currentMonthKey)}`
       ),
     enabled: browser && canAccessApi && isPastMonth
-  }));
-
-  const previousSnapshotQuery = createQuery(() => ({
-    queryKey: ['snapshot', 'monthly_previous', previousMonthKey] as const,
-    queryFn: async () =>
-      apiJson<HistorySnapshot | null>(
-        `/api/snapshots?periodType=monthly&periodKey=${encodeURIComponent(previousMonthKey)}`
-      ),
-    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   const monthlyInstancesQuery = createQuery(() => ({
@@ -177,8 +166,7 @@
   const generatedMonthlyInstances = $derived(
     createMonthlyPeriodInstances({
       monthKey: currentMonthKey,
-      monthlyTasks: tasksQuery.data ?? [],
-      previousMonthlySnapshot: previousSnapshotQuery.data
+      monthlyTasks: tasksQuery.data ?? []
     })
   );
 
@@ -219,8 +207,6 @@
   const monthlyInstanceSummary = $derived(
     summarizeInstances(monthlyPeriodInstances, monthlyCompletedInstanceKeys)
   );
-  const previousMonthlySummary = $derived(summarizeSnapshot(previousSnapshotQuery.data));
-  const monthlyCarryoverTasks = $derived((previousSnapshotQuery.data?.missed_tasks ?? []) as Task[]);
 
   type MonthlyBoardDragPayload =
     | { kind: 'monthly-template'; templateId: string }
@@ -370,15 +356,6 @@
     queryClient.setQueryData(
       ['period_instance_status', 'weekly', currentMonthKey],
       { ...weeklyCompletedByStatusKey, [statusKey]: nextCompleted }
-    );
-  }
-
-  function hasCarryover(instance: unknown): boolean {
-    return (
-      typeof instance === 'object' &&
-      instance !== null &&
-      'carryover' in instance &&
-      (instance as { carryover?: unknown }).carryover === true
     );
   }
 
@@ -1030,17 +1007,6 @@
             </div>
           </div>
         </div>
-
-        {#if !isPastMonth && monthlyCarryoverTasks.length > 0}
-          <div class="mt-5 rounded-[22px] border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-950/16">
-            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
-              Carry-over from last month
-            </div>
-            <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              {previousMonthlySummary.openTasks} task · {previousMonthlySummary.openHours}h acik kaldi
-            </div>
-          </div>
-        {/if}
       </section>
 
       {#if isPastMonth}
@@ -1269,7 +1235,7 @@
                               {instance.title}
                             </div>
                             <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                              {instance.estimated_hours ?? 1}h{#if hasCarryover(instance)} · carry-over{/if}
+                              {instance.estimated_hours ?? 1}h
                             </div>
                           </button>
                         </div>

@@ -94,15 +94,11 @@ function getWeeklyCellScore(
 
 function sortInstancesForGeneration(instances: PersistedPeriodTaskInstance[]): PersistedPeriodTaskInstance[] {
   return [...instances].sort((a, b) => {
-    const aCarryover = a.carryover ? 1 : 0;
-    const bCarryover = b.carryover ? 1 : 0;
     const aHours = a.estimated_hours ?? 1;
     const bHours = b.estimated_hours ?? 1;
 
     return (
-      bCarryover - aCarryover ||
-      bHours - aHours ||
-      a.title.localeCompare(b.title, 'tr')
+      bHours - aHours || a.title.localeCompare(b.title, 'tr')
     );
   });
 }

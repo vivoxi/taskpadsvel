@@ -93,34 +93,4 @@ describe('ruleScheduler', () => {
     expect(blocks.every((block) => typeof block.linked_instance_key === 'string')).toBe(true);
   });
 
-  it('prioritizes carry-over tasks earlier when scheduling without planner notes', () => {
-    const blocks = generateRuleBasedSchedule({
-      weekKey: '2026-W14',
-      monthKey: '2026-M04',
-      weekOfMonth: 1,
-      plannerNotes: {},
-      carryoverTaskTitles: ['Carry over first'],
-      weeklyTasks: [
-        {
-          id: 'w1',
-          title: 'Carry over first',
-          type: 'weekly',
-          completed: false,
-          notes: serializeTaskDetails('', 2),
-          created_at: '2026-01-01T00:00:00.000Z'
-        },
-        {
-          id: 'w2',
-          title: 'Normal task',
-          type: 'weekly',
-          completed: false,
-          notes: serializeTaskDetails('', 2),
-          created_at: '2026-01-01T00:00:00.000Z'
-        }
-      ],
-      monthlyTasks: []
-    });
-
-    expect(blocks[0]?.task_title).toBe('Carry over first');
-  });
 });

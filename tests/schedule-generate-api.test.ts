@@ -133,8 +133,7 @@ describe('schedule generate API', () => {
       weekOfMonth: 1,
       plannerNotes: {},
       weeklyTasks: [weeklyTask],
-      monthlyTasks: [],
-      carryoverTaskTitles: []
+      monthlyTasks: []
     });
     expect(eqDeleteMock).toHaveBeenCalledWith('week_key', '2026-W14');
 
@@ -230,8 +229,7 @@ describe('schedule generate API', () => {
           preferred_week_of_month: 1,
           preferred_day: 'Friday'
         })
-      ],
-      carryoverTaskTitles: []
+      ]
     });
 
     expect(insertMock).toHaveBeenCalledTimes(1);

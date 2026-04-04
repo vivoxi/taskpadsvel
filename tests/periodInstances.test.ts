@@ -7,7 +7,7 @@ import {
 import { serializeTaskDetails } from '../src/lib/taskDetails';
 
 describe('periodInstances helpers', () => {
-  it('creates weekly instances and marks carry-over tasks', () => {
+  it('creates weekly instances without carry-over flags', () => {
     const instances = createWeeklyPeriodInstances({
       weekKey: '2026-W15',
       weeklyTasks: [
@@ -47,8 +47,8 @@ describe('periodInstances helpers', () => {
     expect(instances[0]).toMatchObject({
       template_id: 'w1',
       period_key: '2026-W15',
-      carryover: true,
-      carryover_source_period_key: '2026-W14'
+      carryover: false,
+      carryover_source_period_key: null
     });
   });
 
@@ -82,7 +82,7 @@ describe('periodInstances helpers', () => {
     expect(parsed?.updatedAt).toBe('2026-04-02T10:00:00.000Z');
   });
 
-  it('creates monthly instances and keeps carry-over empty when no snapshot exists', () => {
+  it('creates monthly instances with carry-over disabled', () => {
     const instances = createMonthlyPeriodInstances({
       monthKey: '2026-M04',
       monthlyTasks: [

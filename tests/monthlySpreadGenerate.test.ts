@@ -37,8 +37,7 @@ describe('monthlySpreadGenerate', () => {
         makeInstance({
           template_id: 'm1',
           title: 'Deep work',
-          estimated_hours: 3,
-          carryover: true
+          estimated_hours: 3
         })
       ],
       weeklyTemplateInstancesByWeek: {},
