@@ -233,16 +233,18 @@
   <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 font-mono">
     <div class="flex flex-1 items-center gap-2">
     {#if !readonly}
-      <select
-        value={selectedDay}
-        oninput={handleMoveDay}
-        class="rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-600 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-zinc-400"
-        aria-label="Move schedule item to day"
-      >
-        {#each DAY_NAMES as day}
-          <option value={day}>{day}</option>
-        {/each}
-      </select>
+      <div class="opacity-0 group-hover:opacity-100 transition-opacity">
+        <select
+          value={selectedDay}
+          oninput={handleMoveDay}
+          class="rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-600 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-zinc-400"
+          aria-label="Move schedule item to day"
+        >
+          {#each DAY_NAMES as day}
+            <option value={day}>{day}</option>
+          {/each}
+        </select>
+      </div>
     {/if}
     {#if editingField === 'start_time'}
       <input
@@ -299,8 +301,9 @@
   {:else}
     <button
       onclick={() => startEdit('task_title')}
-      class="text-left font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors
+      class="text-left font-medium transition-colors hover:underline hover:decoration-zinc-400
         {completed ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'}"
+      title="Click to edit title"
     >
       {block.task_title}
     </button>

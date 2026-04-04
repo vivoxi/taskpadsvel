@@ -358,7 +358,7 @@
             {task.title.trim() || 'Untitled task'}
           </button>
           <Accordion.Trigger
-            class="!flex-none !px-1 !py-1 !text-zinc-400 !opacity-0 transition-opacity hover:!no-underline group-hover:!opacity-100 dark:!text-zinc-600"
+            class="!flex-none !px-1.5 !py-1.5 !text-zinc-300 !opacity-100 transition-colors hover:!text-zinc-500 hover:!no-underline dark:!text-zinc-700 dark:hover:!text-zinc-400"
             aria-label="Toggle task details"
           >
             <ChevronDown size={14} />

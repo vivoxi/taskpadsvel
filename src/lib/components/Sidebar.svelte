@@ -10,6 +10,8 @@
     NotebookPen
   } from 'lucide-svelte';
   import { themeMode, toggleTheme } from '$lib/stores/theme';
+  import { getWeekKey, getWeekDays } from '$lib/weekUtils';
+  import { format } from 'date-fns';
 
   let {
     mobile = false,
@@ -18,6 +20,14 @@
     mobile?: boolean;
     onNavigate?: () => void;
   } = $props();
+
+  const weekDays = getWeekDays(getWeekKey());
+  const weekStart = weekDays[0];
+  const weekEnd = weekDays[6];
+  const currentWeekLabel =
+    weekStart.getMonth() === weekEnd.getMonth()
+      ? `${format(weekStart, 'MMM d')}–${format(weekEnd, 'd')}`
+      : `${format(weekStart, 'MMM d')}–${format(weekEnd, 'MMM d')}`;
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -40,6 +50,7 @@
     <h1 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
       TaskpadSvel
     </h1>
+    <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{currentWeekLabel}</p>
   </div>
 
   {#each navItems as item}

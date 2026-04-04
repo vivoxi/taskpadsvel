@@ -933,81 +933,50 @@
 <div class="flex h-full flex-col">
   <div class="flex-1 overflow-auto p-4 sm:p-6">
     <div class="mx-auto flex max-w-5xl flex-col gap-6">
-      <section class="rounded-[28px] border border-zinc-200 bg-sky-50/70 px-6 py-6 shadow-[0_24px_70px_-50px_rgba(15,23,42,0.3)] dark:border-zinc-800 dark:bg-sky-950/12">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div class="inline-flex items-center rounded-full border border-sky-200 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700 dark:border-sky-500/20 dark:bg-white/6 dark:text-sky-300">
-              This Month
-            </div>
-            <h1 class="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-              Monthly Execution Board
-            </h1>
-            <p class="mt-3 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Aylık recurring işlerin bu ay hangi hafta/güne düştüğünü gör, tamamlananları
-              işaretle, geçmiş aylarda neyi kaçırdığını archive’dan takip et.
-            </p>
-          </div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <h1 class="text-base font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">This Month</h1>
+          {#if isPastMonth}
+            <span class="rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">Archived</span>
+          {/if}
+        </div>
 
-          <div class="flex flex-wrap items-center gap-3 rounded-[22px] border border-zinc-200/80 bg-white/78 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950/45">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1 rounded-[18px] border border-zinc-200 bg-white/80 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950/50">
             <button
               onclick={() => monthOffset -= 1}
-              class="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              class="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={14} />
             </button>
-            <span class="min-w-[120px] text-center text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            <span class="min-w-[110px] text-center text-sm font-medium text-zinc-900 dark:text-zinc-100">
               {monthLabel(currentMonthKey)}
             </span>
             <button
               onclick={() => monthOffset += 1}
-              class="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              class="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={14} />
             </button>
-            {#if monthOffset !== 0}
-              <button
-                onclick={() => monthOffset = 0}
-                class="text-xs text-blue-600 hover:underline dark:text-blue-400"
-              >
-                Current month
-              </button>
-            {/if}
+          </div>
+          {#if monthOffset !== 0}
+            <button
+              onclick={() => monthOffset = 0}
+              class="text-xs text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Current month
+            </button>
+          {/if}
+
+          <div class="flex items-center gap-3 rounded-[18px] border border-zinc-200 bg-white/80 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950/50">
+            <span class="text-zinc-400 text-xs">Planned <span class="font-semibold text-zinc-900 dark:text-zinc-50">{isPastMonth ? summarizeSnapshot(snapshotQuery.data).plannedHours : monthlyInstanceSummary.plannedHours}h</span></span>
+            <span class="text-zinc-300 dark:text-zinc-700">·</span>
+            <span class="text-zinc-400 text-xs">Done <span class="font-semibold text-zinc-900 dark:text-zinc-50">{isPastMonth ? summarizeSnapshot(snapshotQuery.data).completedHours : monthlyInstanceSummary.completedHours}h</span></span>
+            <span class="text-zinc-300 dark:text-zinc-700">·</span>
+            <span class="text-zinc-400 text-xs">Open <span class="font-semibold text-zinc-900 dark:text-zinc-50">{isPastMonth ? summarizeSnapshot(snapshotQuery.data).openHours : monthlyInstanceSummary.openHours}h</span></span>
           </div>
         </div>
-
-        {#if isPastMonth}
-          <div class="mt-4 text-xs uppercase tracking-[0.22em] text-zinc-400">
-            Archived Month — Read Only
-          </div>
-        {/if}
-
-        <div class="mt-5 grid gap-3 sm:grid-cols-3">
-          <div class="rounded-[20px] border border-white/70 bg-white/72 px-4 py-3 dark:border-white/6 dark:bg-zinc-950/42">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Planned Hours</div>
-            <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-              {isPastMonth
-                ? summarizeSnapshot(snapshotQuery.data).plannedHours
-                : monthlyInstanceSummary.plannedHours}h
-            </div>
-          </div>
-          <div class="rounded-[20px] border border-white/70 bg-white/72 px-4 py-3 dark:border-white/6 dark:bg-zinc-950/42">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Completed Hours</div>
-            <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-              {isPastMonth
-                ? summarizeSnapshot(snapshotQuery.data).completedHours
-                : monthlyInstanceSummary.completedHours}h
-            </div>
-          </div>
-          <div class="rounded-[20px] border border-white/70 bg-white/72 px-4 py-3 dark:border-white/6 dark:bg-zinc-950/42">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Open Hours</div>
-            <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-              {isPastMonth
-                ? summarizeSnapshot(snapshotQuery.data).openHours
-                : monthlyInstanceSummary.openHours}h
-            </div>
-          </div>
-        </div>
-      </section>
+      </div>
 
       {#if isPastMonth}
         {#if snapshotQuery.isLoading}

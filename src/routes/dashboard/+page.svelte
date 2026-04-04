@@ -16,7 +16,6 @@
     ArrowUpRight,
     Calendar,
     CalendarDays,
-    CheckCircle2,
     Clock3,
     Target
   } from 'lucide-svelte';
@@ -392,50 +391,7 @@
         {/each}
       </section>
 
-      <section class="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <article class="rounded-[28px] border border-zinc-200 bg-white/95 p-6 shadow-[0_22px_70px_-44px_rgba(15,23,42,0.38)] dark:border-zinc-800 dark:bg-zinc-950/90">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <h2 class="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Current Progress</h2>
-              <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Weekly ve monthly task listelerinin su anki oranlari
-              </p>
-            </div>
-            <div class="rounded-2xl bg-orange-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-700 dark:bg-orange-500/10 dark:text-orange-300">
-              Live
-            </div>
-          </div>
-
-          <div class="mt-6 grid gap-4 md:grid-cols-2">
-            <div class="rounded-[22px] border border-orange-200/80 bg-orange-50/90 p-5 dark:border-orange-500/20 dark:bg-orange-950/18">
-              <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-                <CheckCircle2 size={16} />
-                Weekly Tasks
-              </div>
-              <div class="mt-4 text-3xl font-semibold text-zinc-950 dark:text-zinc-50">
-                {weeklyMetrics.completed}<span class="text-zinc-400">/{weeklyMetrics.total}</span>
-              </div>
-              <div class="mt-3 h-2 overflow-hidden rounded-full bg-white dark:bg-zinc-950">
-                <div class="h-full rounded-full bg-orange-400" style={`width: ${weeklyMetrics.percentage}%`}></div>
-              </div>
-            </div>
-
-            <div class="rounded-[22px] border border-sky-200/80 bg-sky-50/90 p-5 dark:border-sky-500/20 dark:bg-sky-950/18">
-              <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-                <CheckCircle2 size={16} />
-                Monthly Tasks
-              </div>
-              <div class="mt-4 text-3xl font-semibold text-zinc-950 dark:text-zinc-50">
-                {monthlyMetrics.completed}<span class="text-zinc-400">/{monthlyMetrics.total}</span>
-              </div>
-              <div class="mt-3 h-2 overflow-hidden rounded-full bg-white dark:bg-zinc-950">
-                <div class="h-full rounded-full bg-sky-400" style={`width: ${monthlyMetrics.percentage}%`}></div>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="rounded-[28px] border border-zinc-200 bg-white/95 p-6 shadow-[0_22px_70px_-44px_rgba(15,23,42,0.38)] dark:border-zinc-800 dark:bg-zinc-950/90">
+      <article class="rounded-[28px] border border-zinc-200 bg-white/95 p-6 shadow-[0_22px_70px_-44px_rgba(15,23,42,0.38)] dark:border-zinc-800 dark:bg-zinc-950/90">
           <h2 class="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Last Archived Results</h2>
           <div class="mt-6 space-y-4">
             <div class="rounded-[22px] border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
@@ -492,8 +448,7 @@
               </div>
             {/if}
           </div>
-        </article>
-      </section>
+      </article>
     {/if}
   </div>
 </div>

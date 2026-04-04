@@ -9,7 +9,7 @@
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
   import { dragHandle, dragHandleZone, type DndEvent } from 'svelte-dnd-action';
-  import { CheckSquare2, Filter, GripVertical, ListTodo, Square, Trash2 } from 'lucide-svelte';
+  import { CheckSquare2, GripVertical, Square, Trash2 } from 'lucide-svelte';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import { Progress } from '$lib/components/ui/progress/index.js';
   import TaskRow from './TaskRow.svelte';
@@ -584,49 +584,48 @@
 <div class="flex flex-col gap-4 max-w-2xl mx-auto">
   <!-- Progress bar -->
   {#if completionToggleEnabled}
-    <div class="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
-          <ListTodo size={15} />
-          {completedCount} of {totalCount} complete
+    <div class="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{completedCount}/{totalCount}</span>
+          <div class="w-28">
+            <Progress value={progressValue} class="h-1.5 w-full" />
+          </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1 rounded-full border border-zinc-200 bg-white p-0.5 dark:border-zinc-700 dark:bg-zinc-950/50">
+            {#each ['all', 'active', 'completed'] as filterOption}
+              <button
+                onclick={() => (taskFilter = filterOption as typeof taskFilter)}
+                class={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                  taskFilter === filterOption
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                }`}
+              >
+                {filterOption}
+              </button>
+            {/each}
+          </div>
           <button
             onclick={() => setAllTasksCompleted(completedCount !== totalCount)}
-            class="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-300 dark:hover:text-zinc-100"
+            class="rounded-full border border-zinc-200 bg-white p-1.5 text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-400 dark:hover:text-zinc-100"
+            title={completedCount === totalCount && totalCount > 0 ? 'Uncheck all' : 'Check all'}
           >
             {#if completedCount === totalCount && totalCount > 0}
               <Square size={13} />
-              Uncheck all
             {:else}
               <CheckSquare2 size={13} />
-              Check all
             {/if}
           </button>
           <button
             onclick={clearCompletedTasks}
-            class="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-300"
+            class="rounded-full border border-zinc-200 bg-white p-1.5 text-zinc-500 transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-400"
+            title="Clear completed"
           >
             <Trash2 size={13} />
-            Clear completed
           </button>
         </div>
-      </div>
-      <Progress value={progressValue} class="h-2 w-full" />
-      <div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-        <Filter size={12} />
-        {#each ['all', 'active', 'completed'] as filterOption}
-          <button
-            onclick={() => (taskFilter = filterOption as typeof taskFilter)}
-            class={`rounded-full px-3 py-1 transition-colors ${
-              taskFilter === filterOption
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'bg-white text-zinc-500 hover:text-zinc-900 dark:bg-zinc-900/50 dark:text-zinc-400 dark:hover:text-zinc-100'
-            }`}
-          >
-            {filterOption}
-          </button>
-        {/each}
       </div>
     </div>
   {/if}
@@ -646,7 +645,7 @@
       class="flex min-h-12 flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
     >
       {#each visibleTasks as task (task.id)}
-        <div class="group flex items-start gap-2">
+        <div class="group relative flex items-start gap-2">
           <div class="relative pt-2">
             <button
               type="button"
@@ -660,20 +659,8 @@
             >
               <GripVertical size={14} />
             </button>
-            <div
-              class="pointer-events-none absolute left-5 top-1 z-20 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
-            >
-              <button
-                type="button"
-                onclick={() => deleteTask(task.id)}
-                class="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
-              >
-                <Trash2 size={13} />
-                Delete
-              </button>
-            </div>
           </div>
-          <div class="min-w-0 flex-1">
+          <div class="min-w-0 flex-1 pr-10">
             <TaskRow
               {task}
               attachments={getAttachmentsForTask(task.id)}
@@ -691,6 +678,14 @@
               {onAttachmentDeleted}
             />
           </div>
+          <button
+            type="button"
+            onclick={() => deleteTask(task.id)}
+            class="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-white/80 text-zinc-400 opacity-0 shadow-sm backdrop-blur transition-all duration-150 hover:border-red-200 hover:bg-white hover:text-red-500 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-200 group-hover:opacity-100 dark:bg-zinc-900/80 dark:text-zinc-500 dark:hover:border-red-500/20 dark:hover:bg-zinc-900 dark:hover:text-red-400"
+            aria-label={`Delete ${task.title || 'task'}`}
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
       {/each}
     </div>

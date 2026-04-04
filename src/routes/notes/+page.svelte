@@ -1,7 +1,7 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';
-  import { Lightbulb, NotebookPen, Plus, Sparkles, Trash2 } from 'lucide-svelte';
+  import { Lightbulb, NotebookPen, Plus, Trash2 } from 'lucide-svelte';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import {
     createDefaultNotesState,
@@ -176,35 +176,16 @@
 
 <div class="p-4 sm:p-6">
   <div class="mx-auto flex max-w-6xl flex-col gap-6">
-    <section class="rounded-[28px] border border-zinc-200 bg-amber-50/70 px-6 py-6 shadow-[0_24px_70px_-50px_rgba(15,23,42,0.3)] dark:border-zinc-800 dark:bg-amber-950/12">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div class="max-w-3xl">
-          <div class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700 dark:border-amber-500/20 dark:bg-white/6 dark:text-amber-300">
-            <Sparkles size={12} />
-            Notes Deck
-          </div>
-          <h1 class="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-4xl">
-            Notes
-          </h1>
-          <p class="mt-3 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Hızlı fikirleri, bugunun odaklarini ve daha sonra donecegin notlari tek sayfada tut. Notlar hem cihazda kalir hem de buluta senkronlanir.
-          </p>
-        </div>
-
-        <div class="rounded-[24px] border border-zinc-200/80 bg-white/80 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-950/50">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Autosave</div>
-          <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-            {savedAt ?? '--:--'}
-          </div>
-          <div class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            {workspaceWords} kelime, {bulletCount} madde
-          </div>
-          <div class="mt-1 text-xs uppercase tracking-[0.16em] text-zinc-400">
-            {syncLabel}
-          </div>
-        </div>
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <h1 class="text-base font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Notes</h1>
+        <span class="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">Notes Deck</span>
       </div>
-    </section>
+      <div class="flex items-center gap-3 text-sm text-zinc-400 dark:text-zinc-500">
+        <span>{workspaceWords} kelime · {bulletCount} madde</span>
+        <span class="text-xs uppercase tracking-[0.16em]">{savedAt ? `Saved ${savedAt}` : syncLabel}</span>
+      </div>
+    </div>
 
     <section class="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
       <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
