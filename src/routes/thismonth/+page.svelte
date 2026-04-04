@@ -2,7 +2,7 @@
   import { browser } from '$app/environment';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { format } from 'date-fns';
-  import { TRIGGERS, dndzone, type DndEvent } from 'svelte-dnd-action';
+  import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
@@ -164,12 +164,13 @@
   let weeklyTemplateSourceItemsByWeek =
     $state<Record<number, PersistedPeriodTaskInstance[]>>({});
   let isDragging = $state(false);
+  let monthlyBoardRenderNonce = $state(0);
 
   const monthlyTemplateInstances = $derived(
     materializeMonthlyTaskInstances(tasksQuery.data ?? [], currentMonthKey).map((instance) => ({
       ...instance,
-      id: `monthly-source:${instance.template_id}`,
-      instance_key: `monthly-source:${instance.template_id}`,
+      id: `monthly-source:${currentMonthKey}:${instance.template_id}`,
+      instance_key: `monthly-source:${currentMonthKey}:${instance.template_id}`,
       carryover: false,
       carryover_source_period_key: null
     }))
@@ -191,8 +192,8 @@
       byWeek[weekNum] = materializeWeeklyTaskInstances(weeklyTasksQuery.data ?? [], weekKey).map(
         (instance) => ({
           ...instance,
-          id: `weekly-source:${weekNum}:${instance.template_id}`,
-          instance_key: `weekly-source:${weekNum}:${instance.template_id}`,
+          id: `weekly-source:${weekKey}:${instance.template_id}`,
+          instance_key: `weekly-source:${weekKey}:${instance.template_id}`,
           carryover: false,
           carryover_source_period_key: null
         })
@@ -217,6 +218,10 @@
     weeklyTemplateSourceItemsByWeek = cloneTemplateSourceItemsByWeek(
       weeklyTemplateInstancesByWeek
     );
+  }
+
+  function refreshMonthlyBoardSurface() {
+    monthlyBoardRenderNonce += 1;
   }
 
   function getPlannedMonthInstances(): PersistedPeriodTaskInstance[] {
@@ -777,6 +782,7 @@
     } finally {
       isDragging = false;
       resetMonthlyTemplateSources();
+      refreshMonthlyBoardSurface();
     }
   }
 
@@ -801,6 +807,7 @@
     } finally {
       isDragging = false;
       resetWeeklyTemplateSources();
+      refreshMonthlyBoardSurface();
     }
   }
 
@@ -821,6 +828,7 @@
     } finally {
       isDragging = false;
       resetMonthlyTemplateSources();
+      refreshMonthlyBoardSurface();
     }
   }
 
@@ -833,12 +841,11 @@
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
     try {
-      if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-        await persistMonthlyInstances();
-      }
+      void event;
     } finally {
       isDragging = false;
       resetMonthlyTemplateSources();
+      refreshMonthlyBoardSurface();
     }
   }
 
@@ -858,12 +865,12 @@
     event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
   ) {
     try {
-      if (event.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-        await persistWeeklyInstances(week);
-      }
+      void week;
+      void event;
     } finally {
       isDragging = false;
       resetWeeklyTemplateSources();
+      refreshMonthlyBoardSurface();
     }
   }
 </script>
@@ -1071,8 +1078,9 @@
             </div>
           </div>
 
-          <div class="mt-5 overflow-x-auto">
-            <div class="grid min-w-[760px] grid-cols-[96px_repeat(5,minmax(0,1fr))] gap-3">
+          {#key `${currentMonthKey}:${monthlyBoardRenderNonce}`}
+            <div class="mt-5 overflow-x-auto">
+              <div class="grid min-w-[760px] grid-cols-[96px_repeat(5,minmax(0,1fr))] gap-3">
               <div></div>
               {#each MONTHLY_PLAN_DAYS as day}
                 <div class="rounded-[16px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-400">
@@ -1205,7 +1213,8 @@
                 {/each}
               {/each}
             </div>
-          </div>
+            </div>
+          {/key}
 
           <div class="mt-5 rounded-[22px] border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-950/16">
             <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
