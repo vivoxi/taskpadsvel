@@ -300,14 +300,26 @@
             <div class="rounded-[20px] border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Weekly Load</div>
               <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{weeklyHours.plannedHours}h</div>
+              <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+                <div class="h-full rounded-full bg-orange-400 transition-all" style={`width: ${weeklyMetrics.percentage}%`}></div>
+              </div>
+              <div class="mt-1 text-[11px] text-zinc-400">{weeklyMetrics.completed}/{weeklyMetrics.total} done</div>
             </div>
             <div class="rounded-[20px] border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Monthly Load</div>
               <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{monthlyHours.plannedHours}h</div>
+              <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+                <div class="h-full rounded-full bg-sky-400 transition-all" style={`width: ${monthlyMetrics.percentage}%`}></div>
+              </div>
+              <div class="mt-1 text-[11px] text-zinc-400">{monthlyMetrics.completed}/{monthlyMetrics.total} done</div>
             </div>
             <div class="rounded-[20px] border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Schedule Blocks</div>
               <div class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{scheduleMetrics.total}</div>
+              <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+                <div class="h-full rounded-full bg-emerald-400 transition-all" style={`width: ${scheduleMetrics.percentage}%`}></div>
+              </div>
+              <div class="mt-1 text-[11px] text-zinc-400">{scheduleMetrics.completed}/{scheduleMetrics.total} done</div>
             </div>
           </div>
         </div>

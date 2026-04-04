@@ -351,7 +351,7 @@
         {:else}
           <button
             onclick={startTitleEdit}
-            class="flex-1 truncate py-1 text-left text-sm transition-colors duration-200 {task.completed
+            class="flex-1 line-clamp-2 py-1 text-left text-sm transition-colors duration-200 {task.completed
               ? 'text-zinc-400 line-through dark:text-zinc-600'
               : 'text-zinc-900 dark:text-zinc-100'}"
           >

@@ -5,6 +5,7 @@
   import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
   import { Toaster } from 'svelte-sonner';
   import { browser } from '$app/environment';
+  import { page } from '$app/stores';
   import { env } from '$env/dynamic/public';
   import PomodoroFloatingWidget from '$lib/components/PomodoroFloatingWidget.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -100,5 +101,7 @@
   {/if}
 
   <Toaster richColors position="bottom-right" />
-  <PomodoroFloatingWidget />
+  {#if $page.url.pathname !== '/pomodoro'}
+    <PomodoroFloatingWidget />
+  {/if}
 </QueryClientProvider>

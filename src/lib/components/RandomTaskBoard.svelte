@@ -738,7 +738,7 @@
             class="flex min-h-10 flex-col divide-y divide-zinc-100 dark:divide-zinc-800"
           >
             {#each (localCategoryTasks[category] ?? []).filter((task) => isTaskVisible(task)) as task (task.id)}
-              <div class="group flex items-start gap-2">
+              <div class="group relative flex items-start gap-2">
                 <div class="relative pt-2">
                   <button
                     type="button"
@@ -752,20 +752,8 @@
                   >
                     <GripVertical size={14} />
                   </button>
-                  <div
-                    class="pointer-events-none absolute left-5 top-1 z-20 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
-                  >
-                    <button
-                      type="button"
-                      onclick={() => deleteTask(task.id)}
-                      class="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
-                    >
-                      <Trash2 size={13} />
-                      Delete
-                    </button>
-                  </div>
                 </div>
-                <div class="min-w-0 flex-1">
+                <div class="min-w-0 flex-1 pr-10">
                   <TaskRow
                     {task}
                     attachments={getAttachmentsForTask(task.id)}
@@ -783,6 +771,14 @@
                     {onAttachmentDeleted}
                   />
                 </div>
+                <button
+                  type="button"
+                  onclick={() => deleteTask(task.id)}
+                  class="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-white/80 text-zinc-400 opacity-0 shadow-sm backdrop-blur transition-all duration-150 hover:border-red-200 hover:bg-white hover:text-red-500 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-200 group-hover:opacity-100 dark:bg-zinc-900/80 dark:text-zinc-500 dark:hover:border-red-500/20 dark:hover:bg-zinc-900 dark:hover:text-red-400"
+                  aria-label={`Delete ${task.title || 'task'}`}
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             {/each}
           </div>

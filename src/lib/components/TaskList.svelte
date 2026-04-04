@@ -620,7 +620,7 @@
           </button>
           <button
             onclick={clearCompletedTasks}
-            class="rounded-full border border-zinc-200 bg-white p-1.5 text-zinc-500 transition-colors hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-400"
+            class="rounded-full border border-red-200 bg-red-50 p-1.5 text-red-400 transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-600 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-400/70 dark:hover:text-red-400"
             title="Clear completed"
           >
             <Trash2 size={13} />

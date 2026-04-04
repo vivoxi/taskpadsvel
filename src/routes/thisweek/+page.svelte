@@ -483,33 +483,34 @@
 
 <div class="flex h-full flex-col">
   <!-- Week navigation header -->
-  <div class="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 shrink-0 sm:px-6 sm:py-4">
-    <button
-      onclick={() => weekOffset.update((n) => n - 1)}
-      class="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-    >
-      <ChevronLeft size={16} />
-    </button>
-    <span class="min-w-0 flex-1 text-center text-sm font-medium text-zinc-900 dark:text-zinc-100 sm:min-w-[160px] sm:flex-none">
-      {weekLabel(currentWeekKey)}
-    </span>
-    <button
-      onclick={() => weekOffset.update((n) => n + 1)}
-      class="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-    >
-      <ChevronRight size={16} />
-    </button>
-    {#if $weekOffset !== 0}
+  <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 shrink-0 sm:px-6 sm:py-4">
+    <div class="flex items-center gap-1">
       <button
-        onclick={() => weekOffset.set(0)}
-        class="text-xs text-blue-600 dark:text-blue-400 hover:underline ml-1"
+        onclick={() => weekOffset.update((n) => n - 1)}
+        class="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
       >
-        This week
+        <ChevronLeft size={16} />
       </button>
-    {/if}
-    <div class="flex-1"></div>
+      <span class="whitespace-nowrap px-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        {weekLabel(currentWeekKey)}
+      </span>
+      <button
+        onclick={() => weekOffset.update((n) => n + 1)}
+        class="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+      >
+        <ChevronRight size={16} />
+      </button>
+      {#if $weekOffset !== 0}
+        <button
+          onclick={() => weekOffset.set(0)}
+          class="text-xs text-blue-600 dark:text-blue-400 hover:underline ml-1"
+        >
+          This week
+        </button>
+      {/if}
+    </div>
     {#if isPastWeek}
-      <span class="text-xs text-zinc-400 italic">Archived Week — Read Only</span>
+      <span class="text-xs text-zinc-400 italic">Archived — Read Only</span>
     {:else}
       <a
         href="/thismonth"
@@ -714,16 +715,20 @@
             </div>
           {:else}
             <div class="flex flex-col gap-6">
-              {#each DAY_NAMES as day}
+              {#each DAY_NAMES as day, i}
                 {#if getCurrentInstancesForDay(day).length > 0}
+                  {@const todayDay = isToday(i)}
                   <div class="flex flex-col gap-2">
                     <div class="flex items-center gap-2">
-                      <h4 class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                      <h4 class={`text-xs font-semibold uppercase tracking-wide ${todayDay ? 'text-blue-500 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
                         {day}
                       </h4>
                       <span class="text-xs text-zinc-400 dark:text-zinc-500">
                         {getDayDateLabel(day)}
                       </span>
+                      {#if todayDay}
+                        <span class="text-xs font-medium text-blue-500">Today</span>
+                      {/if}
                     </div>
                     <div class="flex flex-col gap-2">
                       {#each getCurrentInstancesForDay(day) as instance (instance.instance_key)}
