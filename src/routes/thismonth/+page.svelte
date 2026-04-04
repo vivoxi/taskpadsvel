@@ -158,6 +158,7 @@
   let monthlyCompletedInstanceKeys = $state<string[]>([]);
   let weeklyCompletedByStatusKey = $state<Record<string, string[]>>({});
   let activeDropZone = $state<string | null>(null);
+  let activeDragPayload = $state<BoardDragPayload | null>(null);
 
   const monthlyTemplateInstances = $derived(
     materializeMonthlyTaskInstances(tasksQuery.data ?? [], currentMonthKey).map((instance) => ({
@@ -397,6 +398,7 @@
   }
 
   function handleBoardDragStart(event: DragEvent, payload: BoardDragPayload) {
+    activeDragPayload = payload;
     if (!event.dataTransfer) return;
 
     const serialized = JSON.stringify(payload);
@@ -407,9 +409,14 @@
 
   function handleBoardDragEnd() {
     activeDropZone = null;
+    activeDragPayload = null;
   }
 
   function readBoardDragPayload(event: DragEvent): BoardDragPayload | null {
+    if (activeDragPayload) {
+      return activeDragPayload;
+    }
+
     const raw =
       event.dataTransfer?.getData(BOARD_DRAG_MIME) ?? event.dataTransfer?.getData('text/plain');
     if (!raw) return null;
@@ -741,6 +748,7 @@
       if (!copy) return;
 
       await persistMonthlyInstances([...monthlyPeriodInstances, copy]);
+      activeDragPayload = null;
       return;
     }
 
@@ -750,6 +758,7 @@
         preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
       })
     );
+    activeDragPayload = null;
   }
 
   async function handleFlexibleDrop(event: DragEvent) {
@@ -767,6 +776,7 @@
       if (!copy) return;
 
       await persistMonthlyInstances([...monthlyPeriodInstances, copy]);
+      activeDragPayload = null;
       return;
     }
 
@@ -776,6 +786,7 @@
         preferred_day: null
       })
     );
+    activeDragPayload = null;
   }
 
   async function handleWeeklyCellDrop(week: number, day: string, event: DragEvent) {
@@ -796,6 +807,7 @@
       if (!copy) return;
 
       await persistWeeklyInstances(week, [...currentWeekInstances, copy]);
+      activeDragPayload = null;
       return;
     }
 
@@ -808,6 +820,7 @@
         day as PersistedPeriodTaskInstance['preferred_day']
       )
     );
+    activeDragPayload = null;
   }
 </script>
 
