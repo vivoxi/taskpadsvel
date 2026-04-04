@@ -3,6 +3,15 @@
   import { createQuery } from '@tanstack/svelte-query';
   import { apiJson, canUseClientApi } from '$lib/client/api';
   import {
+    getMonthlyInstanceStatusStorageKey,
+    getMonthlyInstancesStorageKey,
+    getWeeklyInstanceStatusStorageKey,
+    getWeeklyInstancesStorageKey,
+    parsePersistedPeriodInstanceStatus,
+    parsePersistedPeriodInstances,
+    type PersistedPeriodTaskInstance
+  } from '$lib/periodInstances';
+  import {
     Activity,
     ArrowUpRight,
     Calendar,
@@ -11,9 +20,13 @@
     Clock3,
     Target
   } from 'lucide-svelte';
-  import { summarizeSnapshot, summarizeTasks } from '$lib/periodSummary';
+  import { summarizeInstances, summarizeSnapshot, summarizeTasks } from '$lib/periodSummary';
   import { authPassword } from '$lib/stores';
-  import { getWeekKey } from '$lib/weekUtils';
+  import {
+    getBoardMonthKeyForWeek,
+    getBoardWeekOfMonth,
+    getWeekKey
+  } from '$lib/weekUtils';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import type { HistorySnapshot, ScheduleBlock, Task, TaskType } from '$lib/types';
 
@@ -31,6 +44,8 @@
   };
 
   const currentWeekKey = getWeekKey();
+  const currentMonthKey = getBoardMonthKeyForWeek(currentWeekKey);
+  const currentWeekOfMonth = getBoardWeekOfMonth(currentWeekKey, currentMonthKey);
   const canAccessApi = $derived(canUseClientApi($authPassword));
 
   const tasksQuery = createQuery(() => ({
@@ -43,6 +58,60 @@
     queryKey: ['dashboard', 'weekly_schedule', currentWeekKey] as const,
     queryFn: async () =>
       apiJson<ScheduleBlock[]>(`/api/weekly-schedule?weekKey=${encodeURIComponent(currentWeekKey)}`),
+    enabled: browser && canAccessApi
+  }));
+
+  const weeklyInstancesQuery = createQuery(() => ({
+    queryKey: ['dashboard', 'period_instances', 'weekly', currentWeekKey] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(getWeeklyInstancesStorageKey(currentWeekKey))}`
+      );
+      return parsePersistedPeriodInstances(response.entries[0]?.value)?.instances ?? [];
+    },
+    enabled: browser && canAccessApi
+  }));
+
+  const weeklyStatusQuery = createQuery(() => ({
+    queryKey: ['dashboard', 'period_status', 'weekly', currentWeekKey] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(
+          getWeeklyInstanceStatusStorageKey(currentWeekKey)
+        )}`
+      );
+      return (
+        parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
+      );
+    },
+    enabled: browser && canAccessApi
+  }));
+
+  const monthlyInstancesQuery = createQuery(() => ({
+    queryKey: ['dashboard', 'period_instances', 'monthly', currentMonthKey, currentWeekOfMonth] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(getMonthlyInstancesStorageKey(currentMonthKey))}`
+      );
+      return (parsePersistedPeriodInstances(response.entries[0]?.value)?.instances ?? []).filter(
+        (instance) => instance.preferred_week_of_month === currentWeekOfMonth
+      );
+    },
+    enabled: browser && canAccessApi
+  }));
+
+  const monthlyStatusQuery = createQuery(() => ({
+    queryKey: ['dashboard', 'period_status', 'monthly', currentMonthKey] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(
+          getMonthlyInstanceStatusStorageKey(currentMonthKey)
+        )}`
+      );
+      return (
+        parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
+      );
+    },
     enabled: browser && canAccessApi
   }));
 
@@ -80,6 +149,15 @@
     return { completed, total, percentage };
   }
 
+  function toDashboardMetrics(summary: ReturnType<typeof summarizeInstances>) {
+    return {
+      completed: summary.completedTasks,
+      total: summary.totalTasks,
+      percentage: summary.completionPercentage,
+      plannedHours: summary.plannedHours
+    };
+  }
+
   function progressTone(percentage: number) {
     if (percentage >= 80) return 'bg-emerald-400';
     if (percentage >= 50) return 'bg-orange-400';
@@ -92,11 +170,25 @@
     return 'Needs focus';
   }
 
-  const weeklyMetrics = $derived(getCompletionMetrics('weekly'));
-  const monthlyMetrics = $derived(getCompletionMetrics('monthly'));
+  const weeklyMetrics = $derived(
+    toDashboardMetrics(
+      summarizeInstances(
+        (weeklyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+        weeklyStatusQuery.data ?? []
+      )
+    )
+  );
+  const monthlyMetrics = $derived(
+    toDashboardMetrics(
+      summarizeInstances(
+        (monthlyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+        monthlyStatusQuery.data ?? []
+      )
+    )
+  );
   const randomMetrics = $derived(getCompletionMetrics('random'));
-  const weeklyHours = $derived(summarizeTasks(getTasksByType('weekly')));
-  const monthlyHours = $derived(summarizeTasks(getTasksByType('monthly')));
+  const weeklyHours = $derived({ plannedHours: weeklyMetrics.plannedHours });
+  const monthlyHours = $derived({ plannedHours: monthlyMetrics.plannedHours });
   const scheduleMetrics = $derived(getScheduleMetrics());
   const totalCompleted = $derived(
     weeklyMetrics.completed + monthlyMetrics.completed + randomMetrics.completed
@@ -106,11 +198,21 @@
   );
   const overallPercentage = $derived(totalTasks > 0 ? Math.round((totalCompleted / totalTasks) * 100) : 0);
   const loading = $derived(
-    tasksQuery.isLoading || scheduleQuery.isLoading
+    tasksQuery.isLoading ||
+      scheduleQuery.isLoading ||
+      weeklyInstancesQuery.isLoading ||
+      weeklyStatusQuery.isLoading ||
+      monthlyInstancesQuery.isLoading ||
+      monthlyStatusQuery.isLoading
   );
   const hasError = $derived(
     Boolean(
-      tasksQuery.error || scheduleQuery.error
+      tasksQuery.error ||
+        scheduleQuery.error ||
+        weeklyInstancesQuery.error ||
+        weeklyStatusQuery.error ||
+        monthlyInstancesQuery.error ||
+        monthlyStatusQuery.error
     )
   );
   const archiveHasError = $derived(
@@ -130,10 +232,10 @@
         'border-orange-200/80 bg-orange-50/90 dark:border-orange-500/20 dark:bg-orange-950/18',
       glowClass: '',
       railClass: 'bg-orange-400 dark:bg-orange-400',
-      href: '/weekly'
+      href: '/thisweek'
     },
     {
-      title: 'Monthly',
+      title: 'This Month',
       eyebrow: 'Long-cycle work',
       percentage: monthlyMetrics.percentage,
       completed: monthlyMetrics.completed,
@@ -143,7 +245,7 @@
         'border-sky-200/80 bg-sky-50/90 dark:border-sky-500/20 dark:bg-sky-950/18',
       glowClass: '',
       railClass: 'bg-sky-400 dark:bg-sky-400',
-      href: '/monthly'
+      href: '/thismonth'
     },
     {
       title: 'This Week Schedule',
