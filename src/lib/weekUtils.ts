@@ -90,3 +90,21 @@ export function getWeekOfMonth(weekKey: string): number {
   const anchor = days[2];
   return Math.ceil(anchor.getDate() / 7);
 }
+
+export function getBoardMonthKeyForWeek(weekKey: string): string {
+  const days = getWeekDays(weekKey);
+  const boardAnchor = days[4] ?? days[2] ?? days[0] ?? new Date();
+  return getMonthKey(boardAnchor);
+}
+
+export function getBoardWeekOfMonth(weekKey: string, monthKey = getBoardMonthKeyForWeek(weekKey)): number {
+  for (const weekOfMonth of [1, 2, 3, 4]) {
+    if (getMonthWeekKey(monthKey, weekOfMonth) === weekKey) {
+      return weekOfMonth;
+    }
+  }
+
+  const days = getWeekDays(weekKey);
+  const boardAnchor = days[4] ?? days[2] ?? days[0] ?? new Date();
+  return Math.max(1, Math.min(4, Math.ceil(boardAnchor.getDate() / 7)));
+}

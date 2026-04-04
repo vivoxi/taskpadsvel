@@ -3,6 +3,8 @@ import {
   getWeekKey,
   getMonthKey,
   getWeekDays,
+  getBoardMonthKeyForWeek,
+  getBoardWeekOfMonth,
   weekLabel,
   monthLabel,
   DAY_NAMES
@@ -66,5 +68,15 @@ describe('DAY_NAMES', () => {
     expect(DAY_NAMES).toHaveLength(7);
     expect(DAY_NAMES[0]).toBe('Monday');
     expect(DAY_NAMES[6]).toBe('Sunday');
+  });
+});
+
+describe('board month helpers', () => {
+  it('maps a cross-month week to the This Month board month', () => {
+    expect(getBoardMonthKeyForWeek('2025-W18')).toBe('2025-M05');
+  });
+
+  it('maps a cross-month week to week 1 inside the This Month board', () => {
+    expect(getBoardWeekOfMonth('2025-W18')).toBe(1);
   });
 });

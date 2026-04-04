@@ -25,10 +25,11 @@
   import {
     DAY_NAMES,
     addWeeks,
+    getBoardMonthKeyForWeek,
+    getBoardWeekOfMonth,
     getMonthKey,
     getWeekDays,
     getWeekKey,
-    getWeekOfMonth,
     weekLabel
   } from '$lib/weekUtils';
   import type { ScheduleBlock, WeeklyPlan, HistorySnapshot, Task, TaskAttachment, TaskType } from '$lib/types';
@@ -38,8 +39,8 @@
   const currentWeekKey = $derived(getWeekKey(addWeeks(today, $weekOffset)));
   const isPastWeek = $derived($weekOffset < 0);
   const weekDays = $derived(getWeekDays(currentWeekKey));
-  const currentMonthKey = $derived(getMonthKey(weekDays[2] ?? addWeeks(today, $weekOffset)));
-  const currentWeekOfMonth = $derived(getWeekOfMonth(currentWeekKey));
+  const currentMonthKey = $derived(getBoardMonthKeyForWeek(currentWeekKey));
+  const currentWeekOfMonth = $derived(getBoardWeekOfMonth(currentWeekKey, currentMonthKey));
   const canAccessApi = $derived(canUseClientApi($authPassword));
   const weeklyInstanceStatusStorageKey = $derived(
     getWeeklyInstanceStatusStorageKey(currentWeekKey)
