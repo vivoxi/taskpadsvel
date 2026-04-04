@@ -2,6 +2,7 @@
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';
   import { Lightbulb, NotebookPen, Plus, Sparkles, Trash2 } from 'lucide-svelte';
+  import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import {
     createDefaultNotesState,
     NOTES_SUPABASE_KEY,
@@ -10,7 +11,7 @@
     parsePersistedNotesState,
     type NotesState
   } from '$lib/notes';
-  import { supabase } from '$lib/supabase';
+  import { authPassword } from '$lib/stores';
 
   let notes = $state<NotesState>(createDefaultNotesState());
   let bulletDraft = $state('');
@@ -19,6 +20,7 @@
   let syncState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let remoteReady = $state(false);
   let hasLocalEdits = $state(false);
+  const canAccessApi = $derived(canUseClientApi($authPassword));
 
   const bulletCount = $derived(notes.bullets.length);
   const workspaceWords = $derived(
@@ -67,19 +69,16 @@
 
     if (remoteSaveTimer) clearTimeout(remoteSaveTimer);
     remoteSaveTimer = setTimeout(async () => {
-      const { error } = await supabase.from('user_preferences').upsert(
-        {
+      try {
+        await apiSendJson('/api/preferences', 'POST', {
           key: NOTES_SUPABASE_KEY,
           value: {
             state: payload,
             updatedAt
           },
-          updated_at: updatedAt
-        },
-        { onConflict: 'key' }
-      );
-
-      if (error) {
+          updatedAt
+        });
+      } catch (error) {
         syncState = 'error';
         console.error('Failed to sync notes', error);
         return;
@@ -134,30 +133,6 @@
       notes = createDefaultNotesState();
     }
 
-    void (async () => {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', NOTES_SUPABASE_KEY)
-        .maybeSingle();
-
-      if (error) {
-        syncState = 'error';
-        remoteReady = true;
-        console.error('Failed to load notes sync state', error);
-        return;
-      }
-
-      const persisted = parsePersistedNotesState(data?.value);
-      if (persisted && !hasLocalEdits) {
-        notes = persisted.state;
-        savedAt = formatSavedAt(persisted.updatedAt);
-        syncState = persisted.updatedAt ? 'saved' : 'idle';
-      }
-
-      remoteReady = true;
-    })();
-
     persistLocalState();
 
     return () => {
@@ -169,6 +144,29 @@
     if (!mounted) return;
     persistLocalState();
     if (remoteReady) scheduleRemoteSave();
+  });
+
+  $effect(() => {
+    if (!mounted || remoteReady || !canAccessApi) return;
+
+    apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+      `/api/preferences?key=${encodeURIComponent(NOTES_SUPABASE_KEY)}`
+    )
+      .then((response) => {
+        const persisted = parsePersistedNotesState(response.entries[0]?.value);
+        if (persisted && !hasLocalEdits) {
+          notes = persisted.state;
+          savedAt = formatSavedAt(persisted.updatedAt);
+          syncState = persisted.updatedAt ? 'saved' : 'idle';
+        }
+      })
+      .catch((error) => {
+        syncState = 'error';
+        console.error('Failed to load notes sync state', error);
+      })
+      .finally(() => {
+        remoteReady = true;
+      });
   });
 </script>
 

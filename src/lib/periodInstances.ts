@@ -193,3 +193,15 @@ export function updateCompletedInstanceKeys(
   }
   return Array.from(next);
 }
+
+export function toggleCompletedInstanceKey(
+  keys: string[],
+  instanceKey: string
+): { completed: boolean; completedInstanceKeys: string[] } {
+  const completed = !keys.includes(instanceKey);
+
+  return {
+    completed,
+    completedInstanceKeys: updateCompletedInstanceKeys(keys, instanceKey, completed)
+  };
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
+  import { apiJson, apiSendJson } from '$lib/client/api';
   import {
     getPeriodInstanceStatusStorageKey,
     parsePeriodInstanceKey,
@@ -7,7 +8,6 @@
     updateCompletedInstanceKeys
   } from '$lib/periodInstances';
   import { parseScheduleBlockDetails, serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
-  import { supabase } from '$lib/supabase';
   import { toast } from 'svelte-sonner';
   import { DAY_NAMES } from '$lib/weekUtils';
   import { Trash2 } from 'lucide-svelte';
@@ -95,12 +95,11 @@
     const updated = { ...block, [field]: value };
     onUpdate(updated);
 
-    const { error } = await supabase
-      .from('weekly_schedule')
-      .update({ [field]: value })
-      .eq('id', block.id);
-
-    if (error) toast.error('Failed to save');
+    try {
+      await apiSendJson(`/api/weekly-schedule/${block.id}`, 'PATCH', { [field]: value });
+    } catch {
+      toast.error('Failed to save');
+    }
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -129,12 +128,9 @@
     completed = nextCompleted;
     onUpdate(updated);
 
-    const { error } = await supabase
-      .from('weekly_schedule')
-      .update({ notes: nextNotes })
-      .eq('id', block.id);
-
-    if (error) {
+    try {
+      await apiSendJson(`/api/weekly-schedule/${block.id}`, 'PATCH', { notes: nextNotes });
+    } catch {
       completed = !nextCompleted;
       onUpdate(block);
       toast.error('Failed to save');
@@ -155,11 +151,9 @@
     const parsedInstanceKey = parsePeriodInstanceKey(linkedInstanceKey);
     if (!parsedInstanceKey) return;
 
-    const { data: matchingBlocks, error: blocksError } = await supabase
-      .from('weekly_schedule')
-      .select('id, notes');
-
-    if (blocksError) throw blocksError;
+    const matchingBlocks = await apiJson<Array<{ id: string; notes: string }>>(
+      `/api/weekly-schedule?weekKey=${encodeURIComponent(weekKey)}`
+    );
 
     const parsedBlock = parseScheduleBlockDetails(updatedBlock.notes);
     const allCompleted = (matchingBlocks ?? [])
@@ -177,15 +171,10 @@
       parsedInstanceKey.periodKey
     );
 
-    const { data, error } = await supabase
-      .from('user_preferences')
-      .select('value')
-      .eq('key', storageKey)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    const persisted = parsePersistedPeriodInstanceStatus(data?.value);
+    const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+      `/api/preferences?key=${encodeURIComponent(storageKey)}`
+    );
+    const persisted = parsePersistedPeriodInstanceStatus(response.entries[0]?.value);
     const completedInstanceKeys = updateCompletedInstanceKeys(
       persisted?.completedInstanceKeys ?? [],
       linkedInstanceKey,
@@ -193,19 +182,14 @@
     );
 
     const updatedAt = new Date().toISOString();
-    const { error: saveError } = await supabase.from('user_preferences').upsert(
-      {
-        key: storageKey,
-        value: {
-          completedInstanceKeys,
-          updatedAt
-        },
-        updated_at: updatedAt
+    await apiSendJson('/api/preferences', 'POST', {
+      key: storageKey,
+      value: {
+        completedInstanceKeys,
+        updatedAt
       },
-      { onConflict: 'key' }
-    );
-
-    if (saveError) throw saveError;
+      updatedAt
+    });
 
     queryClient.setQueryData(['period_instance_status', parsedInstanceKey.periodType, storageKey], {
       completedInstanceKeys,

@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { get, writable } from 'svelte/store';
+import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
 import {
   appendPomodoroHistory,
   createDefaultPomodoroSnapshot,
@@ -17,7 +18,7 @@ import {
   type PomodoroMode,
   type PomodoroSnapshot
 } from '$lib/pomodoro';
-import { supabase } from '$lib/supabase';
+import { authPassword } from '$lib/stores';
 
 export type PomodoroSyncState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -42,6 +43,7 @@ const pomodoroTimerState = writable<PomodoroTimerState>(DEFAULT_TIMER_STATE);
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let remoteSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let authUnsubscribe: (() => void) | null = null;
 let hasLocalInteraction = false;
 let initialized = false;
 
@@ -110,24 +112,24 @@ function scheduleRemoteSync(delay = 400) {
 
   if (remoteSyncTimer) clearTimeout(remoteSyncTimer);
   remoteSyncTimer = setTimeout(async () => {
-    const { error } = await supabase.from('user_preferences').upsert(
-      {
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
         key: POMODORO_SUPABASE_KEY,
         value: {
           ...payload,
           updatedAt
         },
-        updated_at: updatedAt
-      },
-      { onConflict: 'key' }
-    );
-
-    pomodoroTimerState.update((current) => ({
-      ...current,
-      syncState: error ? 'error' : 'saved'
-    }));
-
-    if (error) {
+        updatedAt
+      });
+      pomodoroTimerState.update((current) => ({
+        ...current,
+        syncState: 'saved'
+      }));
+    } catch (error) {
+      pomodoroTimerState.update((current) => ({
+        ...current,
+        syncState: 'error'
+      }));
       console.error('Failed to sync pomodoro', error);
     }
   }, delay);
@@ -274,38 +276,34 @@ function startTicker() {
 }
 
 async function hydrateRemoteState() {
-  const { data, error } = await supabase
-    .from('user_preferences')
-    .select('value')
-    .eq('key', POMODORO_SUPABASE_KEY)
-    .maybeSingle();
+  try {
+    const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+      `/api/preferences?key=${encodeURIComponent(POMODORO_SUPABASE_KEY)}`
+    );
+    const persisted = parsePersistedPomodoroState(response.entries[0]?.value);
+    if (persisted && !hasLocalInteraction) {
+      applySnapshot(persisted.snapshot, persisted.history);
+      pomodoroTimerState.update((state) => ({
+        ...state,
+        syncState: persisted.updatedAt ? 'saved' : 'idle'
+      }));
+    }
 
-  if (error) {
+    pomodoroTimerState.update((state) => ({
+      ...state,
+      remoteReady: true
+    }));
+
+    if (get(pomodoroTimerState).isRunning) {
+      startTicker();
+    }
+  } catch (error) {
     pomodoroTimerState.update((state) => ({
       ...state,
       remoteReady: true,
       syncState: 'error'
     }));
     console.error('Failed to load pomodoro sync state', error);
-    return;
-  }
-
-  const persisted = parsePersistedPomodoroState(data?.value);
-  if (persisted && !hasLocalInteraction) {
-    applySnapshot(persisted.snapshot, persisted.history);
-    pomodoroTimerState.update((state) => ({
-      ...state,
-      syncState: persisted.updatedAt ? 'saved' : 'idle'
-    }));
-  }
-
-  pomodoroTimerState.update((state) => ({
-    ...state,
-    remoteReady: true
-  }));
-
-  if (get(pomodoroTimerState).isRunning) {
-    startTicker();
   }
 }
 
@@ -342,7 +340,17 @@ export function initializePomodoroTimer() {
   }
 
   persistLocalState(get(pomodoroTimerState));
-  void hydrateRemoteState();
+
+  if (canUseClientApi(get(authPassword))) {
+    void hydrateRemoteState();
+  } else if (!authUnsubscribe) {
+    authUnsubscribe = authPassword.subscribe((password) => {
+      if (!canUseClientApi(password)) return;
+      authUnsubscribe?.();
+      authUnsubscribe = null;
+      void hydrateRemoteState();
+    });
+  }
 }
 
 export const pomodoroTimer = {

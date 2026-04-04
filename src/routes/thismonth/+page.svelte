@@ -5,6 +5,7 @@
   import { TRIGGERS, dndzone, type DndEvent } from 'svelte-dnd-action';
   import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
+  import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import {
     MONTHLY_PLAN_DAYS,
     MONTHLY_PLAN_WEEKS,
@@ -18,7 +19,7 @@
     getWeeklyInstancesStorageKey,
     parsePersistedPeriodInstanceStatus,
     parsePersistedPeriodInstances,
-    updateCompletedInstanceKeys,
+    toggleCompletedInstanceKey,
     type PersistedPeriodTaskInstance
   } from '$lib/periodInstances';
   import { summarizeInstances, summarizeSnapshot } from '$lib/periodSummary';
@@ -27,7 +28,6 @@
     serializeScheduleBlockDetails
   } from '$lib/scheduleBlockDetails';
   import { authPassword } from '$lib/stores';
-  import { supabase } from '$lib/supabase';
   import {
     addMonths,
     getMonthKey,
@@ -46,6 +46,7 @@
   const queryClient = useQueryClient();
   const today = new Date();
   let monthOffset = $state(0);
+  const canAccessApi = $derived(canUseClientApi($authPassword));
 
   const currentMonthKey = $derived(getMonthKey(addMonths(today, monthOffset)));
   const isPastMonth = $derived(monthOffset < 0);
@@ -57,88 +58,54 @@
 
   const tasksQuery = createQuery(() => ({
     queryKey: ['tasks', 'monthly'] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('type', 'monthly')
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Task[];
-    },
-    enabled: browser && !isPastMonth
+    queryFn: async () => apiJson<Task[]>('/api/tasks?type=monthly'),
+    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   const weeklyTasksQuery = createQuery(() => ({
     queryKey: ['tasks', 'weekly'] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('type', 'weekly')
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Task[];
-    },
-    enabled: browser && !isPastMonth
+    queryFn: async () => apiJson<Task[]>('/api/tasks?type=weekly'),
+    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   const snapshotQuery = createQuery(() => ({
     queryKey: ['snapshot', 'monthly', currentMonthKey] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('history_snapshots')
-        .select('*')
-        .eq('period_type', 'monthly')
-        .eq('period_key', currentMonthKey)
-        .maybeSingle();
-      if (error) throw error;
-      return data as HistorySnapshot | null;
-    },
-    enabled: browser && isPastMonth
+    queryFn: async () =>
+      apiJson<HistorySnapshot | null>(
+        `/api/snapshots?periodType=monthly&periodKey=${encodeURIComponent(currentMonthKey)}`
+      ),
+    enabled: browser && canAccessApi && isPastMonth
   }));
 
   const previousSnapshotQuery = createQuery(() => ({
     queryKey: ['snapshot', 'monthly_previous', previousMonthKey] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('history_snapshots')
-        .select('*')
-        .eq('period_type', 'monthly')
-        .eq('period_key', previousMonthKey)
-        .maybeSingle();
-      if (error) throw error;
-      return data as HistorySnapshot | null;
-    },
-    enabled: browser && !isPastMonth
+    queryFn: async () =>
+      apiJson<HistorySnapshot | null>(
+        `/api/snapshots?periodType=monthly&periodKey=${encodeURIComponent(previousMonthKey)}`
+      ),
+    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   const monthlyInstancesQuery = createQuery(() => ({
     queryKey: ['thismonth_page', 'period_instances', currentMonthKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', monthlyInstancesStorageKey)
-        .maybeSingle();
-      if (error) throw error;
-      return data?.value ?? null;
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(monthlyInstancesStorageKey)}`
+      );
+      return response.entries[0]?.value ?? null;
     },
-    enabled: browser && !isPastMonth
+    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   const monthlyInstanceStatusQuery = createQuery(() => ({
     queryKey: ['period_instance_status', 'monthly', monthlyInstanceStatusStorageKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', monthlyInstanceStatusStorageKey)
-        .maybeSingle();
-      if (error) throw error;
-      return data?.value ?? null;
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(monthlyInstanceStatusStorageKey)}`
+      );
+      return response.entries[0]?.value ?? null;
     },
-    enabled: browser && !isPastMonth
+    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   const weeklyInstanceStatusQuery = createQuery(() => ({
@@ -147,19 +114,17 @@
       const keys = MONTHLY_PLAN_WEEKS.map((w) =>
         getWeeklyInstanceStatusStorageKey(getMonthWeekKey(currentMonthKey, w))
       );
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('key, value')
-        .in('key', keys);
-      if (error) throw error;
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?keys=${encodeURIComponent(keys.join(','))}`
+      );
       const map: Record<string, string[]> = {};
-      for (const row of (data ?? []) as { key: string; value: unknown }[]) {
+      for (const row of response.entries) {
         const parsed = parsePersistedPeriodInstanceStatus(row.value);
         if (parsed) map[row.key] = parsed.completedInstanceKeys;
       }
       return map;
     },
-    enabled: browser && !isPastMonth
+    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   const weeklyInstancesQuery = createQuery(() => ({
@@ -168,14 +133,12 @@
       const keys = MONTHLY_PLAN_WEEKS.map((week) =>
         getWeeklyInstancesStorageKey(getMonthWeekKey(currentMonthKey, week))
       );
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('key, value')
-        .in('key', keys);
-      if (error) throw error;
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?keys=${encodeURIComponent(keys.join(','))}`
+      );
 
       const map: Record<string, PersistedPeriodTaskInstance[]> = {};
-      for (const row of (data ?? []) as { key: string; value: unknown }[]) {
+      for (const row of response.entries) {
         const parsed = parsePersistedPeriodInstances(row.value);
         const periodKey = row.key.replace('period_instances:weekly:', '');
         if (parsed) map[periodKey] = parsed.instances;
@@ -183,7 +146,7 @@
 
       return map;
     },
-    enabled: browser && !isPastMonth
+    enabled: browser && canAccessApi && !isPastMonth
   }));
 
   let monthlyPeriodInstances = $state<PersistedPeriodTaskInstance[]>([]);
@@ -420,20 +383,19 @@
     const weekKey = instanceKey.split(':')[2];
     const statusKey = getWeeklyInstanceStatusStorageKey(weekKey);
     const currentCompleted = weeklyCompletedByStatusKey[statusKey] ?? [];
-    const nowCompleted = !currentCompleted.includes(instanceKey);
-    const nextCompleted = updateCompletedInstanceKeys(currentCompleted, instanceKey, nowCompleted);
+    const {
+      completed: nowCompleted,
+      completedInstanceKeys: nextCompleted
+    } = toggleCompletedInstanceKey(currentCompleted, instanceKey);
     const updatedAt = new Date().toISOString();
 
-    const { error } = await supabase.from('user_preferences').upsert(
-      {
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
         key: statusKey,
         value: { completedInstanceKeys: nextCompleted, updatedAt },
-        updated_at: updatedAt
-      },
-      { onConflict: 'key' }
-    );
-
-    if (error) {
+        updatedAt
+      });
+    } catch {
       toast.error('Failed to update weekly status');
       return;
     }
@@ -633,33 +595,32 @@
   async function toggleInstance(instanceKey: string) {
     if (isPastMonth) return;
 
-    const nextCompletedInstanceKeys = updateCompletedInstanceKeys(
+    const {
+      completed: nextCompleted,
+      completedInstanceKeys: nextCompletedInstanceKeys
+    } = toggleCompletedInstanceKey(
       monthlyCompletedInstanceKeys,
-      instanceKey,
-      !isInstanceCompleted(instanceKey)
+      instanceKey
     );
     const updatedAt = new Date().toISOString();
 
-    const { error } = await supabase.from('user_preferences').upsert(
-      {
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
         key: monthlyInstanceStatusStorageKey,
         value: {
           completedInstanceKeys: nextCompletedInstanceKeys,
           updatedAt
         },
-        updated_at: updatedAt
-      },
-      { onConflict: 'key' }
-    );
-
-    if (error) {
+        updatedAt
+      });
+    } catch {
       toast.error('Failed to update this month status');
       return;
     }
 
     monthlyCompletedInstanceKeys = nextCompletedInstanceKeys;
 
-    await syncScheduleBlocksForInstance(instanceKey, !isInstanceCompleted(instanceKey));
+    await syncScheduleBlocksForInstance(instanceKey, nextCompleted);
 
     queryClient.setQueryData(
       ['period_instance_status', 'monthly', monthlyInstanceStatusStorageKey],
@@ -672,44 +633,35 @@
 
   async function syncScheduleBlocksForInstance(instanceKey: string, completed: boolean) {
     const monthWeekKeys = MONTHLY_PLAN_WEEKS.map((week) => getMonthWeekKey(currentMonthKey, week));
-    const { data, error } = await supabase
-      .from('weekly_schedule')
-      .select('id, notes, week_key, day, start_time, end_time, task_title, sort_order')
-      .in('week_key', monthWeekKeys);
-
-    if (error) {
+    const data = await apiJson<ScheduleBlock[]>(
+      `/api/weekly-schedule?weekKeys=${encodeURIComponent(monthWeekKeys.join(','))}`
+    ).catch(() => {
       toast.error('This Month updated, but This Week sync failed');
-      return;
-    }
+      return null;
+    });
 
-    const matchingBlocks = ((data ?? []) as ScheduleBlock[]).filter(
+    if (!data) return;
+
+    const matchingBlocks = data.filter(
       (block) => parseScheduleBlockDetails(block.notes).linkedInstanceKey === instanceKey
     );
 
     if (matchingBlocks.length === 0) return;
 
-    const results = await Promise.all(
+    await Promise.all(
       matchingBlocks.map((block) => {
         const details = parseScheduleBlockDetails(block.notes);
-        return supabase
-          .from('weekly_schedule')
-          .update({
-            notes: serializeScheduleBlockDetails(
-              details.notes,
-              completed,
-              details.linkedTaskId,
-              details.linkedTaskType,
-              details.linkedInstanceKey
-            )
-          })
-          .eq('id', block.id);
+        return apiSendJson(`/api/weekly-schedule/${block.id}`, 'PATCH', {
+          notes: serializeScheduleBlockDetails(
+            details.notes,
+            completed,
+            details.linkedTaskId,
+            details.linkedTaskType,
+            details.linkedInstanceKey
+          )
+        });
       })
     );
-
-    if (results.some((result) => result.error)) {
-      toast.error('This Month updated, but This Week sync failed');
-      return;
-    }
 
     queryClient.invalidateQueries({ queryKey: ['weekly_schedule'] });
   }
@@ -737,19 +689,16 @@
     const updatedAt = new Date().toISOString();
     monthlyPeriodInstances = nextInstances;
 
-    const { error } = await supabase.from('user_preferences').upsert(
-      {
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
         key: monthlyInstancesStorageKey,
         value: {
           instances: nextInstances,
           updatedAt
         },
-        updated_at: updatedAt
-      },
-      { onConflict: 'key' }
-    );
-
-    if (error) {
+        updatedAt
+      });
+    } catch {
       toast.error('Failed to save month board order');
       return;
     }
@@ -773,19 +722,16 @@
       [weekKey]: nextWeekInstances
     };
 
-    const { error } = await supabase.from('user_preferences').upsert(
-      {
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
         key: getWeeklyInstancesStorageKey(weekKey),
         value: {
           instances: nextWeekInstances,
           updatedAt
         },
-        updated_at: updatedAt
-      },
-      { onConflict: 'key' }
-    );
-
-    if (error) {
+        updatedAt
+      });
+    } catch {
       toast.error('Failed to save weekly board order');
       return;
     }

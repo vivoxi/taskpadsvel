@@ -4,6 +4,7 @@
   import { toast } from 'svelte-sonner';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
+  import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import AttachmentChip from '$lib/components/AttachmentChip.svelte';
   import DayCard from '$lib/components/DayCard.svelte';
   import ScheduleDay from '$lib/components/ScheduleDay.svelte';
@@ -14,13 +15,13 @@
     getWeeklyInstancesStorageKey,
     parsePersistedPeriodInstanceStatus,
     parsePersistedPeriodInstances,
-    updateCompletedInstanceKeys,
+    toggleCompletedInstanceKey,
     type PersistedPeriodTaskInstance
   } from '$lib/periodInstances';
   import { normalizeScheduleDayBlocks } from '$lib/scheduleLayout';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
-  import { supabase } from '$lib/supabase';
-  import { weekOffset } from '$lib/stores';
+  import { getTaskAttachmentsForWeek } from '$lib/taskAttachments';
+  import { authPassword, weekOffset } from '$lib/stores';
   import {
     DAY_NAMES,
     addWeeks,
@@ -39,6 +40,7 @@
   const weekDays = $derived(getWeekDays(currentWeekKey));
   const currentMonthKey = $derived(getMonthKey(weekDays[2] ?? addWeeks(today, $weekOffset)));
   const currentWeekOfMonth = $derived(getWeekOfMonth(currentWeekKey));
+  const canAccessApi = $derived(canUseClientApi($authPassword));
   const weeklyInstanceStatusStorageKey = $derived(
     getWeeklyInstanceStatusStorageKey(currentWeekKey)
   );
@@ -59,15 +61,9 @@
 
   const planQuery = createQuery(() => ({
     queryKey: ['weekly_plan', currentWeekKey] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('weekly_plan')
-        .select('*')
-        .eq('week_key', currentWeekKey);
-      if (error) throw error;
-      return (data ?? []) as WeeklyPlan[];
-    },
-    enabled: browser && !isPastWeek
+    queryFn: async () =>
+      apiJson<WeeklyPlan[]>(`/api/weekly-plan?weekKey=${encodeURIComponent(currentWeekKey)}`),
+    enabled: browser && canAccessApi && !isPastWeek
   }));
 
   function getPlanContent(day: string): string {
@@ -76,74 +72,59 @@
 
   const scheduleQuery = createQuery(() => ({
     queryKey: ['weekly_schedule', currentWeekKey] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('weekly_schedule')
-        .select('*')
-        .eq('week_key', currentWeekKey)
-        .order('sort_order', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as ScheduleBlock[];
-    },
-    enabled: browser
+    queryFn: async () =>
+      apiJson<ScheduleBlock[]>(`/api/weekly-schedule?weekKey=${encodeURIComponent(currentWeekKey)}`),
+    enabled: browser && canAccessApi
   }));
 
   const weeklyInstancesQuery = createQuery(() => ({
     queryKey: ['thisweek_period_instances', 'weekly', currentWeekKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', getWeeklyInstancesStorageKey(currentWeekKey))
-        .maybeSingle();
-      if (error) throw error;
-      return parsePersistedPeriodInstances(data?.value)?.instances ?? [];
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(getWeeklyInstancesStorageKey(currentWeekKey))}`
+      );
+      return parsePersistedPeriodInstances(response.entries[0]?.value)?.instances ?? [];
     },
-    enabled: browser && !isPastWeek
+    enabled: browser && canAccessApi && !isPastWeek
   }));
 
   const monthlyInstancesQuery = createQuery(() => ({
     queryKey: ['thisweek_period_instances', 'monthly', currentMonthKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', getMonthlyInstancesStorageKey(currentMonthKey))
-        .maybeSingle();
-      if (error) throw error;
-      return (parsePersistedPeriodInstances(data?.value)?.instances ?? []).filter(
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(getMonthlyInstancesStorageKey(currentMonthKey))}`
+      );
+      return (parsePersistedPeriodInstances(response.entries[0]?.value)?.instances ?? []).filter(
         (instance) => instance.preferred_week_of_month === currentWeekOfMonth
       );
     },
-    enabled: browser && !isPastWeek
+    enabled: browser && canAccessApi && !isPastWeek
   }));
 
   const weeklyInstanceStatusQuery = createQuery(() => ({
     queryKey: ['period_instance_status', 'weekly', weeklyInstanceStatusStorageKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', weeklyInstanceStatusStorageKey)
-        .maybeSingle();
-      if (error) throw error;
-      return parsePersistedPeriodInstanceStatus(data?.value)?.completedInstanceKeys ?? [];
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(weeklyInstanceStatusStorageKey)}`
+      );
+      return (
+        parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
+      );
     },
-    enabled: browser && !isPastWeek
+    enabled: browser && canAccessApi && !isPastWeek
   }));
 
   const monthlyInstanceStatusQuery = createQuery(() => ({
     queryKey: ['period_instance_status', 'monthly', monthlyInstanceStatusStorageKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', monthlyInstanceStatusStorageKey)
-        .maybeSingle();
-      if (error) throw error;
-      return parsePersistedPeriodInstanceStatus(data?.value)?.completedInstanceKeys ?? [];
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(monthlyInstanceStatusStorageKey)}`
+      );
+      return (
+        parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
+      );
     },
-    enabled: browser && !isPastWeek
+    enabled: browser && canAccessApi && !isPastWeek
   }));
 
   const currentInstanceTemplateIds = $derived(
@@ -161,14 +142,13 @@
   const currentInstanceAttachmentsQuery = createQuery(() => ({
     queryKey: ['thisweek_instance_attachments', currentWeekKey, currentInstanceTemplateIdsKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('task_attachments')
-        .select('*')
-        .in('task_id', currentInstanceTemplateIds);
-      if (error) throw error;
-      return (data ?? []) as TaskAttachment[];
+      return apiJson<TaskAttachment[]>(
+        `/api/attachments?taskIds=${encodeURIComponent(
+          currentInstanceTemplateIds.join(',')
+        )}&weekKey=${encodeURIComponent(currentWeekKey)}`
+      );
     },
-    enabled: browser && !isPastWeek && currentInstanceTemplateIds.length > 0
+    enabled: browser && canAccessApi && !isPastWeek && currentInstanceTemplateIds.length > 0
   }));
 
   function getBlocksForDay(day: string): ScheduleBlock[] {
@@ -183,8 +163,10 @@
   }
 
   function getCurrentAttachmentsForInstance(instance: PersistedPeriodTaskInstance): TaskAttachment[] {
-    return (currentInstanceAttachmentsQuery.data ?? []).filter(
-      (attachment) => attachment.task_id === instance.template_id
+    return getTaskAttachmentsForWeek(
+      currentInstanceAttachmentsQuery.data ?? [],
+      instance.template_id,
+      currentWeekKey
     );
   }
 
@@ -204,26 +186,22 @@
       instance.period_type === 'monthly'
         ? (monthlyInstanceStatusQuery.data ?? [])
         : (weeklyInstanceStatusQuery.data ?? []);
-    const nextKeys = updateCompletedInstanceKeys(
+    const { completedInstanceKeys: nextKeys } = toggleCompletedInstanceKey(
       currentKeys,
-      instance.instance_key,
-      !currentKeys.includes(instance.instance_key)
+      instance.instance_key
     );
     const updatedAt = new Date().toISOString();
 
-    const { error } = await supabase.from('user_preferences').upsert(
-      {
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
         key: statusStorageKey,
         value: {
           completedInstanceKeys: nextKeys,
           updatedAt
         },
-        updated_at: updatedAt
-      },
-      { onConflict: 'key' }
-    );
-
-    if (error) {
+        updatedAt
+      });
+    } catch {
       toast.error('Failed to update task');
       return;
     }
@@ -237,12 +215,8 @@
 
   const tasksQuery = createQuery(() => ({
     queryKey: ['tasks_all'] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('tasks').select('*');
-      if (error) throw error;
-      return (data ?? []) as Task[];
-    },
-    enabled: browser && !isPastWeek
+    queryFn: async () => apiJson<Task[]>('/api/tasks'),
+    enabled: browser && canAccessApi && !isPastWeek
   }));
 
   function getLinkedTaskForBlock(block: ScheduleBlock): { id: string; type: TaskType } | null {
@@ -281,28 +255,20 @@
   const scheduleAttachmentsQuery = createQuery(() => ({
     queryKey: ['schedule_attachments', currentWeekKey, linkedTaskIdsKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('task_attachments')
-        .select('*')
-        .in('task_id', linkedTaskIds);
-      if (error) throw error;
-      return (data ?? []) as TaskAttachment[];
+      return apiJson<TaskAttachment[]>(
+        `/api/attachments?taskIds=${encodeURIComponent(linkedTaskIds.join(','))}&weekKey=${encodeURIComponent(currentWeekKey)}`
+      );
     },
-    enabled: browser && !isPastWeek && linkedTaskIds.length > 0
+    enabled: browser && canAccessApi && !isPastWeek && linkedTaskIds.length > 0
   }));
 
   const snapshotQuery = createQuery(() => ({
     queryKey: ['snapshot', currentWeekKey] as const,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('history_snapshots')
-        .select('*')
-        .eq('period_type', 'weekly')
-        .eq('period_key', currentWeekKey)
-        .maybeSingle();
-      return data as HistorySnapshot | null;
-    },
-    enabled: browser && isPastWeek
+    queryFn: async () =>
+      apiJson<HistorySnapshot | null>(
+        `/api/snapshots?periodType=weekly&periodKey=${encodeURIComponent(currentWeekKey)}`
+      ),
+    enabled: browser && canAccessApi && isPastWeek
   }));
 
   function getPastPlannerNote(day: string): string {
@@ -332,14 +298,11 @@
   const archiveAttachmentsQuery = createQuery(() => ({
     queryKey: ['archive_attachments', currentWeekKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('task_attachments')
-        .select('*')
-        .eq('week_key', currentWeekKey);
-      if (error) throw error;
-      return (data ?? []) as TaskAttachment[];
+      return apiJson<TaskAttachment[]>(
+        `/api/attachments?taskIds=${encodeURIComponent(getPastTasks().map((task) => task.id).join(','))}&weekKey=${encodeURIComponent(currentWeekKey)}`
+      );
     },
-    enabled: browser && isPastWeek
+    enabled: browser && canAccessApi && isPastWeek && getPastTasks().length > 0
   }));
 
   function getPastAttachmentsForTask(taskId: string): TaskAttachment[] {
@@ -360,15 +323,12 @@
   async function persistBlocks(blocks: ScheduleBlock[]) {
     await Promise.all(
       blocks.map((block) =>
-        supabase
-          .from('weekly_schedule')
-          .update({
-            day: block.day,
-            start_time: block.start_time,
-            end_time: block.end_time,
-            sort_order: block.sort_order
-          })
-          .eq('id', block.id)
+        apiSendJson(`/api/weekly-schedule/${block.id}`, 'PATCH', {
+          day: block.day,
+          start_time: block.start_time,
+          end_time: block.end_time,
+          sort_order: block.sort_order
+        })
       )
     );
   }
@@ -407,7 +367,7 @@
   function getAttachmentsForBlock(block: ScheduleBlock): TaskAttachment[] {
     const linkedTask = getLinkedTaskForBlock(block);
     if (!linkedTask) return [];
-    return (scheduleAttachmentsQuery.data ?? []).filter((attachment) => attachment.task_id === linkedTask.id);
+    return getTaskAttachmentsForWeek(scheduleAttachmentsQuery.data ?? [], linkedTask.id, currentWeekKey);
   }
 
   function onScheduleAttachmentAdded(_: TaskAttachment) {
@@ -476,17 +436,17 @@
       ? Math.max(...existingBlocks.map((b) => b.sort_order)) + 1
       : 0;
 
-    const { error: insertError } = await supabase.from('weekly_schedule').insert({
-      week_key: currentWeekKey,
-      day: targetDay,
-      start_time: draft.start_time,
-      end_time: draft.end_time,
-      task_title: draft.task_title,
-      notes: draft.notes,
-      sort_order: nextSortOrder
-    });
-
-    if (insertError) {
+    try {
+      await apiSendJson('/api/weekly-schedule', 'POST', {
+        week_key: currentWeekKey,
+        day: targetDay,
+        start_time: draft.start_time,
+        end_time: draft.end_time,
+        task_title: draft.task_title,
+        notes: draft.notes,
+        sort_order: nextSortOrder
+      });
+    } catch {
       toast.error('Failed to add block');
       return;
     }
@@ -495,12 +455,9 @@
   }
 
   async function deleteBlock(blockId: string) {
-    const { error: deleteError } = await supabase
-      .from('weekly_schedule')
-      .delete()
-      .eq('id', blockId);
-
-    if (deleteError) {
+    try {
+      await apiSendJson(`/api/weekly-schedule/${blockId}`, 'DELETE');
+    } catch {
       toast.error('Failed to delete block');
       return;
     }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parsePersistedPeriodInstanceStatus,
   parsePeriodInstanceKey,
+  toggleCompletedInstanceKey,
   updateCompletedInstanceKeys
 } from '../src/lib/periodInstances';
 
@@ -33,5 +34,17 @@ describe('period instance status helpers', () => {
     expect(
       updateCompletedInstanceKeys(['weekly:w1:2026-W14'], 'weekly:w1:2026-W14', false)
     ).toEqual([]);
+  });
+
+  it('returns next completion state together with updated keys', () => {
+    expect(toggleCompletedInstanceKey([], 'monthly:m1:2026-M04')).toEqual({
+      completed: true,
+      completedInstanceKeys: ['monthly:m1:2026-M04']
+    });
+
+    expect(toggleCompletedInstanceKey(['monthly:m1:2026-M04'], 'monthly:m1:2026-M04')).toEqual({
+      completed: false,
+      completedInstanceKeys: []
+    });
   });
 });

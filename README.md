@@ -66,7 +66,9 @@ Optional AI values:
 
 ## Supabase Notes
 
-This repo does not currently ship Supabase migrations. The following tables are expected to exist in your project:
+This repo now ships an RLS migration in [supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql](/Users/mbtkimya/Documents/taskpad%20svelte/supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql).
+
+The following tables are expected to exist in your project before applying that migration:
 
 - `tasks`
 - `weekly_plan`
@@ -77,6 +79,14 @@ This repo does not currently ship Supabase migrations. The following tables are 
 - `user_preferences`
 
 `user_preferences` is used for task ordering and random category preferences. If you are setting up a fresh Supabase project, create that table manually or add your own migration before running the app.
+
+The shipped RLS migration:
+
+- enables RLS on the public app tables
+- revokes direct `anon`/`authenticated` access
+- adds explicit deny-all policies for those roles
+
+That setup assumes the app talks to Supabase through server endpoints using `SUPABASE_SERVICE_KEY`, not from the browser.
 
 ## Dokploy Deployment
 

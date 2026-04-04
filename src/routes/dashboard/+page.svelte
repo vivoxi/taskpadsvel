@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { createQuery } from '@tanstack/svelte-query';
+  import { apiJson, canUseClientApi } from '$lib/client/api';
   import {
     Activity,
     ArrowUpRight,
@@ -11,7 +12,7 @@
     Target
   } from 'lucide-svelte';
   import { summarizeSnapshot, summarizeTasks } from '$lib/periodSummary';
-  import { supabase } from '$lib/supabase';
+  import { authPassword } from '$lib/stores';
   import { getWeekKey } from '$lib/weekUtils';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import type { HistorySnapshot, ScheduleBlock, Task, TaskType } from '$lib/types';
@@ -30,61 +31,31 @@
   };
 
   const currentWeekKey = getWeekKey();
+  const canAccessApi = $derived(canUseClientApi($authPassword));
 
   const tasksQuery = createQuery(() => ({
     queryKey: ['dashboard', 'tasks'] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('tasks').select('*');
-      if (error) throw error;
-      return (data ?? []) as Task[];
-    },
-    enabled: browser
+    queryFn: async () => apiJson<Task[]>('/api/tasks'),
+    enabled: browser && canAccessApi
   }));
 
   const scheduleQuery = createQuery(() => ({
     queryKey: ['dashboard', 'weekly_schedule', currentWeekKey] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('weekly_schedule')
-        .select('*')
-        .eq('week_key', currentWeekKey)
-        .order('sort_order', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as ScheduleBlock[];
-    },
-    enabled: browser
+    queryFn: async () =>
+      apiJson<ScheduleBlock[]>(`/api/weekly-schedule?weekKey=${encodeURIComponent(currentWeekKey)}`),
+    enabled: browser && canAccessApi
   }));
 
   const latestWeeklySnapshotQuery = createQuery(() => ({
     queryKey: ['dashboard', 'latest_snapshot', 'weekly'] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('history_snapshots')
-        .select('*')
-        .eq('period_type', 'weekly')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data as HistorySnapshot | null;
-    },
-    enabled: browser
+    queryFn: async () => apiJson<HistorySnapshot | null>('/api/snapshots?periodType=weekly&latest=true'),
+    enabled: browser && canAccessApi
   }));
 
   const latestMonthlySnapshotQuery = createQuery(() => ({
     queryKey: ['dashboard', 'latest_snapshot', 'monthly'] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('history_snapshots')
-        .select('*')
-        .eq('period_type', 'monthly')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data as HistorySnapshot | null;
-    },
-    enabled: browser
+    queryFn: async () => apiJson<HistorySnapshot | null>('/api/snapshots?periodType=monthly&latest=true'),
+    enabled: browser && canAccessApi
   }));
 
   function getTasksByType(type: TaskType): Task[] {

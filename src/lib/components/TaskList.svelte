@@ -10,6 +10,7 @@
   import { browser } from '$app/environment';
   import { dragHandle, dragHandleZone, type DndEvent } from 'svelte-dnd-action';
   import { CheckSquare2, Filter, GripVertical, ListTodo, Square, Trash2 } from 'lucide-svelte';
+  import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import { Progress } from '$lib/components/ui/progress/index.js';
   import TaskRow from './TaskRow.svelte';
   import {
@@ -19,11 +20,10 @@
     updateCompletedInstanceKeys
   } from '$lib/periodInstances';
   import { parseScheduleBlockDetails, serializeScheduleBlockDetails } from '$lib/scheduleBlockDetails';
+  import { getTaskAttachmentsForWeek } from '$lib/taskAttachments';
   import { parseTaskDetails, serializeTaskDetails } from '$lib/taskDetails';
-  import { supabase } from '$lib/supabase';
   import { authPassword } from '$lib/stores';
   import { getWeekKey, getMonthKey } from '$lib/weekUtils';
-  import { takeSnapshot } from '$lib/snapshot';
   import type { ScheduleBlock, Task, TaskAttachment, TaskType } from '$lib/types';
 
   let {
@@ -40,19 +40,13 @@
   const weekKey = getWeekKey();
   const monthKey = getMonthKey();
   const taskOrderStorageKey = $derived(`${TASK_ORDER_STORAGE_PREFIX}${type}`);
+  const canAccessApi = $derived(canUseClientApi($authPassword));
 
   // --- Queries ---
   const tasksQuery = createQuery(() => ({
     queryKey: ['tasks', type] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('type', type)
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Task[];
-    }
+    queryFn: async () => apiJson<Task[]>(`/api/tasks?type=${encodeURIComponent(type)}`),
+    enabled: browser && canAccessApi
   }));
 
   const taskIds = $derived((tasksQuery.data ?? []).map((task) => task.id));
@@ -61,14 +55,11 @@
   const attachmentsQuery = createQuery(() => ({
     queryKey: ['attachments', type, taskIdsKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('task_attachments')
-        .select('*')
-        .in('task_id', taskIds);
-      if (error) throw error;
-      return (data ?? []) as TaskAttachment[];
+      return apiJson<TaskAttachment[]>(
+        `/api/attachments?taskIds=${encodeURIComponent(taskIds.join(','))}&weekKey=${encodeURIComponent(weekKey)}`
+      );
     },
-    enabled: tasksQuery.isSuccess && taskIds.length > 0
+    enabled: browser && canAccessApi && tasksQuery.isSuccess && taskIds.length > 0
   }));
 
   const instanceStatusStorageKey = $derived(
@@ -83,15 +74,12 @@
     queryKey: ['period_instance_status', type, instanceStatusStorageKey] as const,
     queryFn: async () => {
       if (!instanceStatusStorageKey) return null;
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('value')
-        .eq('key', instanceStatusStorageKey)
-        .maybeSingle();
-      if (error) throw error;
-      return data?.value ?? null;
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(instanceStatusStorageKey)}`
+      );
+      return response.entries[0]?.value ?? null;
     },
-    enabled: !templateMode && type !== 'random'
+    enabled: browser && canAccessApi && !templateMode && type !== 'random'
   }));
 
   let taskOrder = $state<string[]>([]);
@@ -109,14 +97,14 @@
       if (cached) taskOrder = JSON.parse(cached) as string[];
     } catch { /* ignore */ }
 
-    supabase
-      .from('user_preferences')
-      .select('value')
-      .eq('key', taskOrderStorageKey)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.value && Array.isArray(data.value)) {
-          taskOrder = data.value as string[];
+    if (!canAccessApi) return;
+
+    apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+      `/api/preferences?key=${encodeURIComponent(taskOrderStorageKey)}`
+    ).then((response) => {
+        const value = response.entries[0]?.value;
+        if (Array.isArray(value)) {
+          taskOrder = value as string[];
         }
         taskOrderLoaded = true;
       });
@@ -194,10 +182,15 @@
   $effect(() => {
     if (!browser || !taskOrderLoaded) return;
     localStorage.setItem(taskOrderStorageKey, JSON.stringify(taskOrder));
-    supabase
-      .from('user_preferences')
-      .upsert({ key: taskOrderStorageKey, value: taskOrder, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-      .then(({ error }) => { if (error) console.error('Failed to save task order', error); });
+    if (!canAccessApi) return;
+    const updatedAt = new Date().toISOString();
+    apiSendJson('/api/preferences', 'POST', {
+      key: taskOrderStorageKey,
+      value: taskOrder,
+      updatedAt
+    }).catch((error) => {
+      console.error('Failed to save task order', error);
+    });
   });
 
   const completedCount = $derived(displayTasks.filter((t) => t.completed).length);
@@ -205,7 +198,7 @@
   const progressValue = $derived(totalCount > 0 ? (completedCount / totalCount) * 100 : 0);
 
   function getAttachmentsForTask(taskId: string): TaskAttachment[] {
-    return (attachmentsQuery.data ?? []).filter((a) => a.task_id === taskId);
+    return getTaskAttachmentsForWeek(attachmentsQuery.data ?? [], taskId, weekKey);
   }
 
   function handleTaskOrderConsider(event: CustomEvent<DndEvent<Task>>) {
@@ -223,18 +216,20 @@
     category: string | null
   ) {
     const payload = serializeTaskDetails('', null, null, null, category, indentLevel);
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert({
+    let data: { id: string } | null = null;
+
+    try {
+      data = await apiSendJson<{ id: string }>('/api/tasks', 'POST', {
         title: '',
         type,
         completed: false,
         notes: payload
-      })
-      .select('id')
-      .single();
+      });
+    } catch {
+      data = null;
+    }
 
-    if (error || !data?.id) {
+    if (!data?.id) {
       toast.error('Failed to add task');
       return;
     }
@@ -271,26 +266,10 @@
     resetInFlightPeriods.add(resetCacheKey);
 
     try {
-      const { data: logRow } = await supabase
-        .from('reset_log')
-        .select('last_reset_key')
-        .eq('type', resetType)
-        .maybeSingle();
-
-      if (logRow && logRow.last_reset_key === currentKey) {
-        checkedResetPeriods.add(resetCacheKey);
-        return;
-      }
-
-      if (logRow?.last_reset_key) {
-        await takeSnapshot(resetType, logRow.last_reset_key);
-      }
-
-      await supabase.from('tasks').update({ completed: false }).eq('type', type);
-      await supabase
-        .from('reset_log')
-        .upsert({ type: resetType, last_reset_key: currentKey }, { onConflict: 'type' });
-
+      await apiSendJson('/api/reset', 'POST', {
+        type: resetType,
+        currentKey
+      });
       checkedResetPeriods.add(resetCacheKey);
       queryClient.invalidateQueries({ queryKey: ['tasks', type] });
     } catch (err) {
@@ -310,11 +289,14 @@
     if (!title) return;
     newTitle = '';
 
-    const { error } = await supabase
-      .from('tasks')
-      .insert({ title, type, completed: false, notes: '' });
-
-    if (error) {
+    try {
+      await apiSendJson('/api/tasks', 'POST', {
+        title,
+        type,
+        completed: false,
+        notes: ''
+      });
+    } catch {
       toast.error('Failed to add task');
       return;
     }
@@ -325,8 +307,12 @@
     if (!completionToggleEnabled || totalCount === 0) return;
 
     if (type === 'random') {
-      const { error } = await supabase.from('tasks').update({ completed }).eq('type', type);
-      if (error) {
+      try {
+        await apiSendJson('/api/tasks', 'PATCH', {
+          taskType: type,
+          updates: { completed }
+        });
+      } catch {
         toast.error('Failed to update tasks');
         return;
       }
@@ -342,19 +328,16 @@
       : [];
     const updatedAt = new Date().toISOString();
 
-    const { error } = await supabase.from('user_preferences').upsert(
-      {
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
         key: instanceStatusStorageKey,
         value: {
           completedInstanceKeys: nextCompletedInstanceKeys,
           updatedAt
         },
-        updated_at: updatedAt
-      },
-      { onConflict: 'key' }
-    );
-
-    if (error) {
+        updatedAt
+      });
+    } catch {
       toast.error('Failed to update tasks');
       return;
     }
@@ -369,10 +352,46 @@
     if (!completionToggleEnabled) return;
     const completedTasks = displayTasks.filter((task) => task.completed);
     if (completedTasks.length === 0) return;
-    if (!confirm(`Delete ${completedTasks.length} completed task(s)?`)) return;
 
-    for (const task of completedTasks) {
-      await deleteTask(task.id, false);
+    if (type === 'random') {
+      if (!confirm(`Delete ${completedTasks.length} completed task(s)?`)) return;
+
+      for (const task of completedTasks) {
+        await deleteTask(task.id, false);
+      }
+      return;
+    }
+
+    if (!instanceStatusStorageKey) return;
+    if (!confirm(`Clear ${completedTasks.length} completed task(s)?`)) return;
+
+    const completedKeysToClear = new Set(
+      completedTasks
+        .map((task) => getInstanceKeyForTask(task))
+        .filter((item): item is string => Boolean(item))
+    );
+    const nextCompletedInstanceKeys = completedInstanceKeys.filter(
+      (instanceKey) => !completedKeysToClear.has(instanceKey)
+    );
+    const updatedAt = new Date().toISOString();
+
+    try {
+      await apiSendJson('/api/preferences', 'POST', {
+        key: instanceStatusStorageKey,
+        value: {
+          completedInstanceKeys: nextCompletedInstanceKeys,
+          updatedAt
+        },
+        updatedAt
+      });
+      queryClient.setQueryData(['period_instance_status', type, instanceStatusStorageKey], {
+        completedInstanceKeys: nextCompletedInstanceKeys,
+        updatedAt
+      });
+      await Promise.all(completedTasks.map((task) => syncScheduleCompletionForTask(task, false)));
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to clear completed tasks');
     }
   }
 
@@ -382,12 +401,9 @@
 
   // --- Toggle ---
   async function syncScheduleCompletionForTask(task: Task, completed: boolean) {
-    const { data: scheduleBlocks, error: fetchError } = await supabase
-      .from('weekly_schedule')
-      .select('id, week_key, day, start_time, end_time, task_title, notes, sort_order')
-      .eq('week_key', weekKey);
-
-    if (fetchError) throw fetchError;
+    const scheduleBlocks = await apiJson<ScheduleBlock[]>(
+      `/api/weekly-schedule?weekKey=${encodeURIComponent(weekKey)}`
+    );
 
     const directMatches = (scheduleBlocks ?? []).filter((block) => {
       const details = parseScheduleBlockDetails(block.notes);
@@ -420,12 +436,10 @@
     });
 
     const updates = updatedBlocks.map((block) =>
-      supabase.from('weekly_schedule').update({ notes: block.notes }).eq('id', block.id)
+      apiSendJson(`/api/weekly-schedule/${block.id}`, 'PATCH', { notes: block.notes })
     );
 
-    const results = await Promise.all(updates);
-    const failedUpdate = results.find((result) => result.error);
-    if (failedUpdate?.error) throw failedUpdate.error;
+    await Promise.all(updates);
 
     queryClient.setQueryData<ScheduleBlock[]>(
       ['weekly_schedule', weekKey],
@@ -451,19 +465,16 @@
       );
       const updatedAt = new Date().toISOString();
 
-      const { error } = await supabase.from('user_preferences').upsert(
-        {
+      try {
+        await apiSendJson('/api/preferences', 'POST', {
           key: instanceStatusStorageKey,
           value: {
             completedInstanceKeys: nextCompletedInstanceKeys,
             updatedAt
           },
-          updated_at: updatedAt
-        },
-        { onConflict: 'key' }
-      );
-
-      if (error) {
+          updatedAt
+        });
+      } catch {
         toast.error('Failed to update task');
         return;
       }
@@ -552,7 +563,10 @@
 
   // --- Reset all (Random only) ---
   async function resetAll() {
-    await supabase.from('tasks').update({ completed: false }).eq('type', type);
+    await apiSendJson('/api/tasks', 'PATCH', {
+      taskType: type,
+      updates: { completed: false }
+    });
     queryClient.invalidateQueries({ queryKey: ['tasks', type] });
     toast.success('All tasks reset');
   }

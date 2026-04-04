@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { supabase } from '$lib/supabase';
+  import { apiSendJson } from '$lib/client/api';
   import { debounce } from '$lib/debounce';
   import { toast } from 'svelte-sonner';
 
@@ -26,11 +26,15 @@
   });
 
   const saveContent = debounce(async (weekKeyValue: string, dayValue: string, value: string) => {
-    const { error } = await supabase.from('weekly_plan').upsert(
-      { week_key: weekKeyValue, day: dayValue, content: value },
-      { onConflict: 'week_key,day' }
-    );
-    if (error) toast.error('Failed to save planner note');
+    try {
+      await apiSendJson('/api/weekly-plan', 'POST', {
+        weekKey: weekKeyValue,
+        day: dayValue,
+        content: value
+      });
+    } catch {
+      toast.error('Failed to save planner note');
+    }
   }, 500);
 
   function onInput(e: Event) {

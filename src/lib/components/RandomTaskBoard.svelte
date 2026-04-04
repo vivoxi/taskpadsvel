@@ -21,28 +21,23 @@
     X
   } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
+  import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
+  import { getTaskAttachmentsForWeek } from '$lib/taskAttachments';
   import TaskRow from './TaskRow.svelte';
   import { parseTaskDetails, serializeTaskDetails } from '$lib/taskDetails';
-  import { supabase } from '$lib/supabase';
   import { authPassword } from '$lib/stores';
   import { getWeekKey } from '$lib/weekUtils';
   import type { Task, TaskAttachment } from '$lib/types';
 
   const queryClient = useQueryClient();
   const weekKey = getWeekKey();
+  const canAccessApi = $derived(canUseClientApi($authPassword));
   type CategoryItem = { id: string; name: string };
 
   const tasksQuery = createQuery(() => ({
     queryKey: ['tasks', 'random'] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('type', 'random')
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Task[];
-    }
+    queryFn: async () => apiJson<Task[]>('/api/tasks?type=random'),
+    enabled: browser && canAccessApi
   }));
 
   const taskIds = $derived((tasksQuery.data ?? []).map((task) => task.id));
@@ -51,14 +46,11 @@
   const attachmentsQuery = createQuery(() => ({
     queryKey: ['attachments', 'random', taskIdsKey] as const,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('task_attachments')
-        .select('*')
-        .in('task_id', taskIds);
-      if (error) throw error;
-      return (data ?? []) as TaskAttachment[];
+      return apiJson<TaskAttachment[]>(
+        `/api/attachments?taskIds=${encodeURIComponent(taskIds.join(','))}&weekKey=${encodeURIComponent(weekKey)}`
+      );
     },
-    enabled: tasksQuery.isSuccess && taskIds.length > 0
+    enabled: browser && canAccessApi && tasksQuery.isSuccess && taskIds.length > 0
   }));
 
   let categories = $state<string[]>([DEFAULT_CATEGORY]);
@@ -86,38 +78,48 @@
       categoryOrderMap = {};
     }
 
-    Promise.all([
-      supabase.from('user_preferences').select('value').eq('key', RANDOM_CATEGORIES_STORAGE_KEY).maybeSingle(),
-      supabase.from('user_preferences').select('value').eq('key', RANDOM_CATEGORY_ORDER_STORAGE_KEY).maybeSingle()
-    ]).then(([catResult, orderResult]) => {
-      if (catResult.data?.value && Array.isArray(catResult.data.value)) {
-        categories = catResult.data.value as string[];
-      }
-      if (orderResult.data?.value && typeof orderResult.data.value === 'object' && !Array.isArray(orderResult.data.value)) {
-        categoryOrderMap = orderResult.data.value as Record<string, string[]>;
-      }
-      if (!categories.includes(DEFAULT_CATEGORY)) {
-        categories = [DEFAULT_CATEGORY, ...categories];
-      }
-      categoryStateLoaded = true;
-    });
+    if (!canAccessApi) return;
+
+    apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+      `/api/preferences?keys=${encodeURIComponent(
+        `${RANDOM_CATEGORIES_STORAGE_KEY},${RANDOM_CATEGORY_ORDER_STORAGE_KEY}`
+      )}`
+    )
+      .then((response) => {
+        const entryMap = Object.fromEntries(response.entries.map((entry) => [entry.key, entry.value]));
+        const categoriesValue = entryMap[RANDOM_CATEGORIES_STORAGE_KEY];
+        const orderValue = entryMap[RANDOM_CATEGORY_ORDER_STORAGE_KEY];
+
+        if (Array.isArray(categoriesValue)) {
+          categories = categoriesValue as string[];
+        }
+        if (orderValue && typeof orderValue === 'object' && !Array.isArray(orderValue)) {
+          categoryOrderMap = orderValue as Record<string, string[]>;
+        }
+        if (!categories.includes(DEFAULT_CATEGORY)) {
+          categories = [DEFAULT_CATEGORY, ...categories];
+        }
+      })
+      .finally(() => {
+        categoryStateLoaded = true;
+      });
   });
 
   $effect(() => {
     if (!browser || !categoryStateLoaded) return;
     localStorage.setItem(RANDOM_CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
     localStorage.setItem(RANDOM_CATEGORY_ORDER_STORAGE_KEY, JSON.stringify(categoryOrderMap));
+    if (!canAccessApi) return;
 
-    supabase
-      .from('user_preferences')
-      .upsert(
-        [
-          { key: RANDOM_CATEGORIES_STORAGE_KEY, value: categories, updated_at: new Date().toISOString() },
-          { key: RANDOM_CATEGORY_ORDER_STORAGE_KEY, value: categoryOrderMap, updated_at: new Date().toISOString() }
-        ],
-        { onConflict: 'key' }
-      )
-      .then(({ error }) => { if (error) console.error('Failed to save category state', error); });
+    const updatedAt = new Date().toISOString();
+    apiSendJson('/api/preferences', 'POST', {
+      entries: [
+        { key: RANDOM_CATEGORIES_STORAGE_KEY, value: categories, updatedAt },
+        { key: RANDOM_CATEGORY_ORDER_STORAGE_KEY, value: categoryOrderMap, updatedAt }
+      ]
+    }).catch((error) => {
+      console.error('Failed to save category state', error);
+    });
   });
 
   $effect(() => {
@@ -224,7 +226,7 @@
   }
 
   function getAttachmentsForTask(taskId: string): TaskAttachment[] {
-    return (attachmentsQuery.data ?? []).filter((attachment) => attachment.task_id === taskId);
+    return getTaskAttachmentsForWeek(attachmentsQuery.data ?? [], taskId, weekKey);
   }
 
   function createUniqueCategoryName(base = 'New Category'): string {
@@ -273,8 +275,7 @@
           details.indentLevel
         );
 
-        const { error } = await supabase.from('tasks').update({ notes: payload }).eq('id', task.id);
-        if (error) throw error;
+        await apiSendJson(`/api/task/${task.id}`, 'PATCH', { notes: payload });
       }
 
       const { [previousCategory]: previousOrder = [], ...remainingOrder } = categoryOrderMap;
@@ -316,8 +317,7 @@
           details.indentLevel
         );
 
-        const { error } = await supabase.from('tasks').update({ notes: payload }).eq('id', task.id);
-        if (error) throw error;
+        await apiSendJson(`/api/task/${task.id}`, 'PATCH', { notes: payload });
       }
 
       const { [category]: removedOrder = [], ...nextOrderMap } = categoryOrderMap;
@@ -360,11 +360,14 @@
       category === DEFAULT_CATEGORY ? null : category,
       0
     );
-    const { error } = await supabase
-      .from('tasks')
-      .insert({ title, type: 'random', completed: false, notes: payload });
-
-    if (error) {
+    try {
+      await apiSendJson('/api/tasks', 'POST', {
+        title,
+        type: 'random',
+        completed: false,
+        notes: payload
+      });
+    } catch {
       toast.error('Failed to add task');
       return;
     }
@@ -383,13 +386,20 @@
       indentLevel
     );
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert({ title: '', type: 'random', completed: false, notes: payload })
-      .select('id')
-      .single();
+    let data: { id: string } | null = null;
 
-    if (error || !data?.id) {
+    try {
+      data = await apiSendJson<{ id: string }>('/api/tasks', 'POST', {
+        title: '',
+        type: 'random',
+        completed: false,
+        notes: payload
+      });
+    } catch {
+      data = null;
+    }
+
+    if (!data?.id) {
       toast.error('Failed to add task');
       return;
     }
@@ -416,8 +426,9 @@
   }
 
   async function toggleTask(id: string, completed: boolean) {
-    const { error } = await supabase.from('tasks').update({ completed }).eq('id', id);
-    if (error) {
+    try {
+      await apiSendJson(`/api/task/${id}`, 'PATCH', { completed });
+    } catch {
       toast.error('Failed to update task');
       return;
     }
@@ -428,8 +439,9 @@
   }
 
   async function updateTaskTitle(id: string, title: string) {
-    const { error } = await supabase.from('tasks').update({ title }).eq('id', id);
-    if (error) {
+    try {
+      await apiSendJson(`/api/task/${id}`, 'PATCH', { title });
+    } catch {
       toast.error('Failed to update task');
       return;
     }
@@ -441,16 +453,9 @@
     const task = (tasksQuery.data ?? []).find((entry) => entry.id === id);
     if (askConfirmation && !confirm(`Delete "${task?.title || 'this task'}"?`)) return;
 
-    let password = '';
-    const unsub = authPassword.subscribe((value) => (password = value));
-    unsub();
-
-    const response = await fetch(`/api/task/${id}`, {
-      method: 'DELETE',
-      headers: password ? { Authorization: `Bearer ${password}` } : {}
-    });
-
-    if (!response.ok) {
+    try {
+      await apiSendJson(`/api/task/${id}`, 'DELETE');
+    } catch {
       toast.error('Failed to delete task');
       return;
     }
@@ -470,14 +475,21 @@
   async function resetAll() {
     if (!confirm('Reset all random tasks?')) return;
 
-    await supabase.from('tasks').update({ completed: false }).eq('type', 'random');
+    await apiSendJson('/api/tasks', 'PATCH', {
+      taskType: 'random',
+      updates: { completed: false }
+    });
     queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
     toast.success('All tasks reset');
   }
 
   async function setAllRandomTasksCompleted(completed: boolean) {
-    const { error } = await supabase.from('tasks').update({ completed }).eq('type', 'random');
-    if (error) {
+    try {
+      await apiSendJson('/api/tasks', 'PATCH', {
+        taskType: 'random',
+        updates: { completed }
+      });
+    } catch {
       toast.error('Failed to update tasks');
       return;
     }
@@ -539,8 +551,9 @@
         details.indentLevel
       );
 
-      const { error } = await supabase.from('tasks').update({ notes: payload }).eq('id', task.id);
-      if (error) {
+      try {
+        await apiSendJson(`/api/task/${task.id}`, 'PATCH', { notes: payload });
+      } catch {
         toast.error('Failed to move task');
         queryClient.invalidateQueries({ queryKey: ['tasks', 'random'] });
         return;
