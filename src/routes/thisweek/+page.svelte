@@ -1,7 +1,6 @@
 <script lang="ts">
   import { format } from 'date-fns';
   import { ChevronLeft, ChevronRight } from 'lucide-svelte';
-  import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
@@ -37,9 +36,7 @@
   const queryClient = useQueryClient();
   const today = new Date();
 
-  onMount(() => {
-    weekOffset.set(0);
-  });
+  weekOffset.set(0);
 
   const currentWeekKey = $derived(getWeekKey(addWeeks(today, $weekOffset)));
   const isPastWeek = $derived($weekOffset < 0);
