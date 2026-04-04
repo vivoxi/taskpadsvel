@@ -1081,22 +1081,19 @@
                       }`}
                     >
                       {#each cellTasks as instance (instance.instance_key)}
-                        <div
-                          draggable="true"
-                          role="listitem"
-                          aria-label={`Move monthly task ${instance.title}`}
-                          ondragstart={(event) =>
-                            handleBoardDragStart(event, {
-                              kind: 'monthly-instance',
-                              instanceKey: instance.instance_key
-                            })}
-                          ondragend={handleBoardDragEnd}
-                          class="group flex items-start gap-2"
-                        >
+                        <div class="group flex items-start gap-2">
                           <div class="mt-3 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600">
                             <GripVertical size={12} />
                           </div>
                           <button
+                            draggable="true"
+                            aria-label={`Move monthly task ${instance.title}`}
+                            ondragstart={(event) =>
+                              handleBoardDragStart(event, {
+                                kind: 'monthly-instance',
+                                instanceKey: instance.instance_key
+                              })}
+                            ondragend={handleBoardDragEnd}
                             onclick={() => toggleInstance(instance.instance_key)}
                             class={`w-full rounded-[14px] border px-3 py-2 text-left transition-colors ${
                               isInstanceCompleted(instance.instance_key)
@@ -1135,23 +1132,20 @@
                       }`}
                     >
                       {#each weeklyTasks as wInstance (wInstance.instance_key)}
-                        <div
-                          draggable="true"
-                          role="listitem"
-                          aria-label={`Move weekly task ${wInstance.title}`}
-                          ondragstart={(event) =>
-                            handleBoardDragStart(event, {
-                              kind: 'weekly-instance',
-                              instanceKey: wInstance.instance_key,
-                              week
-                            })}
-                          ondragend={handleBoardDragEnd}
-                          class="group flex items-start gap-2"
-                        >
+                        <div class="group flex items-start gap-2">
                           <div class="mt-2 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600">
                             <GripVertical size={12} />
                           </div>
                           <button
+                            draggable="true"
+                            aria-label={`Move weekly task ${wInstance.title}`}
+                            ondragstart={(event) =>
+                              handleBoardDragStart(event, {
+                                kind: 'weekly-instance',
+                                instanceKey: wInstance.instance_key,
+                                week
+                              })}
+                            ondragend={handleBoardDragEnd}
                             onclick={() => toggleWeeklyInstance(wInstance.instance_key)}
                             class={`w-full rounded-[12px] border px-3 py-1.5 text-left transition-colors ${
                               isWeeklyInstanceCompleted(wInstance.instance_key)
@@ -1200,18 +1194,16 @@
               }`}
             >
               {#each monthlyFlexibleInstances as instance (instance.instance_key)}
-                <div
-                  draggable="true"
-                  role="listitem"
-                  aria-label={`Move monthly task ${instance.title} to another slot`}
-                  ondragstart={(event) =>
-                    handleBoardDragStart(event, {
-                      kind: 'monthly-instance',
-                      instanceKey: instance.instance_key
-                    })}
-                  ondragend={handleBoardDragEnd}
-                >
+                <div>
                   <button
+                    draggable="true"
+                    aria-label={`Move monthly task ${instance.title} to another slot`}
+                    ondragstart={(event) =>
+                      handleBoardDragStart(event, {
+                        kind: 'monthly-instance',
+                        instanceKey: instance.instance_key
+                      })}
+                    ondragend={handleBoardDragEnd}
                     onclick={() => toggleInstance(instance.instance_key)}
                     class={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                       isInstanceCompleted(instance.instance_key)
