@@ -2,7 +2,6 @@
   import { browser } from '$app/environment';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { format } from 'date-fns';
-  import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
@@ -22,11 +21,12 @@
     toggleCompletedInstanceKey,
     type PersistedPeriodTaskInstance
   } from '$lib/periodInstances';
-  import {
-    cloneTemplateSourceItems,
-    cloneTemplateSourceItemsByWeek
-  } from '$lib/periodTemplateSources';
   import { summarizeInstances, summarizeSnapshot } from '$lib/periodSummary';
+  import {
+    buildWeeklyCellMap,
+    moveMonthlyInstance,
+    moveWeeklyInstance
+  } from '$lib/monthlySpreadBoard';
   import {
     parseScheduleBlockDetails,
     serializeScheduleBlockDetails
@@ -157,14 +157,7 @@
   let weeklyPeriodInstancesByWeek = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
   let monthlyCompletedInstanceKeys = $state<string[]>([]);
   let weeklyCompletedByStatusKey = $state<Record<string, string[]>>({});
-  let localMonthCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
-  let localWeeklyCells = $state<Record<string, PersistedPeriodTaskInstance[]>>({});
-  let localFlexibleInstances = $state<PersistedPeriodTaskInstance[]>([]);
-  let monthlyTemplateSourceItems = $state<PersistedPeriodTaskInstance[]>([]);
-  let weeklyTemplateSourceItemsByWeek =
-    $state<Record<number, PersistedPeriodTaskInstance[]>>({});
-  let isDragging = $state(false);
-  let monthlyBoardRenderNonce = $state(0);
+  let activeDropZone = $state<string | null>(null);
 
   const monthlyTemplateInstances = $derived(
     materializeMonthlyTaskInstances(tasksQuery.data ?? [], currentMonthKey).map((instance) => ({
@@ -204,40 +197,35 @@
   });
 
   const monthlyPlanBoard = $derived(buildMonthlyPlanBoardFromInstances(monthlyPeriodInstances));
+  const monthlyCellMap = $derived.by(() => {
+    const nextCells: Record<string, PersistedPeriodTaskInstance[]> = {};
+
+    for (const cell of monthlyPlanBoard.cells) {
+      nextCells[getCellKey(cell.week, cell.day)] =
+        cell.tasks as PersistedPeriodTaskInstance[];
+    }
+
+    return nextCells;
+  });
+  const monthlyFlexibleInstances = $derived(
+    monthlyPlanBoard.flexibleTasks as PersistedPeriodTaskInstance[]
+  );
+  const weeklyCellMap = $derived(buildWeeklyCellMap(currentMonthKey, weeklyPeriodInstancesByWeek));
   const monthlyInstanceSummary = $derived(
     summarizeInstances(monthlyPeriodInstances, monthlyCompletedInstanceKeys)
   );
   const previousMonthlySummary = $derived(summarizeSnapshot(previousSnapshotQuery.data));
   const monthlyCarryoverTasks = $derived((previousSnapshotQuery.data?.missed_tasks ?? []) as Task[]);
 
-  function resetMonthlyTemplateSources() {
-    monthlyTemplateSourceItems = cloneTemplateSourceItems(monthlyTemplateInstances);
-  }
+  type MonthlyBoardDragPayload =
+    | { kind: 'monthly-template'; templateId: string }
+    | { kind: 'monthly-instance'; instanceKey: string };
+  type WeeklyBoardDragPayload =
+    | { kind: 'weekly-template'; templateId: string; week: number }
+    | { kind: 'weekly-instance'; instanceKey: string; week: number };
+  type BoardDragPayload = MonthlyBoardDragPayload | WeeklyBoardDragPayload;
 
-  function resetWeeklyTemplateSources() {
-    weeklyTemplateSourceItemsByWeek = cloneTemplateSourceItemsByWeek(
-      weeklyTemplateInstancesByWeek
-    );
-  }
-
-  function refreshMonthlyBoardSurface() {
-    monthlyBoardRenderNonce += 1;
-  }
-
-  function getPlannedMonthInstances(): PersistedPeriodTaskInstance[] {
-    return [
-      ...MONTHLY_PLAN_WEEKS.flatMap((week) =>
-        MONTHLY_PLAN_DAYS.flatMap((day) => localMonthCells[getCellKey(week, day)] ?? [])
-      ),
-      ...localFlexibleInstances
-    ].filter((instance) => !instance.instance_key.startsWith('monthly-source:'));
-  }
-
-  function getPlannedWeekInstances(week: number): PersistedPeriodTaskInstance[] {
-    return MONTHLY_PLAN_DAYS.flatMap(
-      (day) => localWeeklyCells[getCellKey(week, day)] ?? []
-    ).filter((instance) => !instance.instance_key.startsWith('weekly-source:'));
-  }
+  const BOARD_DRAG_MIME = 'application/x-taskpad-monthly-board';
 
   function getMonthlyTemplateHourLimit(templateId: string): number {
     return monthlyTemplateInstances.find((instance) => instance.template_id === templateId)
@@ -251,28 +239,36 @@
   }
 
   function getMonthlyAllocatedHours(templateId: string): number {
-    return getPlannedMonthInstances()
+    return monthlyPeriodInstances
       .filter((instance) => instance.template_id === templateId)
       .reduce((sum, instance) => sum + (instance.estimated_hours ?? 1), 0);
   }
 
   function getWeeklyAllocatedHours(week: number, templateId: string): number {
-    return getPlannedWeekInstances(week)
+    const weekKey = getMonthWeekKey(currentMonthKey, week);
+    return (weeklyPeriodInstancesByWeek[weekKey] ?? [])
       .filter((instance) => instance.template_id === templateId)
       .reduce((sum, instance) => sum + (instance.estimated_hours ?? 1), 0);
   }
 
-  function createInstanceCopyId(kind: 'weekly' | 'monthly', templateId: string, periodKey: string): string {
+  function createInstanceCopyId(
+    kind: 'weekly' | 'monthly',
+    templateId: string,
+    periodKey: string
+  ): string {
     return `${kind}:${templateId}:${periodKey}:${crypto.randomUUID()}`;
   }
 
   function createMonthlyInstanceCopy(
     source: PersistedPeriodTaskInstance,
-    week: number,
-    day: string
+    week: number | null,
+    day: PersistedPeriodTaskInstance['preferred_day']
   ): PersistedPeriodTaskInstance | null {
     const unitHours = Math.min(1, source.estimated_hours ?? 1);
-    if (getMonthlyAllocatedHours(source.template_id) + unitHours > getMonthlyTemplateHourLimit(source.template_id)) {
+    if (
+      getMonthlyAllocatedHours(source.template_id) + unitHours >
+      getMonthlyTemplateHourLimit(source.template_id)
+    ) {
       toast.error(`"${source.title}" monthly hour limit reached`);
       return null;
     }
@@ -286,7 +282,7 @@
       period_type: 'monthly',
       estimated_hours: unitHours,
       preferred_week_of_month: week,
-      preferred_day: day as PersistedPeriodTaskInstance['preferred_day'],
+      preferred_day: day,
       completed: false,
       carryover: false,
       carryover_source_period_key: null
@@ -322,61 +318,6 @@
       carryover: false,
       carryover_source_period_key: null
     };
-  }
-
-  function normalizeMonthDropItems(
-    week: number,
-    day: string,
-    items: PersistedPeriodTaskInstance[]
-  ): PersistedPeriodTaskInstance[] {
-    const nextItems: PersistedPeriodTaskInstance[] = [];
-
-    for (const instance of items) {
-      if (instance.instance_key.startsWith('monthly-source:')) {
-        const copy = createMonthlyInstanceCopy(instance, week, day);
-        if (copy) nextItems.push(copy);
-        continue;
-      }
-
-      nextItems.push({
-        ...instance,
-        preferred_week_of_month: week,
-        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
-      });
-    }
-
-    return nextItems;
-  }
-
-  function normalizeWeeklyDropItems(
-    week: number,
-    day: string,
-    items: PersistedPeriodTaskInstance[]
-  ): PersistedPeriodTaskInstance[] {
-    const weekKey = getMonthWeekKey(currentMonthKey, week);
-    const nextItems: PersistedPeriodTaskInstance[] = [];
-
-    for (const instance of items) {
-      if (instance.instance_key.startsWith('weekly-source:')) {
-        const copy = createWeeklyInstanceCopy(instance, week, day);
-        if (copy) nextItems.push(copy);
-        continue;
-      }
-
-      if (instance.period_key !== weekKey) {
-        toast.error('Weekly tasks can only move inside their own week');
-        continue;
-      }
-
-      nextItems.push({
-        ...instance,
-        id: instance.instance_key,
-        period_key: weekKey,
-        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
-      });
-    }
-
-    return nextItems;
   }
 
   function getPastCompletedTasks(): Task[] {
@@ -445,6 +386,96 @@
     const dayIndex = MONTHLY_PLAN_DAYS.indexOf(day as (typeof MONTHLY_PLAN_DAYS)[number]);
     const date = weekDays[dayIndex];
     return date ? format(date, 'd MMM') : '';
+  }
+
+  function getMonthlyDropZoneKey(week: number, day: string): string {
+    return `monthly:${week}:${day}`;
+  }
+
+  function getWeeklyDropZoneKey(week: number, day: string): string {
+    return `weekly:${week}:${day}`;
+  }
+
+  function handleBoardDragStart(event: DragEvent, payload: BoardDragPayload) {
+    if (!event.dataTransfer) return;
+
+    const serialized = JSON.stringify(payload);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(BOARD_DRAG_MIME, serialized);
+    event.dataTransfer.setData('text/plain', serialized);
+  }
+
+  function handleBoardDragEnd() {
+    activeDropZone = null;
+  }
+
+  function readBoardDragPayload(event: DragEvent): BoardDragPayload | null {
+    const raw =
+      event.dataTransfer?.getData(BOARD_DRAG_MIME) ?? event.dataTransfer?.getData('text/plain');
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw) as BoardDragPayload;
+      if (
+        parsed.kind === 'monthly-template' ||
+        parsed.kind === 'monthly-instance' ||
+        parsed.kind === 'weekly-template' ||
+        parsed.kind === 'weekly-instance'
+      ) {
+        return parsed;
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
+  function allowBoardDrop(
+    event: DragEvent,
+    zoneKey: string,
+    canDrop: (payload: BoardDragPayload) => boolean
+  ) {
+    const payload = readBoardDragPayload(event);
+    if (!payload || !canDrop(payload)) return;
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    activeDropZone = zoneKey;
+  }
+
+  function clearDropZone(zoneKey: string) {
+    if (activeDropZone === zoneKey) {
+      activeDropZone = null;
+    }
+  }
+
+  function canDropMonthlyPayload(payload: BoardDragPayload): payload is MonthlyBoardDragPayload {
+    return payload.kind === 'monthly-template' || payload.kind === 'monthly-instance';
+  }
+
+  function canDropWeeklyPayload(
+    week: number,
+    payload: BoardDragPayload
+  ): payload is WeeklyBoardDragPayload {
+    if (payload.kind === 'weekly-template' || payload.kind === 'weekly-instance') {
+      return payload.week === week;
+    }
+
+    return false;
+  }
+
+  function findMonthlyTemplateInstance(templateId: string): PersistedPeriodTaskInstance | undefined {
+    return monthlyTemplateInstances.find((instance) => instance.template_id === templateId);
+  }
+
+  function findWeeklyTemplateInstance(
+    week: number,
+    templateId: string
+  ): PersistedPeriodTaskInstance | undefined {
+    return weeklyTemplateInstancesByWeek[week]?.find((instance) => instance.template_id === templateId);
   }
 
   function mergeMonthlyInstances(
@@ -540,60 +571,6 @@
   });
 
   $effect(() => {
-    if (isDragging) return;
-    const board = buildMonthlyPlanBoardFromInstances(monthlyPeriodInstances);
-    const nextCells: Record<string, PersistedPeriodTaskInstance[]> = {};
-
-    for (const cell of board.cells) {
-      nextCells[getCellKey(cell.week, cell.day)] =
-        cell.tasks as PersistedPeriodTaskInstance[];
-    }
-
-    localMonthCells = nextCells;
-    localFlexibleInstances = board.flexibleTasks as PersistedPeriodTaskInstance[];
-  });
-
-  $effect(() => {
-    if (isDragging) return;
-
-    const nextWeeklyCells: Record<string, PersistedPeriodTaskInstance[]> = {};
-
-    for (const week of MONTHLY_PLAN_WEEKS) {
-      const weekKey = getMonthWeekKey(currentMonthKey, week);
-      const weekInstances = weeklyPeriodInstancesByWeek[weekKey] ?? [];
-
-      weekInstances.forEach((instance, index) => {
-        const day = instance.preferred_day ?? MONTHLY_PLAN_DAYS[index % MONTHLY_PLAN_DAYS.length];
-        if (!(MONTHLY_PLAN_DAYS as readonly string[]).includes(day)) return;
-        const cellKey = getCellKey(week, day);
-        if (!nextWeeklyCells[cellKey]) nextWeeklyCells[cellKey] = [];
-        nextWeeklyCells[cellKey].push({
-          ...instance,
-          preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
-        });
-      });
-    }
-
-    localWeeklyCells = nextWeeklyCells;
-  });
-
-  $effect(() => {
-    if (isPastMonth || isDragging) {
-      return;
-    }
-
-    resetMonthlyTemplateSources();
-  });
-
-  $effect(() => {
-    if (isPastMonth || isDragging) {
-      return;
-    }
-
-    resetWeeklyTemplateSources();
-  });
-
-  $effect(() => {
     if (isPastMonth) {
       monthlyCompletedInstanceKeys = [];
       return;
@@ -685,26 +662,7 @@
     queryClient.invalidateQueries({ queryKey: ['weekly_schedule'] });
   }
 
-  function updateCellItems(week: number, day: string, items: PersistedPeriodTaskInstance[]) {
-    localMonthCells = {
-      ...localMonthCells,
-      [getCellKey(week, day)]: normalizeMonthDropItems(week, day, items)
-    };
-  }
-
-  function updateWeeklyCellItems(
-    week: number,
-    day: string,
-    items: PersistedPeriodTaskInstance[]
-  ) {
-    localWeeklyCells = {
-      ...localWeeklyCells,
-      [getCellKey(week, day)]: normalizeWeeklyDropItems(week, day, items)
-    };
-  }
-
-  async function persistMonthlyInstances() {
-    const nextInstances = getPlannedMonthInstances();
+  async function persistMonthlyInstances(nextInstances: PersistedPeriodTaskInstance[]) {
     const updatedAt = new Date().toISOString();
     monthlyPeriodInstances = nextInstances;
 
@@ -728,24 +686,27 @@
     });
   }
 
-  async function persistWeeklyInstances(week: number) {
+  async function persistWeeklyInstances(
+    week: number,
+    nextWeekInstances: PersistedPeriodTaskInstance[]
+  ) {
     const weekKey = getMonthWeekKey(currentMonthKey, week);
-    const nextWeekInstances = getPlannedWeekInstances(week).map((instance) => ({
+    const updatedAt = new Date().toISOString();
+    const normalizedInstances = nextWeekInstances.map((instance) => ({
       ...instance,
       id: instance.instance_key,
       period_key: weekKey
     }));
-    const updatedAt = new Date().toISOString();
     weeklyPeriodInstancesByWeek = {
       ...weeklyPeriodInstancesByWeek,
-      [weekKey]: nextWeekInstances
+      [weekKey]: normalizedInstances
     };
 
     try {
       await apiSendJson('/api/preferences', 'POST', {
         key: getWeeklyInstancesStorageKey(weekKey),
         value: {
-          instances: nextWeekInstances,
+          instances: normalizedInstances,
           updatedAt
         },
         updatedAt
@@ -757,121 +718,96 @@
 
     queryClient.setQueryData(['thismonth_page', 'weekly_period_instances', currentMonthKey], {
       ...(weeklyInstancesQuery.data ?? {}),
-      [weekKey]: nextWeekInstances
+      [weekKey]: normalizedInstances
     });
   }
 
-  function handleCellConsider(
-    week: number,
-    day: string,
-    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
-  ) {
-    isDragging = true;
-    updateCellItems(week, day, event.detail.items);
-  }
+  async function handleMonthlyCellDrop(week: number, day: string, event: DragEvent) {
+    const payload = readBoardDragPayload(event);
+    if (!payload || !canDropMonthlyPayload(payload)) return;
 
-  async function handleCellFinalize(
-    week: number,
-    day: string,
-    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
-  ) {
-    updateCellItems(week, day, event.detail.items);
+    event.preventDefault();
+    activeDropZone = null;
 
-    try {
-      await persistMonthlyInstances();
-    } finally {
-      isDragging = false;
-      resetMonthlyTemplateSources();
-      refreshMonthlyBoardSurface();
+    if (payload.kind === 'monthly-template') {
+      const templateInstance = findMonthlyTemplateInstance(payload.templateId);
+      if (!templateInstance) return;
+
+      const copy = createMonthlyInstanceCopy(
+        templateInstance,
+        week,
+        day as PersistedPeriodTaskInstance['preferred_day']
+      );
+      if (!copy) return;
+
+      await persistMonthlyInstances([...monthlyPeriodInstances, copy]);
+      return;
     }
+
+    await persistMonthlyInstances(
+      moveMonthlyInstance(monthlyPeriodInstances, payload.instanceKey, {
+        preferred_week_of_month: week,
+        preferred_day: day as PersistedPeriodTaskInstance['preferred_day']
+      })
+    );
   }
 
-  function handleWeeklyCellConsider(
-    week: number,
-    day: string,
-    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
-  ) {
-    isDragging = true;
-    updateWeeklyCellItems(week, day, event.detail.items);
-  }
+  async function handleFlexibleDrop(event: DragEvent) {
+    const payload = readBoardDragPayload(event);
+    if (!payload || !canDropMonthlyPayload(payload)) return;
 
-  async function handleWeeklyCellFinalize(
-    week: number,
-    day: string,
-    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
-  ) {
-    updateWeeklyCellItems(week, day, event.detail.items);
+    event.preventDefault();
+    activeDropZone = null;
 
-    try {
-      await persistWeeklyInstances(week);
-    } finally {
-      isDragging = false;
-      resetWeeklyTemplateSources();
-      refreshMonthlyBoardSurface();
+    if (payload.kind === 'monthly-template') {
+      const templateInstance = findMonthlyTemplateInstance(payload.templateId);
+      if (!templateInstance) return;
+
+      const copy = createMonthlyInstanceCopy(templateInstance, null, null);
+      if (!copy) return;
+
+      await persistMonthlyInstances([...monthlyPeriodInstances, copy]);
+      return;
     }
+
+    await persistMonthlyInstances(
+      moveMonthlyInstance(monthlyPeriodInstances, payload.instanceKey, {
+        preferred_week_of_month: null,
+        preferred_day: null
+      })
+    );
   }
 
-  function handleFlexibleConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
-    isDragging = true;
-    localFlexibleInstances = event.detail.items.map((instance) => ({
-      ...instance,
-      preferred_week_of_month: null,
-      preferred_day: null
-    }));
-  }
+  async function handleWeeklyCellDrop(week: number, day: string, event: DragEvent) {
+    const payload = readBoardDragPayload(event);
+    if (!payload || !canDropWeeklyPayload(week, payload)) return;
 
-  async function handleFlexibleFinalize(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
-    handleFlexibleConsider(event);
+    event.preventDefault();
+    activeDropZone = null;
 
-    try {
-      await persistMonthlyInstances();
-    } finally {
-      isDragging = false;
-      resetMonthlyTemplateSources();
-      refreshMonthlyBoardSurface();
+    const weekKey = getMonthWeekKey(currentMonthKey, week);
+    const currentWeekInstances = weeklyPeriodInstancesByWeek[weekKey] ?? [];
+
+    if (payload.kind === 'weekly-template') {
+      const templateInstance = findWeeklyTemplateInstance(week, payload.templateId);
+      if (!templateInstance) return;
+
+      const copy = createWeeklyInstanceCopy(templateInstance, week, day);
+      if (!copy) return;
+
+      await persistWeeklyInstances(week, [...currentWeekInstances, copy]);
+      return;
     }
-  }
 
-  function handleMonthlySourceConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
-    isDragging = true;
-    monthlyTemplateSourceItems = cloneTemplateSourceItems(event.detail.items);
-  }
-
-  async function handleMonthlySourceFinalize(
-    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
-  ) {
-    try {
-      void event;
-    } finally {
-      isDragging = false;
-      resetMonthlyTemplateSources();
-      refreshMonthlyBoardSurface();
-    }
-  }
-
-  function handleWeeklySourceConsider(
-    week: number,
-    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
-  ) {
-    isDragging = true;
-    weeklyTemplateSourceItemsByWeek = {
-      ...cloneTemplateSourceItemsByWeek(weeklyTemplateSourceItemsByWeek),
-      [week]: cloneTemplateSourceItems(event.detail.items)
-    };
-  }
-
-  async function handleWeeklySourceFinalize(
-    week: number,
-    event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>
-  ) {
-    try {
-      void week;
-      void event;
-    } finally {
-      isDragging = false;
-      resetWeeklyTemplateSources();
-      refreshMonthlyBoardSurface();
-    }
+    await persistWeeklyInstances(
+      week,
+      moveWeeklyInstance(
+        currentWeekInstances,
+        payload.instanceKey,
+        weekKey,
+        day as PersistedPeriodTaskInstance['preferred_day']
+      )
+    );
   }
 </script>
 
@@ -1044,18 +980,20 @@
               <div class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">
                 Drag Monthly Copies
               </div>
-              <div
-                use:dndzone={{
-                  items: monthlyTemplateSourceItems,
-                  flipDurationMs: 150,
-                  type: 'monthly-instance'
-                }}
-                onconsider={handleMonthlySourceConsider}
-                onfinalize={handleMonthlySourceFinalize}
-                class="mt-3 flex min-h-[44px] flex-wrap gap-2"
-              >
-                {#each monthlyTemplateSourceItems as sourceItem (sourceItem.instance_key)}
-                  <div class="inline-flex cursor-grab items-center gap-2 rounded-full border border-sky-200 bg-white/90 px-3 py-1.5 text-xs text-sky-800 active:cursor-grabbing dark:border-sky-500/20 dark:bg-zinc-950/60 dark:text-sky-200">
+              <div class="mt-3 flex min-h-[44px] flex-wrap gap-2">
+                {#each monthlyTemplateInstances as sourceItem (sourceItem.instance_key)}
+                  <div
+                    draggable="true"
+                    role="listitem"
+                    aria-label={`Drag monthly template ${sourceItem.title}`}
+                    ondragstart={(event) =>
+                      handleBoardDragStart(event, {
+                        kind: 'monthly-template',
+                        templateId: sourceItem.template_id
+                      })}
+                    ondragend={handleBoardDragEnd}
+                    class="inline-flex cursor-grab items-center gap-2 rounded-full border border-sky-200 bg-white/90 px-3 py-1.5 text-xs text-sky-800 active:cursor-grabbing dark:border-sky-500/20 dark:bg-zinc-950/60 dark:text-sky-200"
+                  >
                     <GripVertical size={12} />
                     {sourceItem.title}
                     <span class="text-sky-500 dark:text-sky-400">
@@ -1078,9 +1016,8 @@
             </div>
           </div>
 
-          {#key `${currentMonthKey}:${monthlyBoardRenderNonce}`}
-            <div class="mt-5 overflow-x-auto">
-              <div class="grid min-w-[760px] grid-cols-[96px_repeat(5,minmax(0,1fr))] gap-3">
+          <div class="mt-5 overflow-x-auto">
+            <div class="grid min-w-[760px] grid-cols-[96px_repeat(5,minmax(0,1fr))] gap-3">
               <div></div>
               {#each MONTHLY_PLAN_DAYS as day}
                 <div class="rounded-[16px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-400">
@@ -1091,18 +1028,21 @@
               {#each MONTHLY_PLAN_WEEKS as week}
                 <div class="rounded-[18px] border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
                   Week {week}
-                  <div
-                    use:dndzone={{
-                      items: weeklyTemplateSourceItemsByWeek[week] ?? [],
-                      flipDurationMs: 150,
-                      type: `weekly-instance-${week}`
-                    }}
-                    onconsider={(event) => handleWeeklySourceConsider(week, event)}
-                    onfinalize={(event) => handleWeeklySourceFinalize(week, event)}
-                    class="mt-3 flex min-h-[36px] flex-col gap-1"
-                  >
-                    {#each weeklyTemplateSourceItemsByWeek[week] ?? [] as sourceItem (sourceItem.instance_key)}
-                      <div class="inline-flex cursor-grab items-center gap-1.5 rounded-full border border-violet-200 bg-white/90 px-2 py-1 text-[10px] font-medium text-violet-800 active:cursor-grabbing dark:border-violet-500/20 dark:bg-zinc-950/60 dark:text-violet-200">
+                  <div class="mt-3 flex min-h-[36px] flex-col gap-1">
+                    {#each weeklyTemplateInstancesByWeek[week] ?? [] as sourceItem (sourceItem.instance_key)}
+                      <div
+                        draggable="true"
+                        role="listitem"
+                        aria-label={`Drag weekly template ${sourceItem.title}`}
+                        ondragstart={(event) =>
+                          handleBoardDragStart(event, {
+                            kind: 'weekly-template',
+                            templateId: sourceItem.template_id,
+                            week
+                          })}
+                        ondragend={handleBoardDragEnd}
+                        class="inline-flex cursor-grab items-center gap-1.5 rounded-full border border-violet-200 bg-white/90 px-2 py-1 text-[10px] font-medium text-violet-800 active:cursor-grabbing dark:border-violet-500/20 dark:bg-zinc-950/60 dark:text-violet-200"
+                      >
                         <GripVertical size={10} />
                         <span class="line-clamp-1">{sourceItem.title}</span>
                         <span class="text-violet-500 dark:text-violet-400">
@@ -1114,29 +1054,46 @@
                 </div>
                 {#each MONTHLY_PLAN_DAYS as day}
                   {@const cellKey = getCellKey(week, day)}
-                  {@const cellTasks = localMonthCells[cellKey] ?? []}
-                  {@const weeklyTasks = localWeeklyCells[cellKey] ?? []}
-                  <div class="min-h-[120px] rounded-[18px] border border-zinc-200 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+                  {@const monthlyDropZoneKey = getMonthlyDropZoneKey(week, day)}
+                  {@const weeklyDropZoneKey = getWeeklyDropZoneKey(week, day)}
+                  {@const cellTasks = monthlyCellMap[cellKey] ?? []}
+                  {@const weeklyTasks = weeklyCellMap[cellKey] ?? []}
+                  <div
+                    class={`min-h-[120px] rounded-[18px] border bg-zinc-50/60 p-3 transition-colors dark:bg-zinc-900/60 ${
+                      activeDropZone === monthlyDropZoneKey || activeDropZone === weeklyDropZoneKey
+                        ? 'border-sky-300 dark:border-sky-500/40'
+                        : 'border-zinc-200 dark:border-zinc-800'
+                    }`}
+                  >
                     <div class="mb-2 text-[11px] uppercase tracking-[0.16em] text-zinc-400">
                       {getMonthCellDateLabel(week, day)}
                     </div>
                     <div
-                      use:dndzone={{
-                        items: cellTasks,
-                        flipDurationMs: 150,
-                        type: 'monthly-instance',
-                        dropTargetStyle: {
-                          outline: '2px dashed rgba(14, 165, 233, 0.45)',
-                          outlineOffset: '2px'
-                        }
-                      }}
-                      onconsider={(event) => handleCellConsider(week, day, event)}
-                      onfinalize={(event) => handleCellFinalize(week, day, event)}
-                      class="flex min-h-[76px] flex-col gap-2"
+                      role="group"
+                      ondragover={(event) =>
+                        allowBoardDrop(event, monthlyDropZoneKey, canDropMonthlyPayload)}
+                      ondragleave={() => clearDropZone(monthlyDropZoneKey)}
+                      ondrop={(event) => handleMonthlyCellDrop(week, day, event)}
+                      class={`flex min-h-[76px] flex-col gap-2 rounded-[14px] transition-colors ${
+                        activeDropZone === monthlyDropZoneKey
+                          ? 'bg-sky-50/70 dark:bg-sky-950/10'
+                          : ''
+                      }`}
                     >
                       {#each cellTasks as instance (instance.instance_key)}
-                        <div class="group flex items-start gap-2">
-                          <div class="mt-3 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
+                        <div
+                          draggable="true"
+                          role="listitem"
+                          aria-label={`Move monthly task ${instance.title}`}
+                          ondragstart={(event) =>
+                            handleBoardDragStart(event, {
+                              kind: 'monthly-instance',
+                              instanceKey: instance.instance_key
+                            })}
+                          ondragend={handleBoardDragEnd}
+                          class="group flex items-start gap-2"
+                        >
+                          <div class="mt-3 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600">
                             <GripVertical size={12} />
                           </div>
                           <button
@@ -1164,22 +1121,34 @@
                       {/each}
                     </div>
                     <div
-                      use:dndzone={{
-                        items: weeklyTasks,
-                        flipDurationMs: 150,
-                        type: `weekly-instance-${week}`,
-                        dropTargetStyle: {
-                          outline: '2px dashed rgba(139, 92, 246, 0.45)',
-                          outlineOffset: '2px'
-                        }
-                      }}
-                      onconsider={(event) => handleWeeklyCellConsider(week, day, event)}
-                      onfinalize={(event) => handleWeeklyCellFinalize(week, day, event)}
-                      class="mt-1 flex min-h-[8px] flex-col gap-1"
+                      role="group"
+                      ondragover={(event) =>
+                        allowBoardDrop(event, weeklyDropZoneKey, (payload) =>
+                          canDropWeeklyPayload(week, payload)
+                        )}
+                      ondragleave={() => clearDropZone(weeklyDropZoneKey)}
+                      ondrop={(event) => handleWeeklyCellDrop(week, day, event)}
+                      class={`mt-1 flex min-h-[8px] flex-col gap-1 rounded-[12px] transition-colors ${
+                        activeDropZone === weeklyDropZoneKey
+                          ? 'bg-violet-50/70 dark:bg-violet-950/10'
+                          : ''
+                      }`}
                     >
                       {#each weeklyTasks as wInstance (wInstance.instance_key)}
-                        <div class="group flex items-start gap-2">
-                          <div class="mt-2 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-600">
+                        <div
+                          draggable="true"
+                          role="listitem"
+                          aria-label={`Move weekly task ${wInstance.title}`}
+                          ondragstart={(event) =>
+                            handleBoardDragStart(event, {
+                              kind: 'weekly-instance',
+                              instanceKey: wInstance.instance_key,
+                              week
+                            })}
+                          ondragend={handleBoardDragEnd}
+                          class="group flex items-start gap-2"
+                        >
+                          <div class="mt-2 cursor-grab text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-zinc-600">
                             <GripVertical size={12} />
                           </div>
                           <button
@@ -1213,37 +1182,49 @@
                 {/each}
               {/each}
             </div>
-            </div>
-          {/key}
+          </div>
 
           <div class="mt-5 rounded-[22px] border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-950/16">
             <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
               Flexible Monthly Tasks
             </div>
             <div
-              use:dndzone={{
-                items: localFlexibleInstances,
-                flipDurationMs: 150,
-                type: 'monthly-instance'
-              }}
-              onconsider={handleFlexibleConsider}
-              onfinalize={handleFlexibleFinalize}
-              class="mt-3 flex min-h-[44px] flex-wrap gap-2"
+              role="group"
+              ondragover={(event) => allowBoardDrop(event, 'monthly:flexible', canDropMonthlyPayload)}
+              ondragleave={() => clearDropZone('monthly:flexible')}
+              ondrop={handleFlexibleDrop}
+              class={`mt-3 flex min-h-[44px] flex-wrap gap-2 rounded-[18px] transition-colors ${
+                activeDropZone === 'monthly:flexible'
+                  ? 'bg-amber-100/60 dark:bg-amber-950/18'
+                  : ''
+              }`}
             >
-              {#each localFlexibleInstances as instance (instance.instance_key)}
-                <button
-                  onclick={() => toggleInstance(instance.instance_key)}
-                  class={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                    isInstanceCompleted(instance.instance_key)
-                      ? 'border-emerald-200 bg-emerald-50 text-zinc-500 line-through dark:border-emerald-500/20 dark:bg-emerald-950/20'
-                      : 'border-amber-200 bg-white/80 text-zinc-700 dark:border-amber-500/20 dark:bg-zinc-950/60 dark:text-zinc-200'
-                  }`}
+              {#each monthlyFlexibleInstances as instance (instance.instance_key)}
+                <div
+                  draggable="true"
+                  role="listitem"
+                  aria-label={`Move monthly task ${instance.title} to another slot`}
+                  ondragstart={(event) =>
+                    handleBoardDragStart(event, {
+                      kind: 'monthly-instance',
+                      instanceKey: instance.instance_key
+                    })}
+                  ondragend={handleBoardDragEnd}
                 >
-                  {instance.title} · {instance.estimated_hours ?? 1}h
-                </button>
+                  <button
+                    onclick={() => toggleInstance(instance.instance_key)}
+                    class={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                      isInstanceCompleted(instance.instance_key)
+                        ? 'border-emerald-200 bg-emerald-50 text-zinc-500 line-through dark:border-emerald-500/20 dark:bg-emerald-950/20'
+                        : 'border-amber-200 bg-white/80 text-zinc-700 dark:border-amber-500/20 dark:bg-zinc-950/60 dark:text-zinc-200'
+                    }`}
+                  >
+                    {instance.title} · {instance.estimated_hours ?? 1}h
+                  </button>
+                </div>
               {/each}
             </div>
-            {#if localFlexibleInstances.length === 0}
+            {#if monthlyFlexibleInstances.length === 0}
               <div class="mt-3 text-xs italic text-zinc-400">No flexible task</div>
             {/if}
           </div>
