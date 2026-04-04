@@ -474,6 +474,10 @@
     return false;
   }
 
+  function canDropIntoCell(week: number, payload: BoardDragPayload): boolean {
+    return canDropMonthlyPayload(payload) || canDropWeeklyPayload(week, payload);
+  }
+
   function findMonthlyTemplateInstance(templateId: string): PersistedPeriodTaskInstance | undefined {
     return monthlyTemplateInstances.find((instance) => instance.template_id === templateId);
   }
@@ -822,6 +826,18 @@
     );
     activeDragPayload = null;
   }
+
+  async function handleBoardCellDrop(week: number, day: string, event: DragEvent) {
+    const payload = readBoardDragPayload(event);
+    if (!payload || !canDropIntoCell(week, payload)) return;
+
+    if (canDropMonthlyPayload(payload)) {
+      await handleMonthlyCellDrop(week, day, event);
+      return;
+    }
+
+    await handleWeeklyCellDrop(week, day, event);
+  }
 </script>
 
 <svelte:head>
@@ -1072,8 +1088,17 @@
                   {@const cellTasks = monthlyCellMap[cellKey] ?? []}
                   {@const weeklyTasks = weeklyCellMap[cellKey] ?? []}
                   <div
+                    role="group"
+                    ondragover={(event) =>
+                      allowBoardDrop(event, `${monthlyDropZoneKey}:cell`, (payload) =>
+                        canDropIntoCell(week, payload)
+                      )}
+                    ondragleave={() => clearDropZone(`${monthlyDropZoneKey}:cell`)}
+                    ondrop={(event) => handleBoardCellDrop(week, day, event)}
                     class={`min-h-[120px] rounded-[18px] border bg-zinc-50/60 p-3 transition-colors dark:bg-zinc-900/60 ${
-                      activeDropZone === monthlyDropZoneKey || activeDropZone === weeklyDropZoneKey
+                      activeDropZone === `${monthlyDropZoneKey}:cell` ||
+                      activeDropZone === monthlyDropZoneKey ||
+                      activeDropZone === weeklyDropZoneKey
                         ? 'border-sky-300 dark:border-sky-500/40'
                         : 'border-zinc-200 dark:border-zinc-800'
                     }`}
@@ -1086,7 +1111,10 @@
                       ondragover={(event) =>
                         allowBoardDrop(event, monthlyDropZoneKey, canDropMonthlyPayload)}
                       ondragleave={() => clearDropZone(monthlyDropZoneKey)}
-                      ondrop={(event) => handleMonthlyCellDrop(week, day, event)}
+                      ondrop={(event) => {
+                        event.stopPropagation();
+                        handleMonthlyCellDrop(week, day, event);
+                      }}
                       class={`flex min-h-[76px] flex-col gap-2 rounded-[14px] transition-colors ${
                         activeDropZone === monthlyDropZoneKey
                           ? 'bg-sky-50/70 dark:bg-sky-950/10'
@@ -1137,7 +1165,10 @@
                           canDropWeeklyPayload(week, payload)
                         )}
                       ondragleave={() => clearDropZone(weeklyDropZoneKey)}
-                      ondrop={(event) => handleWeeklyCellDrop(week, day, event)}
+                      ondrop={(event) => {
+                        event.stopPropagation();
+                        handleWeeklyCellDrop(week, day, event);
+                      }}
                       class={`mt-1 flex min-h-[8px] flex-col gap-1 rounded-[12px] transition-colors ${
                         activeDropZone === weeklyDropZoneKey
                           ? 'bg-violet-50/70 dark:bg-violet-950/10'
