@@ -2,12 +2,10 @@
   import { authPassword } from '$lib/stores';
 
   let input = $state('');
-  let show = $state(true);
 
   function submit() {
     if (input.trim()) {
       authPassword.set(input.trim());
-      show = false;
     }
   }
 
@@ -16,7 +14,7 @@
   }
 </script>
 
-{#if show}
+{#if !$authPassword}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
     role="dialog"
@@ -26,7 +24,7 @@
     <div class="bg-white dark:bg-zinc-900 rounded-lg shadow-xl p-6 w-80 flex flex-col gap-4">
       <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100">Password Required</h2>
       <p class="text-sm text-zinc-500 dark:text-zinc-400">
-        Enter the admin password to make changes.
+        Enter the admin password to view and make changes.
       </p>
       <input
         type="password"
