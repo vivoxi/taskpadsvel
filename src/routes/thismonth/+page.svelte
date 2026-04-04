@@ -22,6 +22,10 @@
     toggleCompletedInstanceKey,
     type PersistedPeriodTaskInstance
   } from '$lib/periodInstances';
+  import {
+    cloneTemplateSourceItems,
+    cloneTemplateSourceItemsByWeek
+  } from '$lib/periodTemplateSources';
   import { summarizeInstances, summarizeSnapshot } from '$lib/periodSummary';
   import {
     parseScheduleBlockDetails,
@@ -204,6 +208,16 @@
   );
   const previousMonthlySummary = $derived(summarizeSnapshot(previousSnapshotQuery.data));
   const monthlyCarryoverTasks = $derived((previousSnapshotQuery.data?.missed_tasks ?? []) as Task[]);
+
+  function resetMonthlyTemplateSources() {
+    monthlyTemplateSourceItems = cloneTemplateSourceItems(monthlyTemplateInstances);
+  }
+
+  function resetWeeklyTemplateSources() {
+    weeklyTemplateSourceItemsByWeek = cloneTemplateSourceItemsByWeek(
+      weeklyTemplateInstancesByWeek
+    );
+  }
 
   function getPlannedMonthInstances(): PersistedPeriodTaskInstance[] {
     return [
@@ -563,7 +577,7 @@
       return;
     }
 
-    monthlyTemplateSourceItems = monthlyTemplateInstances;
+    resetMonthlyTemplateSources();
   });
 
   $effect(() => {
@@ -571,7 +585,7 @@
       return;
     }
 
-    weeklyTemplateSourceItemsByWeek = weeklyTemplateInstancesByWeek;
+    resetWeeklyTemplateSources();
   });
 
   $effect(() => {
@@ -762,7 +776,7 @@
       await persistMonthlyInstances();
     } finally {
       isDragging = false;
-      monthlyTemplateSourceItems = monthlyTemplateInstances;
+      resetMonthlyTemplateSources();
     }
   }
 
@@ -786,7 +800,7 @@
       await persistWeeklyInstances(week);
     } finally {
       isDragging = false;
-      weeklyTemplateSourceItemsByWeek = weeklyTemplateInstancesByWeek;
+      resetWeeklyTemplateSources();
     }
   }
 
@@ -806,13 +820,13 @@
       await persistMonthlyInstances();
     } finally {
       isDragging = false;
-      monthlyTemplateSourceItems = monthlyTemplateInstances;
+      resetMonthlyTemplateSources();
     }
   }
 
   function handleMonthlySourceConsider(event: CustomEvent<DndEvent<PersistedPeriodTaskInstance>>) {
     isDragging = true;
-    monthlyTemplateSourceItems = event.detail.items;
+    monthlyTemplateSourceItems = cloneTemplateSourceItems(event.detail.items);
   }
 
   async function handleMonthlySourceFinalize(
@@ -824,7 +838,7 @@
       }
     } finally {
       isDragging = false;
-      monthlyTemplateSourceItems = monthlyTemplateInstances;
+      resetMonthlyTemplateSources();
     }
   }
 
@@ -834,8 +848,8 @@
   ) {
     isDragging = true;
     weeklyTemplateSourceItemsByWeek = {
-      ...weeklyTemplateSourceItemsByWeek,
-      [week]: event.detail.items
+      ...cloneTemplateSourceItemsByWeek(weeklyTemplateSourceItemsByWeek),
+      [week]: cloneTemplateSourceItems(event.detail.items)
     };
   }
 
@@ -849,10 +863,7 @@
       }
     } finally {
       isDragging = false;
-      weeklyTemplateSourceItemsByWeek = {
-        ...weeklyTemplateSourceItemsByWeek,
-        [week]: weeklyTemplateInstancesByWeek[week] ?? []
-      };
+      resetWeeklyTemplateSources();
     }
   }
 </script>
