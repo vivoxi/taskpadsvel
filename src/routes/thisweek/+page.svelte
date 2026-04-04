@@ -1,6 +1,7 @@
 <script lang="ts">
   import { format } from 'date-fns';
   import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
@@ -27,7 +28,6 @@
     addWeeks,
     getBoardMonthKeyForWeek,
     getBoardWeekOfMonth,
-    getMonthKey,
     getWeekDays,
     getWeekKey,
     weekLabel
@@ -36,6 +36,11 @@
 
   const queryClient = useQueryClient();
   const today = new Date();
+
+  onMount(() => {
+    weekOffset.set(0);
+  });
+
   const currentWeekKey = $derived(getWeekKey(addWeeks(today, $weekOffset)));
   const isPastWeek = $derived($weekOffset < 0);
   const weekDays = $derived(getWeekDays(currentWeekKey));
@@ -90,7 +95,13 @@
   }));
 
   const monthlyInstancesQuery = createQuery(() => ({
-    queryKey: ['thisweek_period_instances', 'monthly', currentMonthKey] as const,
+    queryKey: [
+      'thisweek_period_instances',
+      'monthly',
+      currentMonthKey,
+      currentWeekOfMonth,
+      currentWeekKey
+    ] as const,
     queryFn: async () => {
       const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
         `/api/preferences?key=${encodeURIComponent(getMonthlyInstancesStorageKey(currentMonthKey))}`
