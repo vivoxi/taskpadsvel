@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from '$app/stores';
   import { format } from 'date-fns';
   import { Archive, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
@@ -21,25 +22,33 @@
   import { normalizeScheduleDayBlocks } from '$lib/scheduleLayout';
   import { parseScheduleBlockDetails } from '$lib/scheduleBlockDetails';
   import { getTaskAttachmentsForWeek } from '$lib/taskAttachments';
-  import { authPassword, weekOffset } from '$lib/stores';
+  import { authPassword } from '$lib/stores';
   import {
     DAY_NAMES,
-    addWeeks,
     getBoardMonthKeyForWeek,
     getBoardWeekOfMonth,
+    getNextWeekKey,
+    getPreviousWeekKey,
     getWeekDays,
     getWeekKey,
+    normalizeWeekKeyParam,
     weekLabel
   } from '$lib/weekUtils';
   import type { ScheduleBlock, WeeklyPlan, HistorySnapshot, Task, TaskAttachment, TaskType } from '$lib/types';
 
   const queryClient = useQueryClient();
-  const today = new Date();
-
-  weekOffset.set(0);
-
-  const currentWeekKey = $derived(getWeekKey(addWeeks(today, $weekOffset)));
-  const isPastWeek = $derived($weekOffset < 0);
+  const todayWeekKey = getWeekKey();
+  const currentWeekKey = $derived(
+    normalizeWeekKeyParam($page.url.searchParams.get('week'), todayWeekKey)
+  );
+  const isCurrentWeek = $derived(currentWeekKey === todayWeekKey);
+  const currentWeekHref = '/thisweek';
+  const previousWeekHref = $derived(`/thisweek?week=${getPreviousWeekKey(currentWeekKey)}`);
+  const nextWeekHref = $derived(`/thisweek?week=${getNextWeekKey(currentWeekKey)}`);
+  const isPastWeek = $derived(
+    (getWeekDays(currentWeekKey)[0]?.getTime() ?? 0) <
+      (getWeekDays(todayWeekKey)[0]?.getTime() ?? 0)
+  );
   const weekDays = $derived(getWeekDays(currentWeekKey));
   const currentMonthKey = $derived(getBoardMonthKeyForWeek(currentWeekKey));
   const currentWeekOfMonth = $derived(getBoardWeekOfMonth(currentWeekKey, currentMonthKey));
@@ -53,7 +62,7 @@
   let completingInstanceKeys = $state<string[]>([]);
 
   function isToday(dayIndex: number): boolean {
-    if ($weekOffset !== 0) return false;
+    if (!isCurrentWeek) return false;
     return new Date().getDay() === (dayIndex + 1) % 7;
   }
 
@@ -524,39 +533,38 @@
         <span class="text-sm text-zinc-500">
           Bu geçmiş bir haftanın arşividir — salt okunur
         </span>
-        <button
-          type="button"
-          onclick={() => weekOffset.set(0)}
+        <a
+          href={currentWeekHref}
           class="ml-auto text-xs text-zinc-400 underline underline-offset-2 transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-zinc-400"
         >
           Bu haftaya dön
-        </button>
+        </a>
       </div>
     {/if}
     <div class="flex items-center justify-between gap-3">
     <div class="flex items-center gap-1">
-      <button
-        onclick={() => weekOffset.update((n) => n - 1)}
+      <a
+        href={previousWeekHref}
         class="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
       >
         <ChevronLeft size={16} />
-      </button>
+      </a>
       <span class="whitespace-nowrap px-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">
         {weekLabel(currentWeekKey)}
       </span>
-      <button
-        onclick={() => weekOffset.update((n) => n + 1)}
+      <a
+        href={nextWeekHref}
         class="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
       >
         <ChevronRight size={16} />
-      </button>
-      {#if $weekOffset !== 0}
-        <button
-          onclick={() => weekOffset.set(0)}
+      </a>
+      {#if !isCurrentWeek}
+        <a
+          href={currentWeekHref}
           class="text-xs text-blue-600 dark:text-blue-400 hover:underline ml-1"
         >
           This week
-        </button>
+        </a>
       {/if}
     </div>
     {#if isPastWeek}

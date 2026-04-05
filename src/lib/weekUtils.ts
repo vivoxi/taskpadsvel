@@ -71,6 +71,12 @@ export function getPreviousWeekKey(weekKey: string): string {
   return getWeekKey(previousWeekAnchor);
 }
 
+export function getNextWeekKey(weekKey: string): string {
+  const weekDays = getWeekDays(weekKey);
+  const nextWeekAnchor = addDays(weekDays[0] ?? new Date(), 7);
+  return getWeekKey(nextWeekAnchor);
+}
+
 export function getPreviousMonthKey(monthKey: string): string {
   const [yearStr, monthStr] = monthKey.split('-M');
   const date = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1);
@@ -107,4 +113,20 @@ export function getBoardWeekOfMonth(weekKey: string, monthKey = getBoardMonthKey
   const days = getWeekDays(weekKey);
   const boardAnchor = days[4] ?? days[2] ?? days[0] ?? new Date();
   return Math.max(1, Math.min(4, Math.ceil(boardAnchor.getDate() / 7)));
+}
+
+export function normalizeWeekKeyParam(
+  value: string | null | undefined,
+  fallback = getWeekKey()
+): string {
+  if (!value || !/^\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])$/.test(value)) {
+    return fallback;
+  }
+
+  try {
+    const normalized = getWeekKey(getWeekDays(value)[0] ?? new Date());
+    return normalized === value ? value : fallback;
+  } catch {
+    return fallback;
+  }
 }
