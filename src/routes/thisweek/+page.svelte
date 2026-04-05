@@ -8,6 +8,8 @@
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import AttachmentChip from '$lib/components/AttachmentChip.svelte';
   import DayCard from '$lib/components/DayCard.svelte';
+  import ThisWeekDayStack from '$lib/components/ThisWeekDayStack.svelte';
+  import ThisWeekInstanceButton from '$lib/components/ThisWeekInstanceButton.svelte';
   import { Card, EmptyState, PageTitle, SectionHeader } from '$lib/components/ui';
   import {
     getMonthlyInstanceStatusStorageKey,
@@ -196,6 +198,60 @@
       (instance) => isCurrentInstanceCompleted(instance) && !isCompletionTransitioning(instance.instance_key)
     );
   }
+
+  function getTodayDayName(): (typeof DAY_NAMES)[number] | null {
+    if (!isCurrentWeek) return null;
+    return DAY_NAMES[(new Date().getDay() + 6) % 7] ?? null;
+  }
+
+  function getPlannerDays(): (typeof DAY_NAMES)[number][] {
+    const todayDay = getTodayDayName();
+    return DAY_NAMES.filter((day) => day !== todayDay);
+  }
+
+  function getTodayOpenInstances(): PersistedPeriodTaskInstance[] {
+    const todayDay = getTodayDayName();
+    return todayDay ? getActiveInstancesForDay(todayDay) : [];
+  }
+
+  function getTodayCompletedInstances(): PersistedPeriodTaskInstance[] {
+    const todayDay = getTodayDayName();
+    return todayDay ? getCompletedInstancesForDay(todayDay) : [];
+  }
+
+  function getCurrentWeekOpenCount(): number {
+    return DAY_NAMES.reduce((sum, day) => sum + getActiveInstancesForDay(day).length, 0);
+  }
+
+  function getCurrentWeekCompletedCount(): number {
+    return DAY_NAMES.reduce((sum, day) => sum + getCompletedInstancesForDay(day).length, 0);
+  }
+
+  type CurrentWeekSection = {
+    day: (typeof DAY_NAMES)[number];
+    dateLabel: string;
+    isToday: boolean;
+    activeInstances: PersistedPeriodTaskInstance[];
+    completedInstances: PersistedPeriodTaskInstance[];
+  };
+
+  const currentWeekSections = $derived<CurrentWeekSection[]>(
+    DAY_NAMES.map((day, index) => ({
+      day,
+      dateLabel: getDayDateLabel(day),
+      isToday: isToday(index),
+      activeInstances: getActiveInstancesForDay(day),
+      completedInstances: getCompletedInstancesForDay(day)
+    })).filter((section) => section.activeInstances.length > 0 || section.completedInstances.length > 0)
+  );
+
+  const todaySection = $derived(
+    currentWeekSections.find((section) => section.isToday) ?? null
+  );
+
+  const remainingWeekSections = $derived(
+    currentWeekSections.filter((section) => !section.isToday)
+  );
 
   function getCurrentAttachmentsForInstance(instance: PersistedPeriodTaskInstance): TaskAttachment[] {
     return getTaskAttachmentsForWeek(
@@ -675,8 +731,8 @@
             <div class="flex flex-col gap-[var(--space-md)]">
               <div class="flex items-center justify-between gap-3">
                 <div>
-                  <SectionHeader>Operating Console</SectionHeader>
-                  <PageTitle class="mt-2 text-lg">Weekly execution</PageTitle>
+                  <SectionHeader>Past Week Review</SectionHeader>
+                  <PageTitle class="mt-2 text-lg">Weekly review</PageTitle>
                 </div>
                 <SectionHeader>Gunluk Notlar</SectionHeader>
               </div>
@@ -696,10 +752,7 @@
           <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
           <Card class="bg-zinc-900/35">
             <div class="flex flex-col gap-[var(--space-md)]">
-            <div class="flex items-center justify-between gap-3">
-              <SectionHeader>Bu Haftanin Gorevleri</SectionHeader>
-              <span class="text-xs text-zinc-500 dark:text-zinc-400">Execution from This Month</span>
-            </div>
+            <SectionHeader>Haftalik Sonuc</SectionHeader>
             <div class="flex flex-col gap-2">
               <span class="text-xs font-medium text-green-600 dark:text-green-400">
                 Completed
@@ -828,192 +881,213 @@
       {/if}
     {:else}
       <!-- Current/future week: editable planner + AI schedule -->
-      <div class="grid grid-cols-1 gap-[var(--space-lg)] p-[var(--space-xl)] xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <!-- Left: Daily planner notes -->
-        <Card class="bg-zinc-900/80">
-          <div class="flex flex-col gap-[var(--space-md)]">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <SectionHeader>Past Week Review</SectionHeader>
-                <PageTitle class="mt-2 text-lg">Weekly review</PageTitle>
-              </div>
-              <SectionHeader>Gunluk Notlar</SectionHeader>
+      <div class="flex flex-col gap-[var(--space-lg)] p-[var(--space-xl)]">
+        <Card class="border-zinc-800 bg-zinc-950 text-zinc-50">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div class="max-w-2xl">
+              <SectionHeader class="text-zinc-500">Operating Console</SectionHeader>
+              <PageTitle class="mt-2 text-2xl text-zinc-50">
+                {isCurrentWeek ? 'This week in motion' : 'Prepare this week'}
+              </PageTitle>
+              <p class="mt-3 text-sm leading-6 text-zinc-400">
+                {isCurrentWeek
+                  ? 'Plan bugunu, kapa donguleri ve haftanin geri kalanini tek yerde yurur hale getir.'
+                  : 'Yaklasan haftayi netlestir, gunlere not dus ve execution queue’yu hazirla.'}
+              </p>
             </div>
-            {#if planQuery.isLoading}
-              <EmptyState message="Planner notes are loading." />
-            {:else}
-              {#each DAY_NAMES as day, i}
-                <DayCard
-                  weekKey={currentWeekKey}
-                  {day}
-                  dateLabel={getDayDateLabel(day)}
-                  initialContent={getPlanContent(day)}
-                  isToday={isToday(i)}
-                  readonly={false}
-                />
-              {/each}
-            {/if}
+
+            <div class="grid gap-3 sm:grid-cols-3">
+              <div class="rounded-[18px] border border-white/8 bg-white/4 px-4 py-3">
+                <div class="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                  {isCurrentWeek ? 'Today open' : 'Week open'}
+                </div>
+                <div class="mt-2 text-2xl font-semibold text-zinc-50">
+                  {isCurrentWeek ? getTodayOpenInstances().length : getCurrentWeekOpenCount()}
+                </div>
+              </div>
+              <div class="rounded-[18px] border border-white/8 bg-white/4 px-4 py-3">
+                <div class="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Week done</div>
+                <div class="mt-2 text-2xl font-semibold text-zinc-50">
+                  {getCurrentWeekCompletedCount()}
+                </div>
+              </div>
+              <div class="rounded-[18px] border border-white/8 bg-white/4 px-4 py-3">
+                <div class="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Source</div>
+                <div class="mt-2 text-sm font-medium text-zinc-200">This Month plan</div>
+              </div>
+            </div>
           </div>
         </Card>
 
-        <!-- Right: weekly schedule blocks -->
-          <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
-          <Card class="bg-zinc-900/35">
+        {#if isCurrentWeek}
+          <div class="grid grid-cols-1 gap-[var(--space-lg)] xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
+            <div class="flex flex-col gap-[var(--space-lg)]">
+            <Card class="bg-zinc-900/85">
+              <div class="flex flex-col gap-[var(--space-md)]">
+                <div>
+                  <SectionHeader>Today Planner</SectionHeader>
+                  <PageTitle class="mt-2 text-lg">
+                    {todaySection?.day ?? getTodayDayName()}
+                  </PageTitle>
+                  {#if todaySection}
+                    <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                      Bugunun notlarini ve hazirliklarini burada tut.
+                    </p>
+                  {/if}
+                </div>
+                {#if getTodayDayName()}
+                  <DayCard
+                    weekKey={currentWeekKey}
+                    day={getTodayDayName() ?? DAY_NAMES[0]}
+                    dateLabel={getDayDateLabel(getTodayDayName() ?? DAY_NAMES[0])}
+                    initialContent={getPlanContent(getTodayDayName() ?? DAY_NAMES[0])}
+                    isToday={true}
+                    readonly={false}
+                  />
+                {/if}
+              </div>
+            </Card>
+
+            <Card class="bg-zinc-900/45">
+              <div class="flex flex-col gap-[var(--space-md)]">
+                <div>
+                  <SectionHeader>Execution Companion</SectionHeader>
+                  <PageTitle class="mt-2 text-lg">Keep momentum</PageTitle>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <a
+                    href="/pomodoro"
+                    class="rounded-[18px] border border-zinc-800 bg-zinc-900/70 px-4 py-4 transition-colors duration-150 hover:border-zinc-700"
+                  >
+                    <div class="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Focus</div>
+                    <div class="mt-2 text-sm font-medium text-zinc-100">Open Pomodoro</div>
+                    <div class="mt-2 text-sm text-zinc-400">
+                      Secili gorevle sprint baslat.
+                    </div>
+                  </a>
+                  <a
+                    href="/thismonth"
+                    class="rounded-[18px] border border-zinc-800 bg-zinc-900/70 px-4 py-4 transition-colors duration-150 hover:border-zinc-700"
+                  >
+                    <div class="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Planning</div>
+                    <div class="mt-2 text-sm font-medium text-zinc-100">Open This Month</div>
+                    <div class="mt-2 text-sm text-zinc-400">
+                      Hafta bos kaldiginda ayi yeniden duzenle.
+                    </div>
+                  </a>
+                </div>
+              </div>
+            </Card>
+            </div>
+
+            <Card class="bg-zinc-900/35">
+              <div class="flex flex-col gap-[var(--space-md)]">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <SectionHeader>Today Queue</SectionHeader>
+                    <PageTitle class="mt-2 text-lg">Execute now</PageTitle>
+                  </div>
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">From This Month</span>
+                </div>
+
+                {#if !todaySection}
+                  <EmptyState
+                    class="py-10"
+                    message="Bugun icin planlanmis gorev yok. This Month tarafindan bir gun atamasi yapabilir veya planner notu ile bugunu sekillendirebilirsin."
+                    actionLabel="This Month'a git"
+                    onAction={() => {
+                      window.location.href = '/thismonth';
+                    }}
+                  />
+                {:else}
+                  <ThisWeekDayStack
+                    day={todaySection.day}
+                    dateLabel={todaySection.dateLabel}
+                    isToday={true}
+                    activeInstances={todaySection.activeInstances}
+                    completedInstances={todaySection.completedInstances}
+                    sourceLabelFor={getInstanceSourceLabel}
+                    attachmentsFor={getCurrentAttachmentsForInstance}
+                    transitionFor={isCompletionTransitioning}
+                    onToggle={toggleCurrentInstance}
+                  />
+                {/if}
+              </div>
+            </Card>
+          </div>
+        {/if}
+
+        <div class="grid grid-cols-1 gap-[var(--space-lg)] xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <Card class="bg-zinc-900/80">
             <div class="flex flex-col gap-[var(--space-md)]">
-            <SectionHeader>Haftalik Sonuc</SectionHeader>
-          {#if weeklyInstancesQuery.isLoading || monthlyInstancesQuery.isLoading}
-            <EmptyState message="Haftalik gorevler yukleniyor." />
-          {:else if [...(weeklyInstancesQuery.data ?? []), ...(monthlyInstancesQuery.data ?? [])].length === 0}
-            <EmptyState
-              message="No weekly execution plan yet."
-              actionLabel="This Month'a git"
-              onAction={() => {
-                window.location.href = '/thismonth';
-              }}
-            />
-          {:else}
-            <div class="flex flex-col gap-6">
-              {#each DAY_NAMES as day, i}
-                {@const activeInstances = getActiveInstancesForDay(day)}
-                {@const completedInstances = getCompletedInstancesForDay(day)}
-                {#if activeInstances.length > 0 || completedInstances.length > 0}
-                  {@const todayDay = isToday(i)}
-                  <div class={`flex flex-col gap-3 rounded-xl border p-4 ${
-                    todayDay
-                      ? 'border-zinc-500 bg-zinc-800/70'
-                      : 'border-zinc-800 bg-zinc-900/30'
-                  }`}>
-                    <div class="flex items-center justify-between gap-3">
-                      <div class="flex items-center gap-2">
-                      <h4 class={`text-xs font-medium ${todayDay ? 'text-zinc-200' : 'text-zinc-500 dark:text-zinc-400'}`}>
-                        {day}
-                      </h4>
-                      <span class="text-xs text-zinc-400 dark:text-zinc-500">
-                        {getDayDateLabel(day)}
-                      </span>
-                      </div>
-                      {#if todayDay}
-                        <span class="rounded-full bg-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-                          Bugun
-                        </span>
-                      {/if}
-                    </div>
-                    <div class="flex flex-col gap-2">
-                      {#each activeInstances as instance (instance.instance_key)}
-                        <button
-                          type="button"
-                          onclick={() => toggleCurrentInstance(instance)}
-                          class={`flex items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all duration-300 ${
-                            isCompletionTransitioning(instance.instance_key)
-                              ? 'opacity-40'
-                              : 'opacity-100'
-                          } ${
-                            instance.period_type === 'monthly'
-                              ? 'border-sky-200 bg-sky-50/70 dark:border-sky-500/20 dark:bg-sky-950/15'
-                              : 'border-violet-200 bg-violet-50/70 dark:border-violet-500/20 dark:bg-violet-950/15'
-                          }`}
-                        >
-                          <span
-                            class={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                              isCurrentInstanceCompleted(instance)
-                                ? 'border-orange-500 bg-orange-500 dark:border-orange-400 dark:bg-orange-400'
-                                : 'border-zinc-300 dark:border-zinc-600'
-                            }`}
-                          >
-                            {#if isCurrentInstanceCompleted(instance)}
-                              <svg viewBox="0 0 10 10" class="h-3 w-3" fill="none">
-                                <path d="M2 5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                              </svg>
-                            {/if}
-                          </span>
-                          <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-2">
-                              <span class="font-mono text-[10px] uppercase text-zinc-400">
-                                [{instance.period_type}]
-                              </span>
-                              <span
-                                class="text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                              >
-                                {instance.title}
-                              </span>
-                              <span class="ml-auto text-xs text-zinc-600 dark:text-zinc-500">
-                                ↩ {getInstanceSourceLabel(instance)}
-                              </span>
-                            </div>
-                            <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                              {instance.estimated_hours ?? 1}h
-                            </div>
-                            {#if getCurrentAttachmentsForInstance(instance).length > 0}
-                              <div class="mt-2 flex flex-wrap gap-2">
-                                {#each getCurrentAttachmentsForInstance(instance) as attachment (attachment.id)}
-                                  <AttachmentChip
-                                    {attachment}
-                                    readonly={true}
-                                    onDelete={() => {}}
-                                  />
-                                {/each}
-                              </div>
-                            {/if}
-                          </div>
-                        </button>
-                      {/each}
-                      {#if completedInstances.length > 0}
-                        <div class="pt-2">
-                          <div class="mb-2 text-[11px] uppercase tracking-widest text-zinc-500">
-                            Done
-                          </div>
-                          <div class="flex flex-col gap-2">
-                            {#each completedInstances as instance (instance.instance_key)}
-                              <button
-                                type="button"
-                                onclick={() => toggleCurrentInstance(instance)}
-                                class="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 px-3 py-3 text-left opacity-40 transition-all duration-300 dark:border-emerald-500/20 dark:bg-emerald-950/15"
-                              >
-                                <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-orange-500 bg-orange-500 dark:border-orange-400 dark:bg-orange-400">
-                                  <svg viewBox="0 0 10 10" class="h-3 w-3" fill="none">
-                                    <path d="M2 5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                                  </svg>
-                                </span>
-                                <div class="min-w-0 flex-1">
-                                  <div class="flex items-center gap-2">
-                                    <span class="font-mono text-[10px] uppercase text-zinc-400">
-                                      [{instance.period_type}]
-                                    </span>
-                                    <span class="text-sm font-medium text-zinc-400 line-through">
-                                      {instance.title}
-                                    </span>
-                                    <span class="ml-auto text-xs text-zinc-600 dark:text-zinc-500">
-                                      ↩ {getInstanceSourceLabel(instance)}
-                                    </span>
-                                  </div>
-                                  <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                    {instance.estimated_hours ?? 1}h
-                                  </div>
-                                  {#if getCurrentAttachmentsForInstance(instance).length > 0}
-                                    <div class="mt-2 flex flex-wrap gap-2">
-                                      {#each getCurrentAttachmentsForInstance(instance) as attachment (attachment.id)}
-                                        <AttachmentChip
-                                          {attachment}
-                                          readonly={true}
-                                          onDelete={() => {}}
-                                        />
-                                      {/each}
-                                    </div>
-                                  {/if}
-                                </div>
-                              </button>
-                            {/each}
-                          </div>
-                        </div>
-                      {/if}
-                    </div>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <SectionHeader>Week Planner</SectionHeader>
+                  <PageTitle class="mt-2 text-lg">
+                    {isCurrentWeek ? 'Rest of the week' : 'Weekly planner'}
+                  </PageTitle>
+                </div>
+                <SectionHeader>Gunluk Notlar</SectionHeader>
+              </div>
+              {#if planQuery.isLoading}
+                <EmptyState message="Planner notes are loading." />
+              {:else}
+                {#each (isCurrentWeek ? getPlannerDays() : DAY_NAMES) as day, i}
+                  <DayCard
+                    weekKey={currentWeekKey}
+                    {day}
+                    dateLabel={getDayDateLabel(day)}
+                    initialContent={getPlanContent(day)}
+                    isToday={isCurrentWeek ? day === getTodayDayName() : isToday(i)}
+                    readonly={false}
+                  />
+                {/each}
+              {/if}
+            </div>
+          </Card>
+
+          <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
+            <Card class="bg-zinc-900/35">
+              <div class="flex flex-col gap-[var(--space-md)]">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <SectionHeader>Week Queue</SectionHeader>
+                    <PageTitle class="mt-2 text-lg">
+                      {isCurrentWeek ? 'Later this week' : 'Execution queue'}
+                    </PageTitle>
+                  </div>
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">Execution from This Month</span>
+                </div>
+                {#if weeklyInstancesQuery.isLoading || monthlyInstancesQuery.isLoading}
+                  <EmptyState message="Haftalik gorevler yukleniyor." />
+                {:else if [...(weeklyInstancesQuery.data ?? []), ...(monthlyInstancesQuery.data ?? [])].length === 0}
+                  <EmptyState
+                    message="No weekly execution plan yet."
+                    actionLabel="This Month'a git"
+                    onAction={() => {
+                      window.location.href = '/thismonth';
+                    }}
+                  />
+                {:else}
+                  <div class="flex flex-col gap-6">
+                    {#each (isCurrentWeek ? remainingWeekSections : currentWeekSections) as section (section.day)}
+                      <ThisWeekDayStack
+                        day={section.day}
+                        dateLabel={section.dateLabel}
+                        isToday={section.isToday}
+                        activeInstances={section.activeInstances}
+                        completedInstances={section.completedInstances}
+                        sourceLabelFor={getInstanceSourceLabel}
+                        attachmentsFor={getCurrentAttachmentsForInstance}
+                        transitionFor={isCompletionTransitioning}
+                        onToggle={toggleCurrentInstance}
+                      />
+                    {/each}
                   </div>
                 {/if}
-              {/each}
-            </div>
-          {/if}
+              </div>
+            </Card>
           </div>
-        </Card>
         </div>
       </div>
     {/if}
