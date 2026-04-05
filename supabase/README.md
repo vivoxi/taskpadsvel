@@ -1,21 +1,18 @@
 # Supabase Notes
 
-This directory records database expectations that the app relies on.
+The rebuilt planner relies on a small, explicit schema:
+
+- `task_templates`
+- `task_instances`
+- `weekly_notes`
+- `notes_documents`
+- `note_blocks`
 
 ## Migrations
 
-- [migrations/20260404_enable_rls_and_lock_public_tables.sql](/Users/mbtkimya/Documents/taskpad%20svelte/supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql)
+Run these in order:
 
-That migration assumes:
+1. [migrations/20260406_rebuild_planner_core.sql](/Users/mbtkimya/Documents/taskpad%20svelte/supabase/migrations/20260406_rebuild_planner_core.sql)
+2. [migrations/20260404_enable_rls_and_lock_public_tables.sql](/Users/mbtkimya/Documents/taskpad%20svelte/supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql)
 
-- the app reads and writes through server endpoints
-- server-side code uses `SUPABASE_SERVICE_KEY`
-- browser clients do not access the public tables directly
-
-## Existing Projects
-
-If you already ran the SQL manually in Supabase, keep this migration as the source-of-truth for future environments. You do not need to rerun it unless you are provisioning another database or intentionally reconciling drift.
-
-## Fresh Projects
-
-Create the required tables first, then apply the migration so RLS, revoked grants, and deny-all policies match the application.
+The application reads and writes through server endpoints only, using `SUPABASE_SERVICE_KEY`. Browser code should never access these tables directly.

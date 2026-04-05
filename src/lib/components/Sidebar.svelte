@@ -1,18 +1,10 @@
 <script lang="ts">
-  import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { Moon, Sun } from 'lucide-svelte';
-  import {
-    BarChart3,
-    Calendar,
-    Shuffle,
-    LayoutDashboard,
-    TimerReset,
-    NotebookPen
-  } from 'lucide-svelte';
-  import { themeMode, toggleTheme } from '$lib/stores/theme';
-  import { getWeekKey, getWeekDays } from '$lib/weekUtils';
+  import { page } from '$app/stores';
   import { format } from 'date-fns';
+  import { CalendarRange, Moon, NotebookPen, Rows3, Sun } from 'lucide-svelte';
+  import { getMonthKey, getWeekKey, monthLabel, weekLabel } from '$lib/planner/dates';
+  import { themeMode, toggleTheme } from '$lib/stores/theme';
 
   let {
     mobile = false,
@@ -22,52 +14,46 @@
     onNavigate?: () => void;
   } = $props();
 
-  const weekDays = getWeekDays(getWeekKey());
-  const weekStart = weekDays[0];
-  const weekEnd = weekDays[6];
-  const currentWeekLabel =
-    weekStart.getMonth() === weekEnd.getMonth()
-      ? `${format(weekStart, 'MMM d')}–${format(weekEnd, 'd')}`
-      : `${format(weekStart, 'MMM d')}–${format(weekEnd, 'MMM d')}`;
-
   type NavItem = {
     href: string;
     label: string;
-    icon: typeof BarChart3;
-    eyebrow?: string;
+    eyebrow: string;
+    icon: typeof Rows3;
   };
 
   const navItems: NavItem[] = [
-    { href: '/thisweek', label: 'This Week', icon: LayoutDashboard, eyebrow: 'Home' },
-    { href: '/thismonth', label: 'This Month', icon: Calendar },
-    { href: '/random', label: 'Random Tasks', icon: Shuffle },
-    { href: '/pomodoro', label: 'Pomodoro', icon: TimerReset },
-    { href: '/notes', label: 'Notes', icon: NotebookPen },
-    { href: '/dashboard', label: 'Dashboard', icon: BarChart3, eyebrow: 'Overview' }
+    { href: '/week', label: 'Week', eyebrow: weekLabel(getWeekKey()), icon: Rows3 },
+    { href: '/month', label: 'Month', eyebrow: monthLabel(getMonthKey()), icon: CalendarRange },
+    { href: '/notes', label: 'Notes', eyebrow: 'Reference', icon: NotebookPen }
   ];
 </script>
 
 <nav
-  class={`shrink-0 border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900 ${
+  class={`shrink-0 border-r border-[var(--border)] bg-[var(--panel-soft)]/92 p-3 backdrop-blur ${
     mobile
-      ? 'flex h-full w-[min(88vw,19rem)] flex-col border-r shadow-[0_24px_80px_-32px_rgba(15,23,42,0.55)]'
-      : 'hidden w-56 border-r md:flex md:flex-col'
-  } gap-1`}
+      ? 'flex h-full w-[min(88vw,18.5rem)] flex-col shadow-[var(--shadow-soft)]'
+      : 'hidden w-64 md:flex md:flex-col'
+  } gap-2`}
 >
-  <div class="mb-2 border-b border-zinc-200 px-2 py-3 dark:border-zinc-800">
+  <div class="mb-2 rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-card)]">
     <button
       type="button"
       onclick={() => {
         onNavigate();
-        void goto('/thisweek');
+        void goto('/week');
       }}
-      class="text-left transition-colors duration-150 hover:text-zinc-700 focus-visible:outline-2 focus-visible:outline-zinc-400 dark:hover:text-zinc-100"
+      class="text-left transition-colors duration-150 hover:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:outline-zinc-400"
     >
-      <h1 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-        TaskpadSvel
+      <p class="text-[11px] font-medium uppercase tracking-[0.26em] text-[var(--text-faint)]">
+        Planning System
+      </p>
+      <h1 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
+        Taskpad
       </h1>
     </button>
-    <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">{currentWeekLabel}</p>
+    <p class="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+      Plan the month, execute the week, and keep notes without extra surfaces.
+    </p>
   </div>
 
   {#each navItems as item}
@@ -77,35 +63,35 @@
       data-sveltekit-preload-data="hover"
       aria-current={isActive ? 'page' : undefined}
       onclick={onNavigate}
-      class="flex items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm transition-colors duration-150
-        {isActive
-          ? item.href === '/thisweek'
-            ? 'border-zinc-100 bg-zinc-900 font-semibold text-zinc-50 shadow-sm dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-            : 'border-zinc-300 bg-zinc-200 font-medium text-zinc-900 dark:border-zinc-300 dark:bg-zinc-800 dark:text-zinc-100'
-          : item.href === '/dashboard'
-            ? 'border-transparent text-zinc-400 hover:bg-zinc-100/70 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-800/30 dark:hover:text-zinc-300'
-            : 'border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-100'}"
+      class={`flex items-start gap-3 rounded-[18px] border px-3 py-3 text-sm transition-colors duration-150 ${
+        isActive
+          ? 'border-[var(--border-strong)] bg-[var(--panel)] text-[var(--text-primary)] shadow-[var(--shadow-card)]'
+          : 'border-transparent text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'
+      }`}
     >
-      <item.icon size={16} />
+      <item.icon
+        size={16}
+        class={isActive ? 'mt-0.5 text-[var(--text-primary)]' : 'mt-0.5 text-[var(--text-muted)]'}
+      />
       <div class="min-w-0">
-        <div>{item.label}</div>
-        {#if item.eyebrow}
-          <div class={`text-[10px] uppercase tracking-[0.18em] ${
-            isActive && item.href === '/thisweek'
-              ? 'text-zinc-300 dark:text-zinc-700'
-              : 'text-zinc-400 dark:text-zinc-500'
-          }`}>
-            {item.eyebrow}
-          </div>
-        {/if}
+        <div class="font-medium tracking-[-0.01em]">{item.label}</div>
+        <div class="mt-1 text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+          {item.eyebrow}
+        </div>
       </div>
     </a>
   {/each}
 
-  <div class="mt-auto pt-3">
+  <div class="mt-auto space-y-3 pt-3">
+    <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 text-sm text-[var(--text-muted)] shadow-[var(--shadow-card)]">
+      <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Current cadence</div>
+      <div class="mt-2 font-medium text-[var(--text-primary)]">{format(new Date(), 'EEEE')}</div>
+      <div class="mt-1 leading-6">{weekLabel(getWeekKey())}</div>
+    </div>
+
     <button
       onclick={toggleTheme}
-      class="flex w-full items-center gap-3 rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+      class="flex w-full items-center gap-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] shadow-[var(--shadow-card)]"
       aria-label={$themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
     >
       {#if $themeMode === 'dark'}

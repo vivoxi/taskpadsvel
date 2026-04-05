@@ -1,31 +1,31 @@
 # Taskpad Svelte
 
-Taskpad Svelte is a SvelteKit planner for recurring weekly/monthly work, categorized random tasks, and generated weekly schedules.
+Taskpad Svelte is a focused personal planning app rebuilt around three surfaces only:
+
+- `Week`: the default home and execution workspace
+- `Month`: a calm planning studio for recurring work
+- `Notes`: a lightweight block-based writing space
 
 ## Stack
 
 - SvelteKit 2
 - Svelte 5
 - Tailwind 4
-- TanStack Query
 - Supabase
 
 ## Main Pages
 
-- `/dashboard`: completion metrics and archive summaries
-- `/weekly`: recurring weekly tasks
-- `/monthly`: recurring monthly tasks and month archive
-- `/random`: categorized free-form task board
-- `/thisweek`: planner notes, generated schedule, and week archive
+- `/week`: weekly execution plus editable daily notes
+- `/month`: recurring weekly/monthly planning for the selected month
+- `/notes`: document-style notes with headings, paragraphs, and checklists
 
 ## Key Behaviors
 
-- Weekly tasks reset at the start of a new week.
-- Monthly tasks reset at the start of a new month.
-- A snapshot is captured before reset so completed vs missed work stays visible in archives.
-- Generated schedule blocks can sync completion and attachments with linked weekly/monthly tasks.
-- Schedule generation supports both rule-based mode and AI mode.
-- Work hours are fixed at `10:00-17:00` with a break at `13:00-14:00`.
+- The app always opens into the weekly workspace.
+- Past weeks stay editable. There is no snapshot or archive mode.
+- Recurring work is modeled through `task_templates` and concrete `task_instances`.
+- Weekly notes are block-based per weekday and can be edited on any week.
+- General notes use a simple document + block model instead of a rich text editor.
 
 ## Development
 
@@ -54,73 +54,19 @@ Required app values:
 - `SUPABASE_SERVICE_KEY`
 - `ADMIN_PASSWORD`
 
-Optional AI values:
-
-- `AI_PROVIDER=anthropic`
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_MODEL`
-- `AI_PROVIDER=openai-compatible`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `OPENAI_API_URL`
-
 ## Supabase Notes
 
-This repo now ships an RLS migration in [supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql](/Users/mbtkimya/Documents/taskpad%20svelte/supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql).
+Apply the planner schema migration first, then the lock-down migration.
 
-The following tables are expected to exist in your project before applying that migration:
+- [supabase/migrations/20260406_rebuild_planner_core.sql](/Users/mbtkimya/Documents/taskpad%20svelte/supabase/migrations/20260406_rebuild_planner_core.sql)
+- [supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql](/Users/mbtkimya/Documents/taskpad%20svelte/supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql)
 
-- `tasks`
-- `weekly_plan`
-- `weekly_schedule`
-- `history_snapshots`
-- `task_attachments`
-- `reset_log`
-- `user_preferences`
+The rebuilt app uses these tables:
 
-`user_preferences` is used for task ordering and random category preferences. If you are setting up a fresh Supabase project, create that table manually or add your own migration before running the app.
-
-The shipped RLS migration:
-
-- enables RLS on the public app tables
-- revokes direct `anon`/`authenticated` access
-- adds explicit deny-all policies for those roles
+- `task_templates`
+- `task_instances`
+- `weekly_notes`
+- `notes_documents`
+- `note_blocks`
 
 That setup assumes the app talks to Supabase through server endpoints using `SUPABASE_SERVICE_KEY`, not from the browser.
-
-## Dokploy Deployment
-
-This repo is ready to deploy on Dokploy with the `Dockerfile` build type.
-
-Recommended Dokploy settings:
-
-- Build Type: `Dockerfile`
-- Dockerfile Path: `Dockerfile`
-- Docker Context Path: `.`
-- Port: `3000`
-- Persistent Volume: mount a volume to `/app/uploads`
-- Health Check URL: `/api/health`
-
-Build-time arguments:
-
-- `PUBLIC_AUTH_REQUIRED` (optional, defaults to `false`)
-
-Runtime environment variables required in Dokploy:
-
-- `PUBLIC_SUPABASE_URL`
-- `PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY`
-- `ADMIN_PASSWORD`
-- `UPLOADS_DIR=/app/uploads`
-
-Optional runtime AI variables:
-
-- `AI_PROVIDER`
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_MODEL`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `OPENAI_API_URL`
-
-If you use Dokploy rollback or health checks, point them to `http://localhost:3000/api/health`.
