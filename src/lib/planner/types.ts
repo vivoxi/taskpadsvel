@@ -96,6 +96,8 @@ export type WeekViewData = {
   tasks: TaskInstance[];
 };
 
+export type TasksByDay = Partial<Record<DayName, TaskInstance[]>>;
+
 export type MonthWeekSlot = {
   index: number;
   weekKey: string;

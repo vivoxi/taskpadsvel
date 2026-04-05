@@ -1,25 +1,16 @@
 <script lang="ts">
+  import { invalidateAll } from '$app/navigation';
   import { ChevronLeft, ChevronRight } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
-  import BlockEditor from '$lib/components/BlockEditor.svelte';
+  import DayNoteEditor from '$lib/components/DayNoteEditor.svelte';
   import { apiSendJson } from '$lib/client/api';
-  import { DAY_NAMES, type PlannerBlock, type TaskInstance } from '$lib/planner/types';
-  import {
-    formatDayChip,
-    getNextWeekKey,
-    getPreviousWeekKey
-  } from '$lib/planner/dates';
+  import { DAY_NAMES, type PlannerBlock } from '$lib/planner/types';
+  import { getNextWeekKey, getPreviousWeekKey } from '$lib/planner/dates';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
-  let tasks = $state<TaskInstance[]>([]);
 
-  $effect(() => {
-    data.view.weekKey;
-    tasks = structuredClone(data.view.tasks);
-  });
-
-  function taskSort(left: TaskInstance, right: TaskInstance) {
+  function taskSort(left: PageData['view']['tasks'][number], right: PageData['view']['tasks'][number]) {
     const leftDayIndex = left.day_name ? DAY_NAMES.indexOf(left.day_name) : Number.MAX_SAFE_INTEGER;
     const rightDayIndex = right.day_name ? DAY_NAMES.indexOf(right.day_name) : Number.MAX_SAFE_INTEGER;
 
@@ -29,37 +20,17 @@
     );
   }
 
-  const completedTasks = $derived(tasks.filter((task) => task.status === 'done').sort(taskSort));
-  const openTasks = $derived(tasks.filter((task) => task.status === 'open').sort(taskSort));
-  const todayTasks = $derived(
-    data.view.isCurrentWeek && data.view.todayDayName
-      ? openTasks.filter((task) => task.day_name === data.view.todayDayName)
-      : []
-  );
-  const laterTasks = $derived(
-    data.view.isCurrentWeek && data.view.todayDayName
-      ? openTasks.filter((task) => task.day_name !== data.view.todayDayName)
-      : openTasks
-  );
+  const completedTasks = $derived(data.view.tasks.filter((task) => task.status === 'done').sort(taskSort));
+  const openTasks = $derived(data.view.tasks.filter((task) => task.status === 'open').sort(taskSort));
+  const unassignedTasks = $derived(openTasks.filter((task) => task.day_name === null));
 
-  async function toggleTask(taskId: string, nextStatus: 'open' | 'done') {
-    const previousTasks = structuredClone(tasks);
-    tasks = tasks.map((task) =>
-      task.id === taskId
-        ? {
-            ...task,
-            status: nextStatus,
-            completed_at: nextStatus === 'done' ? new Date().toISOString() : null
-          }
-        : task
-    );
-
+  async function toggleSideTask(taskId: string, nextStatus: 'open' | 'done') {
     try {
       await apiSendJson(`/api/task-instances/${taskId}`, 'PATCH', {
         status: nextStatus
       });
+      await invalidateAll();
     } catch (error) {
-      tasks = previousTasks;
       toast.error(error instanceof Error ? error.message : 'Failed to update task');
     }
   }
@@ -147,101 +118,42 @@
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_24rem]">
       <section class="space-y-4">
         {#each data.view.days as day}
-          <article class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)] sm:px-6">
-            <div class="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
-              <div>
-                <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
-                  {day.isoDate}
-                </div>
-                <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-                  {day.dayName}
-                </h2>
-                <p class="mt-1 text-sm text-[var(--text-muted)]">{day.dateLabel}</p>
-              </div>
-
-              {#if data.view.todayDayName === day.dayName}
-                <div class="rounded-full border border-[var(--border-strong)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                  Today
-                </div>
-              {/if}
-            </div>
-
-            <div class="pt-4">
-              <BlockEditor
-                sourceKey={`${data.view.weekKey}:${day.dayName}`}
-                blocks={day.blocks}
-                compact
-                emptyLabel="Add a note, header, or checklist item"
-                onCommit={(blocks) => saveDayBlocks(day.dayName, blocks)}
-              />
-            </div>
-          </article>
+          <DayNoteEditor
+            weekKey={data.view.weekKey}
+            isoDate={day.isoDate}
+            dayName={day.dayName}
+            dateLabel={day.dateLabel}
+            isToday={data.view.todayDayName === day.dayName}
+            tasks={data.byDay[day.dayName] ?? []}
+            blocks={day.blocks}
+            onSaveBlocks={saveDayBlocks}
+          />
         {/each}
       </section>
 
       <aside class="space-y-4 xl:sticky xl:top-6 xl:self-start">
-        {#if data.view.isCurrentWeek}
-          <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)]">
-            <div class="border-b border-[var(--border)] pb-4">
-              <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Today</div>
-              <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-                {data.view.todayDayName ?? 'No day selected'}
-              </h2>
-            </div>
-
-            <div class="space-y-2 pt-4">
-              {#if todayTasks.length === 0}
-                <p class="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
-                  Nothing assigned for today.
-                </p>
-              {:else}
-                {#each todayTasks as task (task.id)}
-                  <button
-                    type="button"
-                    class="flex w-full items-start gap-3 rounded-[18px] border border-[var(--border)] px-4 py-3 text-left transition-colors hover:bg-[var(--panel-soft)]"
-                    onclick={() => toggleTask(task.id, 'done')}
-                  >
-                    <span class="mt-1 h-4 w-4 rounded-full border border-[var(--border-strong)]"></span>
-                    <span class="min-w-0">
-                      <span class="block text-sm font-medium text-[var(--text-primary)]">{task.title_snapshot}</span>
-                      <span class="mt-1 block text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                        {task.day_name ? formatDayChip(data.view.weekKey, task.day_name) : 'Unassigned'}
-                      </span>
-                    </span>
-                  </button>
-                {/each}
-              {/if}
-            </div>
-          </section>
-        {/if}
-
         <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)]">
           <div class="border-b border-[var(--border)] pb-4">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
-              {data.view.isCurrentWeek ? 'This week' : 'Open work'}
-            </div>
+            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">This week</div>
             <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              {data.view.isCurrentWeek ? 'Remaining' : 'Still open'}
+              Unassigned this week
             </h2>
           </div>
 
           <div class="space-y-2 pt-4">
-            {#if laterTasks.length === 0}
+            {#if unassignedTasks.length === 0}
               <p class="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
-                No open tasks here.
+                No unassigned tasks for this week.
               </p>
             {:else}
-              {#each laterTasks as task (task.id)}
+              {#each unassignedTasks as task (task.id)}
                 <button
                   type="button"
                   class="flex w-full items-start justify-between gap-3 rounded-[18px] border border-[var(--border)] px-4 py-3 text-left transition-colors hover:bg-[var(--panel-soft)]"
-                  onclick={() => toggleTask(task.id, 'done')}
+                  onclick={() => toggleSideTask(task.id, 'done')}
                 >
                   <span class="min-w-0">
                     <span class="block text-sm font-medium text-[var(--text-primary)]">{task.title_snapshot}</span>
-                    <span class="mt-1 block text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                      {task.day_name ? formatDayChip(data.view.weekKey, task.day_name) : 'Unassigned'}
-                    </span>
                   </span>
                   <span class="mt-1 h-4 w-4 rounded-full border border-[var(--border-strong)]"></span>
                 </button>
@@ -266,13 +178,10 @@
                 <button
                   type="button"
                   class="flex w-full items-start justify-between gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)]/70 px-4 py-3 text-left opacity-80 transition-colors hover:opacity-100"
-                  onclick={() => toggleTask(task.id, 'open')}
+                  onclick={() => toggleSideTask(task.id, 'open')}
                 >
                   <span class="min-w-0">
                     <span class="block text-sm text-[var(--text-muted)] line-through">{task.title_snapshot}</span>
-                    <span class="mt-1 block text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                      {task.day_name ? formatDayChip(data.view.weekKey, task.day_name) : 'Unassigned'}
-                    </span>
                   </span>
                   <span class="mt-1 h-4 w-4 rounded-full border border-[var(--border-strong)] bg-[var(--accent)]"></span>
                 </button>
