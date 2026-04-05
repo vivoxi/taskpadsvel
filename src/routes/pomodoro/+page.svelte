@@ -1,16 +1,32 @@
 <script lang="ts">
+  import { browser } from '$app/environment';
+  import { createQuery } from '@tanstack/svelte-query';
   import {
+    Archive,
     Bell,
     BellOff,
     CirclePause,
+    ClipboardCheck,
     Play,
     RotateCcw,
     SkipForward,
     Sparkles,
     TimerReset
   } from 'lucide-svelte';
+  import { apiJson, canUseClientApi } from '$lib/client/api';
+  import { Card, EmptyState, PageTitle, SectionHeader } from '$lib/components/ui';
+  import {
+    getMonthlyInstanceStatusStorageKey,
+    getMonthlyInstancesStorageKey,
+    getWeeklyInstanceStatusStorageKey,
+    getWeeklyInstancesStorageKey,
+    parsePersistedPeriodInstanceStatus,
+    parsePersistedPeriodInstances,
+    type PersistedPeriodTaskInstance
+  } from '$lib/periodInstances';
   import {
     formatPomodoroTime,
+    type PomodoroHistoryEntry,
     getPomodoroDayKey,
     getPomodoroModeLabel,
     getPomodoroNextMode,
@@ -18,7 +34,9 @@
     POMODORO_PRESETS,
     type PomodoroMode
   } from '$lib/pomodoro';
+  import { authPassword } from '$lib/stores';
   import { pomodoroTimer } from '$lib/stores/pomodoroTimer';
+  import { getBoardMonthKeyForWeek, getBoardWeekOfMonth, getWeekKey } from '$lib/weekUtils';
 
   const MODE_LABELS: Record<PomodoroMode, string> = {
     focus: 'Focus Sprint',
@@ -67,9 +85,107 @@
   const syncLabel = $derived(
     $pomodoroTimer.syncState === 'error' ? 'Sync error' : 'Cloud backup on'
   );
+  const currentWeekKey = getWeekKey();
+  const currentMonthKey = getBoardMonthKeyForWeek(currentWeekKey);
+  const currentWeekOfMonth = getBoardWeekOfMonth(currentWeekKey, currentMonthKey);
+  const canAccessApi = $derived(canUseClientApi($authPassword));
+
+  const weeklyInstancesQuery = createQuery(() => ({
+    queryKey: ['pomodoro', 'period_instances', 'weekly', currentWeekKey] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(getWeeklyInstancesStorageKey(currentWeekKey))}`
+      );
+      return parsePersistedPeriodInstances(response.entries[0]?.value)?.instances ?? [];
+    },
+    enabled: browser && canAccessApi
+  }));
+
+  const weeklyStatusQuery = createQuery(() => ({
+    queryKey: ['pomodoro', 'period_status', 'weekly', currentWeekKey] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(
+          getWeeklyInstanceStatusStorageKey(currentWeekKey)
+        )}`
+      );
+      return (
+        parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
+      );
+    },
+    enabled: browser && canAccessApi
+  }));
+
+  const monthlyInstancesQuery = createQuery(() => ({
+    queryKey: ['pomodoro', 'period_instances', 'monthly', currentMonthKey, currentWeekOfMonth] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(getMonthlyInstancesStorageKey(currentMonthKey))}`
+      );
+      return (parsePersistedPeriodInstances(response.entries[0]?.value)?.instances ?? []).filter(
+        (instance) => instance.preferred_week_of_month === currentWeekOfMonth
+      );
+    },
+    enabled: browser && canAccessApi
+  }));
+
+  const monthlyStatusQuery = createQuery(() => ({
+    queryKey: ['pomodoro', 'period_status', 'monthly', currentMonthKey] as const,
+    queryFn: async () => {
+      const response = await apiJson<{ entries: Array<{ key: string; value: unknown }> }>(
+        `/api/preferences?key=${encodeURIComponent(
+          getMonthlyInstanceStatusStorageKey(currentMonthKey)
+        )}`
+      );
+      return (
+        parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
+      );
+    },
+    enabled: browser && canAccessApi
+  }));
+
+  type PomodoroTaskOption = {
+    id: string;
+    title: string;
+    source: 'weekly' | 'monthly';
+  };
+
+  function buildTaskOptions(
+    instances: PersistedPeriodTaskInstance[],
+    completedInstanceKeys: string[]
+  ): PomodoroTaskOption[] {
+    return instances
+      .filter((instance) => !completedInstanceKeys.includes(instance.instance_key))
+      .map((instance) => ({
+        id: instance.instance_key,
+        title: instance.title,
+        source: instance.period_type
+      }));
+  }
+
+  const thisWeekTasks = $derived([
+    ...buildTaskOptions(
+      (weeklyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+      weeklyStatusQuery.data ?? []
+    ),
+    ...buildTaskOptions(
+      (monthlyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+      monthlyStatusQuery.data ?? []
+    )
+  ]);
 
   function handleFocusLabelInput(event: Event) {
     pomodoroTimer.setFocusLabel((event.currentTarget as HTMLInputElement).value);
+  }
+
+  function handleTaskSelection(event: Event) {
+    const nextId = (event.currentTarget as HTMLSelectElement).value;
+    const selectedTask = thisWeekTasks.find((task) => task.id === nextId) ?? null;
+    pomodoroTimer.setSelectedTask(selectedTask?.id ?? null, selectedTask?.title ?? null);
+  }
+
+  function getHistoryTaskLabel(entry: PomodoroHistoryEntry): string | null {
+    return entry.taskTitle ? `1 pomodoro · ${entry.taskTitle}` : null;
   }
 </script>
 
@@ -200,10 +316,33 @@
       </article>
 
       <div class="flex flex-col gap-5">
-        <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
+        <Card class="rounded-[28px] border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
           <div class="flex items-center gap-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">
             <TimerReset size={16} />
             Current Focus
+          </div>
+          <div class="mt-4">
+            <SectionHeader class="text-zinc-500 dark:text-zinc-400">Uzerinde calistigin gorev</SectionHeader>
+            <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              Bu hafta planindan bir gorev secersen session gecmisine 1 pomodoro olarak baglanir.
+            </p>
+            <select
+              value={$pomodoroTimer.selectedTaskId ?? ''}
+              onchange={handleTaskSelection}
+              class="mt-3 w-full rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 text-sm text-zinc-700 transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200"
+            >
+              <option value="">- sec -</option>
+              {#each thisWeekTasks as task}
+                <option value={task.id}>{task.title} [{task.source}]</option>
+              {/each}
+            </select>
+            {#if weeklyInstancesQuery.isLoading || monthlyInstancesQuery.isLoading}
+              <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Bu haftanin gorevleri yukleniyor.</p>
+            {:else if thisWeekTasks.length === 0}
+              <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                Bu hafta icin secilebilir gorev yok.
+              </p>
+            {/if}
           </div>
           <input
             type="text"
@@ -215,7 +354,7 @@
           <div class="mt-3 text-xs uppercase tracking-[0.18em] text-zinc-400">
             {$pomodoroTimer.focusLabel.trim() || 'No target selected'}
           </div>
-        </article>
+        </Card>
 
         <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
           <div class="flex items-center justify-between gap-3">
@@ -312,6 +451,12 @@
               <div class="mt-3 line-clamp-2 min-h-[2.75rem] text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 {entry.label || 'Untitled session'}
               </div>
+              {#if getHistoryTaskLabel(entry)}
+                <div class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white/80 px-2.5 py-1 text-[11px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-400">
+                  <ClipboardCheck size={12} />
+                  {getHistoryTaskLabel(entry)}
+                </div>
+              {/if}
               <div class="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
                 {new Date(entry.completedAt).toLocaleString('tr-TR', {
                   day: '2-digit',

@@ -2,9 +2,10 @@
   import { browser } from '$app/environment';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { format } from 'date-fns';
-  import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-svelte';
+  import { ChevronLeft, ChevronRight, GripVertical, Shuffle } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
+  import { PageTitle, SectionHeader } from '$lib/components/ui';
   import {
     MONTHLY_PLAN_DAYS,
     MONTHLY_PLAN_WEEKS,
@@ -934,31 +935,30 @@
   <div class="flex-1 overflow-auto p-4 sm:p-6">
     <div class="mx-auto flex max-w-5xl flex-col gap-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-          <h1 class="text-base font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">This Month</h1>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-4">
+            <button
+              onclick={() => monthOffset -= 1}
+              class="rounded-lg p-2 text-zinc-500 transition-colors duration-150 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <PageTitle class="min-w-[180px] text-center text-xl">
+              {monthLabel(currentMonthKey)}
+            </PageTitle>
+            <button
+              onclick={() => monthOffset += 1}
+              class="rounded-lg p-2 text-zinc-500 transition-colors duration-150 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
           {#if isPastMonth}
             <span class="rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">Archived</span>
           {/if}
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <div class="flex items-center gap-1 rounded-[18px] border border-zinc-200 bg-white/80 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950/50">
-            <button
-              onclick={() => monthOffset -= 1}
-              class="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span class="min-w-[110px] text-center text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              {monthLabel(currentMonthKey)}
-            </span>
-            <button
-              onclick={() => monthOffset += 1}
-              class="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
           {#if monthOffset !== 0}
             <button
               onclick={() => monthOffset = 0}
@@ -1032,7 +1032,10 @@
         <div class="grid gap-6 xl:grid-cols-2">
           <section class="rounded-[28px] border border-zinc-200 bg-white/92 px-4 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] sm:px-6 dark:border-zinc-800 dark:bg-zinc-950/88">
             <div class="mb-5">
-              <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Weekly Templates</div>
+              <div class="mb-3 flex items-center gap-2">
+                <div class="h-2 w-2 rounded-full bg-blue-500/70"></div>
+                <SectionHeader>Haftalik Gorevler</SectionHeader>
+              </div>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
                 Her hafta tekrar eden işler. Kopya atmak için aşağıdaki haftalık chip'leri ilgili haftanın günlerine sürükle.
               </div>
@@ -1042,7 +1045,10 @@
 
           <section class="rounded-[28px] border border-zinc-200 bg-white/92 px-4 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] sm:px-6 dark:border-zinc-800 dark:bg-zinc-950/88">
             <div class="mb-5">
-              <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Monthly Templates</div>
+              <div class="mb-3 flex items-center gap-2">
+                <div class="h-2 w-2 rounded-full bg-amber-500/70"></div>
+                <SectionHeader>Aylik Gorevler</SectionHeader>
+              </div>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
                 Ay içine yayılacak recurring işler. Aşağıdaki chip'lerden calendar'a sürükleyerek manuel kopya oluştur.
               </div>
@@ -1082,7 +1088,7 @@
         <section class="rounded-[28px] border border-zinc-200 bg-white/92 px-4 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] sm:px-6 dark:border-zinc-800 dark:bg-zinc-950/88">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Monthly Spread</div>
+              <SectionHeader>Monthly Spread</SectionHeader>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
                 Bu ayın monthly instance'ları hafta/gün bazında
               </div>
@@ -1091,8 +1097,9 @@
               type="button"
               onclick={handleAutoDistribute}
               disabled={isAutoDistributing}
-              class="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              class="flex items-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm transition-colors duration-150 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
             >
+              <Shuffle size={16} />
               {isAutoDistributing ? 'Distributing...' : 'Auto Distribute'}
             </button>
           </div>
@@ -1151,7 +1158,7 @@
                       activeDropZone === `${monthlyDropZoneKey}:cell` ||
                       activeDropZone === monthlyDropZoneKey ||
                       activeDropZone === weeklyDropZoneKey
-                        ? 'border-sky-300 dark:border-sky-500/40'
+                        ? 'border-dashed border-zinc-400 bg-zinc-800/50 dark:border-zinc-400'
                         : 'border-zinc-200 dark:border-zinc-800'
                     }`}
                   >
@@ -1169,7 +1176,7 @@
                       }}
                       class={`flex min-h-[76px] flex-col gap-2 rounded-[14px] transition-colors ${
                         activeDropZone === monthlyDropZoneKey
-                          ? 'bg-sky-50/70 dark:bg-sky-950/10'
+                          ? 'border border-dashed border-zinc-400 bg-zinc-800/50'
                           : ''
                       }`}
                     >
@@ -1223,7 +1230,7 @@
                       }}
                       class={`mt-1 flex min-h-[8px] flex-col gap-1 rounded-[12px] transition-colors ${
                         activeDropZone === weeklyDropZoneKey
-                          ? 'bg-violet-50/70 dark:bg-violet-950/10'
+                          ? 'border border-dashed border-zinc-400 bg-zinc-800/50'
                           : ''
                       }`}
                     >
@@ -1275,8 +1282,9 @@
           </div>
 
           <div class="mt-5 rounded-[22px] border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-950/16">
-            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
-              Flexible Monthly Tasks
+            <div class="mb-3 flex items-center gap-2">
+              <div class="h-2 w-2 rounded-full bg-zinc-600"></div>
+              <SectionHeader class="text-amber-700 dark:text-amber-300">Yerlestirilmemis</SectionHeader>
             </div>
             <div
               role="group"
@@ -1285,7 +1293,7 @@
               ondrop={handleFlexibleDrop}
               class={`mt-3 flex min-h-[44px] flex-wrap gap-2 rounded-[18px] transition-colors ${
                 activeDropZone === 'monthly:flexible'
-                  ? 'bg-amber-100/60 dark:bg-amber-950/18'
+                  ? 'border border-dashed border-zinc-400 bg-zinc-800/50'
                   : ''
               }`}
             >

@@ -22,6 +22,7 @@
   } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
+  import { EmptyState, SectionHeader } from '$lib/components/ui';
   import { getTaskAttachmentsForWeek } from '$lib/taskAttachments';
   import TaskRow from './TaskRow.svelte';
   import { parseTaskDetails, serializeTaskDetails } from '$lib/taskDetails';
@@ -650,11 +651,9 @@
   </div>
 
   {#if tasksQuery.error}
-    <div class="py-4 text-center text-sm text-red-500">
-      Failed to load random tasks.
-    </div>
+    <EmptyState message="Random taskler yuklenemedi." class="py-8" />
   {:else if tasksQuery.isLoading}
-    <div class="py-4 text-center text-sm text-zinc-400">Loading…</div>
+    <EmptyState message="Random taskler yukleniyor." class="py-8" />
   {:else}
     <div
       use:dndzone={{ items: localCategoryItems, flipDurationMs: 150, type: 'category-board' }}
@@ -680,7 +679,7 @@
                   if (event.key === 'Enter') saveCategoryEdit(category);
                   if (event.key === 'Escape') editingCategory = null;
                 }}
-                class="min-w-0 flex-1 bg-transparent text-3xl font-semibold tracking-tight text-zinc-900 outline-none dark:text-zinc-100"
+                class="min-w-0 flex-1 bg-transparent text-sm font-medium uppercase tracking-widest text-zinc-500 outline-none dark:text-zinc-300"
               />
               <button
                 onclick={() => saveCategoryEdit(category)}
@@ -699,9 +698,9 @@
             {:else}
               <button
                 onclick={() => startCategoryEdit(category)}
-                class="text-left text-3xl font-semibold tracking-tight text-zinc-900 transition-colors hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-200"
+                class="text-left transition-colors duration-150 hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-zinc-400"
               >
-                {category}
+                <SectionHeader class="text-zinc-500 dark:text-zinc-300">{category}</SectionHeader>
               </button>
               <button
                 onclick={() => startCategoryEdit(category)}
@@ -784,25 +783,29 @@
           </div>
 
           {#if (localCategoryTasks[category] ?? []).filter((task) => isTaskVisible(task)).length === 0}
-            <div class="py-2 text-sm italic text-zinc-400">
-              {taskFilter === 'all'
-                ? 'No tasks in this category yet.'
-                : 'No tasks in this filter.'}
-            </div>
+            <EmptyState
+              class="py-8"
+              message={taskFilter === 'all'
+                ? 'Bu kategoride henuz gorev yok.'
+                : 'Bu filtrede gorunecek gorev yok.'}
+            />
           {/if}
 
-          <input
-            value={categoryDrafts[category] ?? ''}
-            oninput={(event) => {
-              categoryDrafts = {
-                ...categoryDrafts,
-                [category]: (event.target as HTMLInputElement).value
-              };
-            }}
-            onkeydown={(event) => onNewTaskKeydown(category, event)}
-            placeholder="+ Add a task"
-            class="w-full rounded-md border border-transparent bg-transparent px-3 py-2 text-sm text-zinc-500 outline-none transition-colors placeholder:text-zinc-400 hover:bg-zinc-50 focus:border-zinc-200 focus:bg-zinc-50 focus:text-zinc-900 focus:ring-1 focus:ring-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-900/50 dark:focus:border-zinc-700 dark:focus:bg-zinc-900 dark:focus:text-zinc-100"
-          />
+          <div class="mt-2 flex items-center gap-2 rounded-lg px-1 py-2">
+            <div class="h-1.5 w-1.5 rounded-full bg-zinc-700"></div>
+            <input
+              value={categoryDrafts[category] ?? ''}
+              oninput={(event) => {
+                categoryDrafts = {
+                  ...categoryDrafts,
+                  [category]: (event.target as HTMLInputElement).value
+                };
+              }}
+              onkeydown={(event) => onNewTaskKeydown(category, event)}
+              placeholder="Gorev ekle..."
+              class="w-full bg-transparent text-sm text-zinc-400 outline-none transition-colors duration-150 placeholder:text-zinc-700 hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-zinc-400 dark:text-zinc-400 dark:hover:text-zinc-200"
+            />
+          </div>
           </div>
         </section>
       {/each}

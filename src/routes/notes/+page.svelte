@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { Lightbulb, NotebookPen, Plus, Trash2 } from 'lucide-svelte';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
+  import { Card, PageTitle, SectionHeader } from '$lib/components/ui';
   import {
     createDefaultNotesState,
     NOTES_SUPABASE_KEY,
@@ -178,7 +179,7 @@
   <div class="mx-auto flex max-w-6xl flex-col gap-6">
     <div class="flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <h1 class="text-base font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Notes</h1>
+        <PageTitle class="text-zinc-950 dark:text-zinc-50">Notes</PageTitle>
         <span class="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">Notes Deck</span>
       </div>
       <div class="flex items-center gap-3 text-sm text-zinc-400 dark:text-zinc-500">
@@ -188,7 +189,7 @@
     </div>
 
     <section class="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-      <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
+      <Card class="rounded-[28px] border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
         <div class="flex items-center gap-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">
           <NotebookPen size={16} />
           Workspace Note
@@ -199,41 +200,48 @@
           placeholder="Uzun notlarini, toplantı ozetlerini veya daginik dusuncelerini buraya birak..."
           class="mt-4 min-h-[28rem] w-full rounded-[24px] border border-zinc-200 bg-zinc-50/75 px-4 py-4 text-sm leading-7 text-zinc-900 outline-none transition-colors focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/65 dark:text-zinc-100 dark:focus:border-zinc-500"
         ></textarea>
-      </article>
+      </Card>
 
       <div class="flex flex-col gap-5">
-        <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
-          <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Today</div>
+        <Card class="rounded-[28px] border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
+          <SectionHeader>Today</SectionHeader>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Bugunun dusunceleri</p>
           <textarea
             value={notes.today}
             oninput={(event) => updateField('today', (event.currentTarget as HTMLTextAreaElement).value)}
-            placeholder="Bugun kesin bitmesi gerekenler..."
+            placeholder="Bugun aklina gelenler, dusunceler, baglantilar..."
             class="mt-4 min-h-[9rem] w-full rounded-[20px] border border-zinc-200 bg-zinc-50/75 px-4 py-3 text-sm leading-7 text-zinc-900 outline-none transition-colors focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/65 dark:text-zinc-100 dark:focus:border-zinc-500"
           ></textarea>
-        </article>
+        </Card>
 
-        <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
-          <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Next Up</div>
+        <Card class="rounded-[28px] border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
+          <SectionHeader>Next Up</SectionHeader>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            Yakinda bakmak istedigin seyler
+          </p>
           <textarea
             value={notes.next}
             oninput={(event) => updateField('next', (event.currentTarget as HTMLTextAreaElement).value)}
             placeholder="Sıradaki adimlar..."
             class="mt-4 min-h-[8rem] w-full rounded-[20px] border border-zinc-200 bg-zinc-50/75 px-4 py-3 text-sm leading-7 text-zinc-900 outline-none transition-colors focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/65 dark:text-zinc-100 dark:focus:border-zinc-500"
           ></textarea>
-        </article>
+        </Card>
 
-        <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
-          <div class="flex items-center gap-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+        <Card class="rounded-[28px] border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
+          <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
             <Lightbulb size={16} />
-            Parking Lot
+            <SectionHeader>Parking Lot</SectionHeader>
           </div>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            Simdi degil ama unutmayacagin seyler
+          </p>
           <textarea
             value={notes.parkingLot}
             oninput={(event) => updateField('parkingLot', (event.currentTarget as HTMLTextAreaElement).value)}
             placeholder="Simdi degil ama kaybolmasin dedigin seyler..."
             class="mt-4 min-h-[8rem] w-full rounded-[20px] border border-zinc-200 bg-zinc-50/75 px-4 py-3 text-sm leading-7 text-zinc-900 outline-none transition-colors focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/65 dark:text-zinc-100 dark:focus:border-zinc-500"
           ></textarea>
-        </article>
+        </Card>
       </div>
     </section>
 

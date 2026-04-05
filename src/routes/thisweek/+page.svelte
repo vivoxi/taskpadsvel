@@ -1,13 +1,13 @@
 <script lang="ts">
   import { format } from 'date-fns';
-  import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { Archive, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { browser } from '$app/environment';
   import { apiJson, apiSendJson, canUseClientApi } from '$lib/client/api';
   import AttachmentChip from '$lib/components/AttachmentChip.svelte';
   import DayCard from '$lib/components/DayCard.svelte';
-  import ScheduleDay from '$lib/components/ScheduleDay.svelte';
+  import { Card, EmptyState, PageTitle, SectionHeader } from '$lib/components/ui';
   import {
     getMonthlyInstanceStatusStorageKey,
     getMonthlyInstancesStorageKey,
@@ -50,6 +50,7 @@
   const monthlyInstanceStatusStorageKey = $derived(
     getMonthlyInstanceStatusStorageKey(currentMonthKey)
   );
+  let completingInstanceKeys = $state<string[]>([]);
 
   function isToday(dayIndex: number): boolean {
     if ($weekOffset !== 0) return false;
@@ -171,6 +172,22 @@
     ];
   }
 
+  function isCompletionTransitioning(instanceKey: string): boolean {
+    return completingInstanceKeys.includes(instanceKey);
+  }
+
+  function getActiveInstancesForDay(day: string): PersistedPeriodTaskInstance[] {
+    return getCurrentInstancesForDay(day).filter(
+      (instance) => !isCurrentInstanceCompleted(instance) || isCompletionTransitioning(instance.instance_key)
+    );
+  }
+
+  function getCompletedInstancesForDay(day: string): PersistedPeriodTaskInstance[] {
+    return getCurrentInstancesForDay(day).filter(
+      (instance) => isCurrentInstanceCompleted(instance) && !isCompletionTransitioning(instance.instance_key)
+    );
+  }
+
   function getCurrentAttachmentsForInstance(instance: PersistedPeriodTaskInstance): TaskAttachment[] {
     return getTaskAttachmentsForWeek(
       currentInstanceAttachmentsQuery.data ?? [],
@@ -186,6 +203,15 @@
     return (weeklyInstanceStatusQuery.data ?? []).includes(instance.instance_key);
   }
 
+  function getInstanceSourceLabel(instance: PersistedPeriodTaskInstance): string {
+    const matchedTask = (tasksQuery.data ?? []).find((task) => task.id === instance.template_id);
+    if (matchedTask && matchedTask.title && matchedTask.title !== instance.title) {
+      return matchedTask.title;
+    }
+
+    return `${instance.period_type} template`;
+  }
+
   async function toggleCurrentInstance(instance: PersistedPeriodTaskInstance) {
     const statusStorageKey =
       instance.period_type === 'monthly'
@@ -195,11 +221,16 @@
       instance.period_type === 'monthly'
         ? (monthlyInstanceStatusQuery.data ?? [])
         : (weeklyInstanceStatusQuery.data ?? []);
+    const currentlyCompleted = currentKeys.includes(instance.instance_key);
     const { completedInstanceKeys: nextKeys } = toggleCompletedInstanceKey(
       currentKeys,
       instance.instance_key
     );
     const updatedAt = new Date().toISOString();
+
+    if (!currentlyCompleted) {
+      completingInstanceKeys = Array.from(new Set([...completingInstanceKeys, instance.instance_key]));
+    }
 
     try {
       await apiSendJson('/api/preferences', 'POST', {
@@ -211,14 +242,20 @@
         updatedAt
       });
     } catch {
+      completingInstanceKeys = completingInstanceKeys.filter((key) => key !== instance.instance_key);
       toast.error('Failed to update task');
       return;
+    }
+
+    if (!currentlyCompleted) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
     }
 
     queryClient.setQueryData(
       ['period_instance_status', instance.period_type, statusStorageKey],
       nextKeys
     );
+    completingInstanceKeys = completingInstanceKeys.filter((key) => key !== instance.instance_key);
     queryClient.invalidateQueries({ queryKey: ['period_instance_status', instance.period_type] });
   }
 
@@ -480,7 +517,23 @@
 
 <div class="flex h-full flex-col">
   <!-- Week navigation header -->
-  <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 shrink-0 sm:px-6 sm:py-4">
+  <div class="shrink-0 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 sm:px-6 sm:py-4">
+    {#if isPastWeek}
+      <div class="mb-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-2">
+        <Archive size={16} class="text-zinc-500" />
+        <span class="text-sm text-zinc-500">
+          Bu geçmiş bir haftanın arşividir — salt okunur
+        </span>
+        <button
+          type="button"
+          onclick={() => weekOffset.set(0)}
+          class="ml-auto text-xs text-zinc-400 underline underline-offset-2 transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-zinc-400"
+        >
+          Bu haftaya dön
+        </button>
+      </div>
+    {/if}
+    <div class="flex items-center justify-between gap-3">
     <div class="flex items-center gap-1">
       <button
         onclick={() => weekOffset.update((n) => n - 1)}
@@ -516,6 +569,7 @@
         Generate from This Month
       </a>
     {/if}
+    </div>
   </div>
 
   <!-- Main content -->
@@ -525,32 +579,33 @@
       {#if snapshotQuery.isLoading}
         <div class="flex items-center justify-center h-40 text-sm text-zinc-400">Loading…</div>
       {:else if !snapshotQuery.data}
-        <div class="flex items-center justify-center h-40 text-sm text-zinc-400 italic">
-          No snapshot found for this week.
-        </div>
+        <EmptyState message="No snapshot found for this week." />
       {:else}
-        <div class="grid grid-cols-1 gap-8 p-4 sm:p-6 xl:grid-cols-[2fr_3fr]">
+        <div class="grid grid-cols-1 gap-[var(--space-lg)] p-[var(--space-xl)] xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <!-- Left: Planner notes -->
-          <div class="flex flex-col gap-4">
-            <h3 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Planner Notes
-            </h3>
-            {#each DAY_NAMES as day, i}
-              <DayCard
-                weekKey={currentWeekKey}
-                {day}
-                initialContent={getPastPlannerNote(day)}
-                isToday={false}
-                readonly={true}
-              />
-            {/each}
-          </div>
+          <Card class="bg-zinc-900/80">
+            <div class="flex flex-col gap-[var(--space-md)]">
+              <div class="flex items-center justify-between gap-3">
+                <PageTitle class="text-lg">This Week</PageTitle>
+                <SectionHeader>Gunluk Notlar</SectionHeader>
+              </div>
+              {#each DAY_NAMES as day, i}
+                <DayCard
+                  weekKey={currentWeekKey}
+                  {day}
+                  initialContent={getPastPlannerNote(day)}
+                  isToday={false}
+                  readonly={true}
+                />
+              {/each}
+            </div>
+          </Card>
 
           <!-- Right: Tasks -->
-          <div class="flex flex-col gap-4">
-            <h3 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Tasks
-            </h3>
+          <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
+          <Card class="bg-zinc-900/35">
+            <div class="flex flex-col gap-[var(--space-md)]">
+            <SectionHeader>Bu Haftanin Gorevleri</SectionHeader>
             <div class="flex flex-col gap-2">
               <span class="text-xs font-medium text-green-600 dark:text-green-400">
                 Completed
@@ -672,72 +727,93 @@
                 {/if}
               </div>
             </div>
+            </div>
+          </Card>
           </div>
         </div>
       {/if}
     {:else}
       <!-- Current/future week: editable planner + AI schedule -->
-      <div class="grid grid-cols-1 gap-8 p-4 sm:p-6 xl:grid-cols-[2fr_3fr]">
+      <div class="grid grid-cols-1 gap-[var(--space-lg)] p-[var(--space-xl)] xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <!-- Left: Daily planner notes -->
-        <div class="flex flex-col gap-4">
-          <h3 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-            Daily Planner
-          </h3>
-          {#if planQuery.isLoading}
-            <div class="text-sm text-zinc-400">Loading…</div>
-          {:else}
-            {#each DAY_NAMES as day, i}
-              <DayCard
-                weekKey={currentWeekKey}
-                {day}
-                dateLabel={getDayDateLabel(day)}
-                initialContent={getPlanContent(day)}
-                isToday={isToday(i)}
-                readonly={false}
-              />
-            {/each}
-          {/if}
-        </div>
+        <Card class="bg-zinc-900/80">
+          <div class="flex flex-col gap-[var(--space-md)]">
+            <div class="flex items-center justify-between gap-3">
+              <PageTitle class="text-lg">This Week</PageTitle>
+              <SectionHeader>Gunluk Notlar</SectionHeader>
+            </div>
+            {#if planQuery.isLoading}
+              <EmptyState message="Planner notes are loading." />
+            {:else}
+              {#each DAY_NAMES as day, i}
+                <DayCard
+                  weekKey={currentWeekKey}
+                  {day}
+                  dateLabel={getDayDateLabel(day)}
+                  initialContent={getPlanContent(day)}
+                  isToday={isToday(i)}
+                  readonly={false}
+                />
+              {/each}
+            {/if}
+          </div>
+        </Card>
 
         <!-- Right: weekly schedule blocks -->
-        <div class="flex flex-col gap-4">
-          <h3 class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-            Weekly Schedule
-          </h3>
+        <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
+        <Card class="bg-zinc-900/35">
+          <div class="flex flex-col gap-[var(--space-md)]">
+          <SectionHeader>Bu Haftanin Gorevleri</SectionHeader>
           {#if weeklyInstancesQuery.isLoading || monthlyInstancesQuery.isLoading}
-            <div class="text-sm text-zinc-400">Loading…</div>
+            <EmptyState message="Haftalik gorevler yukleniyor." />
           {:else if [...(weeklyInstancesQuery.data ?? []), ...(monthlyInstancesQuery.data ?? [])].length === 0}
-            <div class="text-sm text-zinc-400 italic py-4">
-              No schedule yet. Open This Month and drag template copies into the board.
-            </div>
+            <EmptyState
+              message="No weekly execution plan yet."
+              actionLabel="This Month'a git"
+              onAction={() => {
+                window.location.href = '/thismonth';
+              }}
+            />
           {:else}
             <div class="flex flex-col gap-6">
               {#each DAY_NAMES as day, i}
-                {#if getCurrentInstancesForDay(day).length > 0}
+                {@const activeInstances = getActiveInstancesForDay(day)}
+                {@const completedInstances = getCompletedInstancesForDay(day)}
+                {#if activeInstances.length > 0 || completedInstances.length > 0}
                   {@const todayDay = isToday(i)}
-                  <div class="flex flex-col gap-2">
-                    <div class="flex items-center gap-2">
-                      <h4 class={`text-xs font-semibold uppercase tracking-wide ${todayDay ? 'text-blue-500 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                  <div class={`flex flex-col gap-3 rounded-xl border p-4 ${
+                    todayDay
+                      ? 'border-zinc-500 bg-zinc-800/70'
+                      : 'border-zinc-800 bg-zinc-900/30'
+                  }`}>
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-2">
+                      <h4 class={`text-xs font-medium ${todayDay ? 'text-zinc-200' : 'text-zinc-500 dark:text-zinc-400'}`}>
                         {day}
                       </h4>
                       <span class="text-xs text-zinc-400 dark:text-zinc-500">
                         {getDayDateLabel(day)}
                       </span>
+                      </div>
                       {#if todayDay}
-                        <span class="text-xs font-medium text-blue-500">Today</span>
+                        <span class="rounded-full bg-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
+                          Bugun
+                        </span>
                       {/if}
                     </div>
                     <div class="flex flex-col gap-2">
-                      {#each getCurrentInstancesForDay(day) as instance (instance.instance_key)}
+                      {#each activeInstances as instance (instance.instance_key)}
                         <button
                           type="button"
                           onclick={() => toggleCurrentInstance(instance)}
-                          class={`flex items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
-                            isCurrentInstanceCompleted(instance)
-                              ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-950/15'
-                              : instance.period_type === 'monthly'
-                                ? 'border-sky-200 bg-sky-50/70 dark:border-sky-500/20 dark:bg-sky-950/15'
-                                : 'border-violet-200 bg-violet-50/70 dark:border-violet-500/20 dark:bg-violet-950/15'
+                          class={`flex items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all duration-300 ${
+                            isCompletionTransitioning(instance.instance_key)
+                              ? 'opacity-40'
+                              : 'opacity-100'
+                          } ${
+                            instance.period_type === 'monthly'
+                              ? 'border-sky-200 bg-sky-50/70 dark:border-sky-500/20 dark:bg-sky-950/15'
+                              : 'border-violet-200 bg-violet-50/70 dark:border-violet-500/20 dark:bg-violet-950/15'
                           }`}
                         >
                           <span
@@ -759,13 +835,12 @@
                                 [{instance.period_type}]
                               </span>
                               <span
-                                class={`text-sm font-medium ${
-                                  isCurrentInstanceCompleted(instance)
-                                    ? 'text-zinc-400 line-through'
-                                    : 'text-zinc-900 dark:text-zinc-100'
-                                }`}
+                                class="text-sm font-medium text-zinc-900 dark:text-zinc-100"
                               >
                                 {instance.title}
+                              </span>
+                              <span class="ml-auto text-xs text-zinc-600 dark:text-zinc-500">
+                                ↩ {getInstanceSourceLabel(instance)}
                               </span>
                             </div>
                             <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -785,12 +860,63 @@
                           </div>
                         </button>
                       {/each}
+                      {#if completedInstances.length > 0}
+                        <div class="pt-2">
+                          <div class="mb-2 text-[11px] uppercase tracking-widest text-zinc-500">
+                            Done
+                          </div>
+                          <div class="flex flex-col gap-2">
+                            {#each completedInstances as instance (instance.instance_key)}
+                              <button
+                                type="button"
+                                onclick={() => toggleCurrentInstance(instance)}
+                                class="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 px-3 py-3 text-left opacity-40 transition-all duration-300 dark:border-emerald-500/20 dark:bg-emerald-950/15"
+                              >
+                                <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-orange-500 bg-orange-500 dark:border-orange-400 dark:bg-orange-400">
+                                  <svg viewBox="0 0 10 10" class="h-3 w-3" fill="none">
+                                    <path d="M2 5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                                  </svg>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                  <div class="flex items-center gap-2">
+                                    <span class="font-mono text-[10px] uppercase text-zinc-400">
+                                      [{instance.period_type}]
+                                    </span>
+                                    <span class="text-sm font-medium text-zinc-400 line-through">
+                                      {instance.title}
+                                    </span>
+                                    <span class="ml-auto text-xs text-zinc-600 dark:text-zinc-500">
+                                      ↩ {getInstanceSourceLabel(instance)}
+                                    </span>
+                                  </div>
+                                  <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                    {instance.estimated_hours ?? 1}h
+                                  </div>
+                                  {#if getCurrentAttachmentsForInstance(instance).length > 0}
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                      {#each getCurrentAttachmentsForInstance(instance) as attachment (attachment.id)}
+                                        <AttachmentChip
+                                          {attachment}
+                                          readonly={true}
+                                          onDelete={() => {}}
+                                        />
+                                      {/each}
+                                    </div>
+                                  {/if}
+                                </div>
+                              </button>
+                            {/each}
+                          </div>
+                        </div>
+                      {/if}
                     </div>
                   </div>
                 {/if}
               {/each}
             </div>
           {/if}
+          </div>
+        </Card>
         </div>
       </div>
     {/if}

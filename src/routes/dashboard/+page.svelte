@@ -2,6 +2,7 @@
   import { browser } from '$app/environment';
   import { createQuery } from '@tanstack/svelte-query';
   import { apiJson, canUseClientApi } from '$lib/client/api';
+  import { Card, EmptyState, PageTitle, SectionHeader } from '$lib/components/ui';
   import {
     getMonthlyInstanceStatusStorageKey,
     getMonthlyInstancesStorageKey,
@@ -219,6 +220,28 @@
   );
   const latestWeeklySummary = $derived(summarizeSnapshot(latestWeeklySnapshotQuery.data));
   const latestMonthlySummary = $derived(summarizeSnapshot(latestMonthlySnapshotQuery.data));
+  const focusTasks = $derived(
+    [
+      ...(weeklyInstancesQuery.data ?? []),
+      ...(monthlyInstancesQuery.data ?? [])
+    ]
+      .filter((instance) => {
+        const completedKeys =
+          instance.period_type === 'monthly'
+            ? (monthlyStatusQuery.data ?? [])
+            : (weeklyStatusQuery.data ?? []);
+        return !completedKeys.includes(instance.instance_key);
+      })
+      .sort((a, b) => {
+        const aDay = a.preferred_day ?? 'ZZZ';
+        const bDay = b.preferred_day ?? 'ZZZ';
+        return (
+          aDay.localeCompare(bDay, 'tr') ||
+          (b.estimated_hours ?? 1) - (a.estimated_hours ?? 1)
+        );
+      })
+      .slice(0, 3)
+  );
   const metricCards = $derived<MetricCard[]>([
     {
       title: 'Weekly',
@@ -279,8 +302,8 @@
   <title>Dashboard — TaskpadSvel</title>
 </svelte:head>
 
-<div class="min-h-full px-4 py-6 sm:px-6 sm:py-8">
-  <div class="mx-auto flex max-w-6xl flex-col gap-8">
+<div class="min-h-full px-[var(--space-xl)] py-[var(--space-xl)]">
+  <div class="mx-auto flex max-w-6xl flex-col gap-[var(--space-lg)]">
     <section class="relative overflow-hidden rounded-[30px] border border-zinc-200/80 bg-white/95 p-6 shadow-[0_32px_90px_-48px_rgba(15,23,42,0.38)] sm:p-8 dark:border-zinc-800 dark:bg-zinc-950/85">
       <div class="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <div class="flex flex-col gap-4">
@@ -357,6 +380,27 @@
       </div>
     </section>
 
+    <Card class="border-zinc-700 bg-zinc-800/60">
+      <div class="flex flex-col gap-3">
+        <SectionHeader>Su an odaklan</SectionHeader>
+        {#if focusTasks.length > 0}
+          <div class="flex flex-col gap-1.5">
+            {#each focusTasks as task (task.instance_key)}
+              <div class="flex items-center gap-2 py-1.5">
+                <div class="h-1.5 w-1.5 rounded-full bg-zinc-500"></div>
+                <span class="text-sm text-zinc-300">{task.title}</span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <EmptyState
+            class="py-8"
+            message="Su an icin odak listesi bos."
+          />
+        {/if}
+      </div>
+    </Card>
+
     {#if hasError}
       <div class="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
         Dashboard verisi yuklenemedi.
@@ -368,7 +412,7 @@
     {:else}
       <section class="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         {#each metricCards as card (card.title)}
-          <a href={card.href} class={`group relative overflow-hidden rounded-[26px] border p-5 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.42)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-36px_rgba(15,23,42,0.55)] ${card.shellClass}`}>
+          <a href={card.href} class={`group relative cursor-pointer overflow-hidden rounded-[26px] border p-5 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.42)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-36px_rgba(15,23,42,0.55)] ${card.shellClass}`}>
             <div class="relative flex h-full flex-col gap-5">
               <div class="flex items-start justify-between gap-3">
                 <div>
@@ -390,6 +434,10 @@
               </div>
 
               <div class="space-y-3">
+                <div class="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-zinc-400">
+                  <span>Aktif ilerleme</span>
+                  <ArrowUpRight size={14} class="text-zinc-600 transition-colors duration-150 group-hover:text-zinc-400" />
+                </div>
                 <div class="h-2.5 overflow-hidden rounded-full bg-white/80 dark:bg-black/20">
                   <div class={`h-full rounded-full ${card.railClass}`} style={`width: ${card.percentage}%`}></div>
                 </div>
@@ -404,7 +452,7 @@
       </section>
 
       <article class="rounded-[28px] border border-zinc-200 bg-white/95 p-6 shadow-[0_22px_70px_-44px_rgba(15,23,42,0.38)] dark:border-zinc-800 dark:bg-zinc-950/90">
-          <h2 class="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Last Archived Results</h2>
+          <SectionHeader>Gecmis Donemler</SectionHeader>
           <div class="mt-6 space-y-4">
             <div class="rounded-[22px] border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-xs uppercase tracking-[0.18em] text-zinc-400">Weekly Archive</div>
@@ -419,7 +467,7 @@
                 </div>
                 <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                   <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
-                    Carry-over: {latestWeeklySummary.openTasks}
+                    Open tasks: {latestWeeklySummary.openTasks}
                   </div>
                   <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
                     {latestWeeklySummary.openHours}h acik
@@ -443,7 +491,7 @@
                 </div>
                 <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                   <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
-                    Carry-over: {latestMonthlySummary.openTasks}
+                    Open tasks: {latestMonthlySummary.openTasks}
                   </div>
                   <div class="rounded-[14px] border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950/60">
                     {latestMonthlySummary.openHours}h acik

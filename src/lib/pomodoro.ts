@@ -5,6 +5,8 @@ export type PomodoroHistoryEntry = {
   label: string;
   completedAt: string;
   durationSeconds: number;
+  taskId: string | null;
+  taskTitle: string | null;
 };
 
 export type PomodoroSnapshot = {
@@ -13,6 +15,8 @@ export type PomodoroSnapshot = {
   isRunning: boolean;
   targetEpochMs: number | null;
   focusLabel: string;
+  selectedTaskId: string | null;
+  selectedTaskTitle: string | null;
   completedFocusCount: number;
   completedFocusToday: number;
   completedBreakToday: number;
@@ -77,6 +81,8 @@ export function createDefaultPomodoroSnapshot(): PomodoroSnapshot {
     isRunning: false,
     targetEpochMs: null,
     focusLabel: '',
+    selectedTaskId: null,
+    selectedTaskTitle: null,
     completedFocusCount: 0,
     completedFocusToday: 0,
     completedBreakToday: 0,
@@ -102,7 +108,9 @@ function normalizePomodoroHistoryEntry(value: unknown): PomodoroHistoryEntry | n
     durationSeconds:
       typeof parsed.durationSeconds === 'number' && Number.isFinite(parsed.durationSeconds)
         ? Math.max(0, Math.floor(parsed.durationSeconds))
-        : 0
+        : 0,
+    taskId: typeof parsed.taskId === 'string' ? parsed.taskId : null,
+    taskTitle: typeof parsed.taskTitle === 'string' ? parsed.taskTitle : null
   };
 }
 
@@ -124,6 +132,9 @@ function normalizePomodoroSnapshot(value: unknown): PomodoroSnapshot {
         ? parsed.targetEpochMs
         : null,
     focusLabel: typeof parsed.focusLabel === 'string' ? parsed.focusLabel : '',
+    selectedTaskId: typeof parsed.selectedTaskId === 'string' ? parsed.selectedTaskId : null,
+    selectedTaskTitle:
+      typeof parsed.selectedTaskTitle === 'string' ? parsed.selectedTaskTitle : null,
     completedFocusCount:
       typeof parsed.completedFocusCount === 'number' && Number.isFinite(parsed.completedFocusCount)
         ? Math.max(0, Math.floor(parsed.completedFocusCount))

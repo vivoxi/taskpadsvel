@@ -46,7 +46,7 @@
       : 'hidden w-56 border-r md:flex md:flex-col'
   } gap-1`}
 >
-  <div class="px-2 py-3 mb-2">
+  <div class="mb-2 border-b border-zinc-200 px-2 py-3 dark:border-zinc-800">
     <h1 class="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
       TaskpadSvel
     </h1>
@@ -60,10 +60,10 @@
       data-sveltekit-preload-data="hover"
       aria-current={isActive ? 'page' : undefined}
       onclick={onNavigate}
-      class="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors
+      class="flex items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm transition-colors duration-150
         {isActive
-          ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-medium'
-          : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100'}"
+          ? 'border-zinc-300 bg-zinc-200 font-medium text-zinc-900 dark:border-zinc-300 dark:bg-zinc-800 dark:text-zinc-100'
+          : 'border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-100'}"
     >
       <item.icon size={16} />
       {item.label}

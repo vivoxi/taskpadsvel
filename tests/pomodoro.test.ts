@@ -44,14 +44,18 @@ describe('pomodoro helpers', () => {
           mode: 'focus' as const,
           label: 'Recent',
           completedAt: '2026-03-15T10:00:00.000Z',
-          durationSeconds: 1500
+          durationSeconds: 1500,
+          taskId: null,
+          taskTitle: null
         },
         {
           id: 'too-old',
           mode: 'focus' as const,
           label: 'Old',
           completedAt: '2026-02-01T10:00:00.000Z',
-          durationSeconds: 1500
+          durationSeconds: 1500,
+          taskId: null,
+          taskTitle: null
         }
       ],
       {
@@ -59,7 +63,9 @@ describe('pomodoro helpers', () => {
         mode: 'short',
         label: 'Break',
         completedAt: '2026-04-02T12:00:00.000Z',
-        durationSeconds: 300
+        durationSeconds: 300,
+        taskId: null,
+        taskTitle: null
       },
       nowMs
     );
@@ -77,6 +83,8 @@ describe('pomodoro helpers', () => {
           isRunning: true,
           targetEpochMs: 123456,
           focusLabel: 'Review',
+          selectedTaskId: 'weekly:1:2026-W14',
+          selectedTaskTitle: 'Review backlog',
           completedFocusCount: 4,
           completedFocusToday: 2,
           completedBreakToday: 1,
@@ -90,6 +98,8 @@ describe('pomodoro helpers', () => {
       isRunning: true,
       targetEpochMs: 123456,
       focusLabel: 'Review',
+      selectedTaskId: 'weekly:1:2026-W14',
+      selectedTaskTitle: 'Review backlog',
       completedFocusCount: 4,
       completedFocusToday: 2,
       completedBreakToday: 1,
@@ -129,7 +139,9 @@ describe('pomodoro helpers', () => {
         mode: 'focus',
         label: 'Write',
         completedAt: '2026-04-02T10:00:00.000Z',
-        durationSeconds: 1500
+        durationSeconds: 1500,
+        taskId: null,
+        taskTitle: null
       },
     ]);
   });
@@ -144,6 +156,8 @@ describe('pomodoro helpers', () => {
             isRunning: false,
             targetEpochMs: null,
             focusLabel: 'Inbox',
+            selectedTaskId: 'monthly:2:2026-04',
+            selectedTaskTitle: 'Invoice follow-up',
             completedFocusCount: 3,
             completedFocusToday: 2,
             completedBreakToday: 2,
@@ -156,7 +170,9 @@ describe('pomodoro helpers', () => {
               mode: 'focus',
               label: 'Inbox',
               completedAt: '2026-04-02T10:00:00.000Z',
-              durationSeconds: 1500
+              durationSeconds: 1500,
+              taskId: 'monthly:2:2026-04',
+              taskTitle: 'Invoice follow-up'
             }
           ],
           updatedAt: '2026-04-02T11:00:00.000Z'
@@ -170,6 +186,8 @@ describe('pomodoro helpers', () => {
         isRunning: false,
         targetEpochMs: null,
         focusLabel: 'Inbox',
+        selectedTaskId: 'monthly:2:2026-04',
+        selectedTaskTitle: 'Invoice follow-up',
         completedFocusCount: 3,
         completedFocusToday: 2,
         completedBreakToday: 2,
@@ -182,7 +200,9 @@ describe('pomodoro helpers', () => {
           mode: 'focus',
           label: 'Inbox',
           completedAt: '2026-04-02T10:00:00.000Z',
-          durationSeconds: 1500
+          durationSeconds: 1500,
+          taskId: 'monthly:2:2026-04',
+          taskTitle: 'Invoice follow-up'
         }
       ],
       updatedAt: '2026-04-02T11:00:00.000Z'

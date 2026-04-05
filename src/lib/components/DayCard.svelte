@@ -66,7 +66,7 @@
     value={content}
     oninput={onInput}
     disabled={readonly}
-    placeholder="Notes for {day}…"
+    placeholder="Bugun neler yapacaksin? (Gorev notlari, toplanti hazirligi...)"
     rows={4}
     class="w-full bg-transparent text-sm text-zinc-700 dark:text-zinc-300 resize-none outline-none placeholder:text-zinc-400 disabled:opacity-60"
   ></textarea>

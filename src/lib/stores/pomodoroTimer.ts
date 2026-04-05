@@ -69,6 +69,8 @@ function persistLocalState(state: PomodoroTimerState) {
     isRunning: state.isRunning,
     targetEpochMs: state.targetEpochMs,
     focusLabel: state.focusLabel,
+    selectedTaskId: state.selectedTaskId,
+    selectedTaskTitle: state.selectedTaskTitle,
     completedFocusCount: state.completedFocusCount,
     completedFocusToday: state.completedFocusToday,
     completedBreakToday: state.completedBreakToday,
@@ -98,6 +100,8 @@ function scheduleRemoteSync(delay = 400) {
       isRunning: state.isRunning,
       targetEpochMs: state.targetEpochMs,
       focusLabel: state.focusLabel,
+      selectedTaskId: state.selectedTaskId,
+      selectedTaskTitle: state.selectedTaskTitle,
       completedFocusCount: state.completedFocusCount,
       completedFocusToday: state.completedFocusToday,
       completedBreakToday: state.completedBreakToday,
@@ -207,9 +211,11 @@ function completeSession() {
   const historyEntry: PomodoroHistoryEntry = {
     id: `${Date.now()}-${completedMode}`,
     mode: completedMode,
-    label: current.focusLabel.trim(),
+    label: current.focusLabel.trim() || current.selectedTaskTitle || '',
     completedAt: new Date().toISOString(),
-    durationSeconds
+    durationSeconds,
+    taskId: current.selectedTaskId,
+    taskTitle: current.selectedTaskTitle
   };
 
   const nextMode =
@@ -373,6 +379,25 @@ export const pomodoroTimer = {
       localInteraction: true,
       remoteSyncDelay: 500
     });
+  },
+  setSelectedTask(taskId: string | null, taskTitle: string | null) {
+    updateTimerState(
+      (state) => {
+        const shouldSyncLabel =
+          !state.focusLabel.trim() || state.focusLabel.trim() === (state.selectedTaskTitle ?? '');
+
+        return {
+          ...state,
+          selectedTaskId: taskId,
+          selectedTaskTitle: taskTitle,
+          focusLabel: shouldSyncLabel ? taskTitle ?? '' : state.focusLabel
+        };
+      },
+      {
+        localInteraction: true,
+        remoteSyncDelay: 500
+      }
+    );
   },
   startSession() {
     const current = get(pomodoroTimerState);
