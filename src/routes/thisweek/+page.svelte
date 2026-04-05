@@ -76,7 +76,7 @@
     queryKey: ['weekly_plan', currentWeekKey] as const,
     queryFn: async () =>
       apiJson<WeeklyPlan[]>(`/api/weekly-plan?weekKey=${encodeURIComponent(currentWeekKey)}`),
-    enabled: browser && canAccessApi && !isPastWeek
+    enabled: browser && canAccessApi
   }));
 
   function getPlanContent(day: string): string {
@@ -98,7 +98,7 @@
       );
       return parsePersistedPeriodInstances(response.entries[0]?.value)?.instances ?? [];
     },
-    enabled: browser && canAccessApi && !isPastWeek
+    enabled: browser && canAccessApi
   }));
 
   const monthlyInstancesQuery = createQuery(() => ({
@@ -117,7 +117,7 @@
         (instance) => instance.preferred_week_of_month === currentWeekOfMonth
       );
     },
-    enabled: browser && canAccessApi && !isPastWeek
+    enabled: browser && canAccessApi
   }));
 
   const weeklyInstanceStatusQuery = createQuery(() => ({
@@ -130,7 +130,7 @@
         parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
       );
     },
-    enabled: browser && canAccessApi && !isPastWeek
+    enabled: browser && canAccessApi
   }));
 
   const monthlyInstanceStatusQuery = createQuery(() => ({
@@ -143,7 +143,7 @@
         parsePersistedPeriodInstanceStatus(response.entries[0]?.value)?.completedInstanceKeys ?? []
       );
     },
-    enabled: browser && canAccessApi && !isPastWeek
+    enabled: browser && canAccessApi
   }));
 
   const currentInstanceTemplateIds = $derived(
@@ -167,7 +167,7 @@
         )}&weekKey=${encodeURIComponent(currentWeekKey)}`
       );
     },
-    enabled: browser && canAccessApi && !isPastWeek && currentInstanceTemplateIds.length > 0
+    enabled: browser && canAccessApi && currentInstanceTemplateIds.length > 0
   }));
 
   function getBlocksForDay(day: string): ScheduleBlock[] {
@@ -271,7 +271,7 @@
   const tasksQuery = createQuery(() => ({
     queryKey: ['tasks_all'] as const,
     queryFn: async () => apiJson<Task[]>('/api/tasks'),
-    enabled: browser && canAccessApi && !isPastWeek
+    enabled: browser && canAccessApi
   }));
 
   function getLinkedTaskForBlock(block: ScheduleBlock): { id: string; type: TaskType } | null {
@@ -314,7 +314,7 @@
         `/api/attachments?taskIds=${encodeURIComponent(linkedTaskIds.join(','))}&weekKey=${encodeURIComponent(currentWeekKey)}`
       );
     },
-    enabled: browser && canAccessApi && !isPastWeek && linkedTaskIds.length > 0
+    enabled: browser && canAccessApi && linkedTaskIds.length > 0
   }));
 
   const snapshotQuery = createQuery(() => ({
@@ -327,14 +327,73 @@
   }));
 
   function getPastPlannerNote(day: string): string {
-    return snapshotQuery.data?.planner_notes?.[day] ?? '';
+    return getPlanContent(day) || snapshotQuery.data?.planner_notes?.[day] || '';
+  }
+
+  function mapPastInstancesToTasks(
+    instances: PersistedPeriodTaskInstance[],
+    completedInstanceKeys: string[],
+    completed: boolean
+  ): Task[] {
+    const completedKeySet = new Set(completedInstanceKeys);
+
+    return instances
+      .filter((instance) => completedKeySet.has(instance.instance_key) === completed)
+      .map((instance) => ({
+        id: instance.template_id,
+        title: instance.title,
+        type: instance.type,
+        completed,
+        notes: instance.notes,
+        created_at: instance.created_at
+      }));
   }
 
   function getPastCompletedTasks(): Task[] {
+    if (
+      weeklyInstancesQuery.isSuccess &&
+      monthlyInstancesQuery.isSuccess &&
+      weeklyInstanceStatusQuery.isSuccess &&
+      monthlyInstanceStatusQuery.isSuccess
+    ) {
+      return [
+        ...mapPastInstancesToTasks(
+          (weeklyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+          weeklyInstanceStatusQuery.data ?? [],
+          true
+        ),
+        ...mapPastInstancesToTasks(
+          (monthlyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+          monthlyInstanceStatusQuery.data ?? [],
+          true
+        )
+      ];
+    }
+
     return (snapshotQuery.data?.completed_tasks ?? []) as Task[];
   }
 
   function getPastMissedTasks(): Task[] {
+    if (
+      weeklyInstancesQuery.isSuccess &&
+      monthlyInstancesQuery.isSuccess &&
+      weeklyInstanceStatusQuery.isSuccess &&
+      monthlyInstanceStatusQuery.isSuccess
+    ) {
+      return [
+        ...mapPastInstancesToTasks(
+          (weeklyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+          weeklyInstanceStatusQuery.data ?? [],
+          false
+        ),
+        ...mapPastInstancesToTasks(
+          (monthlyInstancesQuery.data ?? []) as PersistedPeriodTaskInstance[],
+          monthlyInstanceStatusQuery.data ?? [],
+          false
+        )
+      ];
+    }
+
     return (snapshotQuery.data?.missed_tasks ?? []) as Task[];
   }
 
@@ -343,11 +402,32 @@
   }
 
   function getPastCompletedScheduleBlocks(): ScheduleBlock[] {
+    if (scheduleQuery.isSuccess) {
+      return (scheduleQuery.data ?? []).filter((block) => parseScheduleBlockDetails(block.notes).completed);
+    }
+
     return (snapshotQuery.data?.completed_schedule_blocks ?? []) as ScheduleBlock[];
   }
 
   function getPastMissedScheduleBlocks(): ScheduleBlock[] {
+    if (scheduleQuery.isSuccess) {
+      return (scheduleQuery.data ?? []).filter(
+        (block) => !parseScheduleBlockDetails(block.notes).completed
+      );
+    }
+
     return (snapshotQuery.data?.missed_schedule_blocks ?? []) as ScheduleBlock[];
+  }
+
+  function hasPastArchiveContent(): boolean {
+    return Boolean(
+      DAY_NAMES.some((day) => getPastPlannerNote(day).trim().length > 0) ||
+        getPastCompletedTasks().length > 0 ||
+        getPastMissedTasks().length > 0 ||
+        getPastCompletedScheduleBlocks().length > 0 ||
+        getPastMissedScheduleBlocks().length > 0 ||
+        snapshotQuery.data
+    );
   }
 
   const archiveAttachmentsQuery = createQuery(() => ({
@@ -584,10 +664,10 @@
   <div class="flex-1 overflow-auto">
     {#if isPastWeek}
       <!-- Past week: read from snapshot -->
-      {#if snapshotQuery.isLoading}
+      {#if snapshotQuery.isLoading || planQuery.isLoading || weeklyInstancesQuery.isLoading || monthlyInstancesQuery.isLoading || weeklyInstanceStatusQuery.isLoading || monthlyInstanceStatusQuery.isLoading || scheduleQuery.isLoading}
         <div class="flex items-center justify-center h-40 text-sm text-zinc-400">Loading…</div>
-      {:else if !snapshotQuery.data}
-        <EmptyState message="No snapshot found for this week." />
+      {:else if !hasPastArchiveContent()}
+        <EmptyState message="No archived data found for this week." />
       {:else}
         <div class="grid grid-cols-1 gap-[var(--space-lg)] p-[var(--space-xl)] xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <!-- Left: Planner notes -->
