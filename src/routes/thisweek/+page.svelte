@@ -611,7 +611,7 @@
       <div class="mb-3 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-2">
         <Archive size={16} class="text-zinc-500" />
         <span class="text-sm text-zinc-500">
-          Bu geçmiş bir haftanın arşividir — salt okunur
+          Gecmis haftanin review gorunumu — salt okunur
         </span>
         <a
           href={currentWeekHref}
@@ -654,7 +654,7 @@
         href="/thismonth"
         class="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
-        Generate from This Month
+        Plan in This Month
       </a>
     {/if}
     </div>
@@ -674,7 +674,10 @@
           <Card class="bg-zinc-900/80">
             <div class="flex flex-col gap-[var(--space-md)]">
               <div class="flex items-center justify-between gap-3">
-                <PageTitle class="text-lg">This Week</PageTitle>
+                <div>
+                  <SectionHeader>Operating Console</SectionHeader>
+                  <PageTitle class="mt-2 text-lg">Weekly execution</PageTitle>
+                </div>
                 <SectionHeader>Gunluk Notlar</SectionHeader>
               </div>
               {#each DAY_NAMES as day, i}
@@ -693,7 +696,10 @@
           <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
           <Card class="bg-zinc-900/35">
             <div class="flex flex-col gap-[var(--space-md)]">
-            <SectionHeader>Bu Haftanin Gorevleri</SectionHeader>
+            <div class="flex items-center justify-between gap-3">
+              <SectionHeader>Bu Haftanin Gorevleri</SectionHeader>
+              <span class="text-xs text-zinc-500 dark:text-zinc-400">Execution from This Month</span>
+            </div>
             <div class="flex flex-col gap-2">
               <span class="text-xs font-medium text-green-600 dark:text-green-400">
                 Completed
@@ -827,7 +833,10 @@
         <Card class="bg-zinc-900/80">
           <div class="flex flex-col gap-[var(--space-md)]">
             <div class="flex items-center justify-between gap-3">
-              <PageTitle class="text-lg">This Week</PageTitle>
+              <div>
+                <SectionHeader>Past Week Review</SectionHeader>
+                <PageTitle class="mt-2 text-lg">Weekly review</PageTitle>
+              </div>
               <SectionHeader>Gunluk Notlar</SectionHeader>
             </div>
             {#if planQuery.isLoading}
@@ -848,10 +857,10 @@
         </Card>
 
         <!-- Right: weekly schedule blocks -->
-        <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
-        <Card class="bg-zinc-900/35">
-          <div class="flex flex-col gap-[var(--space-md)]">
-          <SectionHeader>Bu Haftanin Gorevleri</SectionHeader>
+          <div class="xl:border-l xl:border-zinc-800 xl:pl-[var(--space-lg)]">
+          <Card class="bg-zinc-900/35">
+            <div class="flex flex-col gap-[var(--space-md)]">
+            <SectionHeader>Haftalik Sonuc</SectionHeader>
           {#if weeklyInstancesQuery.isLoading || monthlyInstancesQuery.isLoading}
             <EmptyState message="Haftalik gorevler yukleniyor." />
           {:else if [...(weeklyInstancesQuery.data ?? []), ...(monthlyInstancesQuery.data ?? [])].length === 0}

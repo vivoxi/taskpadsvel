@@ -2,7 +2,6 @@
   import { browser } from '$app/environment';
   import { createQuery } from '@tanstack/svelte-query';
   import {
-    Archive,
     Bell,
     BellOff,
     CirclePause,
@@ -200,13 +199,13 @@
         <div class="max-w-3xl">
           <div class="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-red-700 dark:border-red-500/20 dark:bg-white/6 dark:text-red-300">
             <Sparkles size={12} />
-            Focus Console
+            Focus Companion
           </div>
           <h1 class="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-4xl">
-            Pomodoro takip sayfasi
+            Focus alongside the work
           </h1>
           <p class="mt-3 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Tek isi one al, sprinti baslat, mola ritmini bozma. Sayaç cihazda korunur ve arka planda buluta da senkronlanir.
+            Once This Week icinden gorevini sec, sonra sprinti baslat. Bu ekran planlama degil, calismayi surdurme yuzeyi.
           </p>
         </div>
 
@@ -319,12 +318,12 @@
         <Card class="rounded-[28px] border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
           <div class="flex items-center gap-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">
             <TimerReset size={16} />
-            Current Focus
+            Selected Work
           </div>
           <div class="mt-4">
-            <SectionHeader class="text-zinc-500 dark:text-zinc-400">Uzerinde calistigin gorev</SectionHeader>
+            <SectionHeader class="text-zinc-500 dark:text-zinc-400">This Week context</SectionHeader>
             <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-              Bu hafta planindan bir gorev secersen session gecmisine 1 pomodoro olarak baglanir.
+              Once bu hafta planindan bir gorev sec. Session gecmisi bu goreve baglanir.
             </p>
             <select
               value={$pomodoroTimer.selectedTaskId ?? ''}
@@ -344,15 +343,18 @@
               </p>
             {/if}
           </div>
+          <div class="mt-4 text-[11px] uppercase tracking-[0.18em] text-zinc-400">
+            Opsiyonel not
+          </div>
           <input
             type="text"
             value={$pomodoroTimer.focusLabel}
             oninput={handleFocusLabelInput}
-            placeholder="Su an odaklandigin isi yaz..."
+            placeholder="Istersen bu sprint icin kisa bir not ekle..."
             class="mt-4 w-full rounded-[18px] border border-zinc-200 bg-zinc-50/70 px-4 py-3 text-sm text-zinc-900 outline-none transition-colors focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100 dark:focus:border-zinc-500"
           />
           <div class="mt-3 text-xs uppercase tracking-[0.18em] text-zinc-400">
-            {$pomodoroTimer.focusLabel.trim() || 'No target selected'}
+            {$pomodoroTimer.selectedTaskTitle || $pomodoroTimer.focusLabel.trim() || 'No work selected'}
           </div>
         </Card>
 
@@ -412,8 +414,9 @@
         </article>
 
         <article class="rounded-[28px] border border-zinc-200 bg-white/92 px-5 py-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.25)] dark:border-zinc-800 dark:bg-zinc-950/88">
-          <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">How This Works</div>
+          <div class="text-sm font-medium text-zinc-500 dark:text-zinc-400">How To Use This</div>
           <ul class="mt-4 space-y-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            <li>This Week icinden bir gorev sec, sonra sprinti baslat.</li>
             <li>Timer local olarak tarayicida saklanir; deploy veya DB gerektirmez.</li>
             <li>Focus bitince otomatik mola moduna, mola bitince tekrar focus moduna gecer.</li>
             <li>Her 4 focus sprintten sonra siradaki mola uzun mola olur.</li>

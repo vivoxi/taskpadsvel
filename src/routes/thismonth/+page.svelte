@@ -978,6 +978,15 @@
         </div>
       </div>
 
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-zinc-200 bg-white/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/65">
+        <div>
+          <SectionHeader>Planning Studio</SectionHeader>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            Recurring isleri aya ve haftalara dagit. Gunluk yurutme icin <a href="/thisweek" class="font-medium text-zinc-700 underline underline-offset-2 dark:text-zinc-200">This Week</a> ekranina don.
+          </p>
+        </div>
+      </div>
+
       {#if isPastMonth}
         {#if snapshotQuery.isLoading}
           <div class="flex h-40 items-center justify-center text-sm text-zinc-400">Loading…</div>
@@ -1037,7 +1046,7 @@
                 <SectionHeader>Haftalik Gorevler</SectionHeader>
               </div>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
-                Her hafta tekrar eden işler. Kopya atmak için aşağıdaki haftalık chip'leri ilgili haftanın günlerine sürükle.
+                Planning source. Her hafta tekrar eden isleri ilgili haftalara yerlestir.
               </div>
             </div>
             <TaskList type="weekly" templateMode={true} />
@@ -1050,14 +1059,14 @@
                 <SectionHeader>Aylik Gorevler</SectionHeader>
               </div>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
-                Ay içine yayılacak recurring işler. Aşağıdaki chip'lerden calendar'a sürükleyerek manuel kopya oluştur.
+                Planning source. Aylik recurring isleri calendar uzerine dagit.
               </div>
             </div>
             <TaskList type="monthly" templateMode={true} />
 
             <div class="mt-6 rounded-[20px] border border-sky-100 bg-sky-50/40 p-4 dark:border-sky-500/10 dark:bg-sky-950/10">
               <div class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">
-                Drag Monthly Copies
+                Monthly Copies
               </div>
               <div class="mt-3 flex min-h-[44px] flex-wrap gap-2">
                 {#each monthlyTemplateInstances as sourceItem (sourceItem.instance_key)}
@@ -1090,7 +1099,7 @@
             <div>
               <SectionHeader>Monthly Spread</SectionHeader>
               <div class="mt-1 text-xs uppercase tracking-[0.18em] text-zinc-400">
-                Bu ayın monthly instance'ları hafta/gün bazında
+                Plan gorunumu. Bu ayin work dagilimini hafta ve gun bazinda duzenle.
               </div>
             </div>
             <button
@@ -1100,7 +1109,7 @@
               class="flex items-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm transition-colors duration-150 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
             >
               <Shuffle size={16} />
-              {isAutoDistributing ? 'Distributing...' : 'Auto Distribute'}
+              {isAutoDistributing ? 'Planning...' : 'Auto Distribute'}
             </button>
           </div>
 

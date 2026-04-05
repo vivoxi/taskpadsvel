@@ -13,7 +13,6 @@
     type PersistedPeriodTaskInstance
   } from '$lib/periodInstances';
   import {
-    Activity,
     ArrowUpRight,
     Calendar,
     CalendarDays,
@@ -304,19 +303,14 @@
 
 <div class="min-h-full px-[var(--space-xl)] py-[var(--space-xl)]">
   <div class="mx-auto flex max-w-6xl flex-col gap-[var(--space-lg)]">
-    <section class="relative overflow-hidden rounded-[30px] border border-zinc-200/80 bg-white/95 p-6 shadow-[0_32px_90px_-48px_rgba(15,23,42,0.38)] sm:p-8 dark:border-zinc-800 dark:bg-zinc-950/85">
-      <div class="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+    <section class="relative overflow-hidden rounded-[28px] border border-zinc-200/80 bg-white/92 p-6 shadow-[0_22px_70px_-44px_rgba(15,23,42,0.28)] sm:p-7 dark:border-zinc-800 dark:bg-zinc-950/88">
+      <div class="relative grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <div class="flex flex-col gap-4">
-          <div class="inline-flex w-fit items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-300">
-            <Activity size={12} />
-            Operations Pulse
-          </div>
           <div class="max-w-2xl">
-            <h1 class="text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl dark:text-zinc-50">
-              Weekly ve monthly islerin anlik tamamlama yuzdesi
-            </h1>
+            <SectionHeader>Overview</SectionHeader>
+            <PageTitle class="mt-2 text-zinc-950 dark:text-zinc-50">Progress overview</PageTitle>
             <p class="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Bu ekran, su an acik task listelerindeki ilerlemeyi ve son arsivlenen donemlerin kapanis oranlarini tek bakista gosterir.
+              Bu ekran destekleyici bir ozet. Gunluk kararlar icin once <a href="/thisweek" class="font-medium text-zinc-700 underline underline-offset-2 dark:text-zinc-200">This Week</a>, planlama icin <a href="/thismonth" class="font-medium text-zinc-700 underline underline-offset-2 dark:text-zinc-200">This Month</a> kullan.
             </p>
           </div>
           <div class="grid gap-3 sm:grid-cols-3">
@@ -347,14 +341,11 @@
           </div>
         </div>
 
-        <div class="relative overflow-hidden rounded-[26px] border border-zinc-900 bg-zinc-950 p-6 text-zinc-50">
-          <div class="absolute right-4 top-4 rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.24em] text-zinc-500">
-            Live
-          </div>
+        <div class="relative overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-950 p-5 text-zinc-50">
           <div class="relative flex h-full flex-col justify-between gap-8">
             <div class="space-y-3">
-              <div class="text-xs uppercase tracking-[0.22em] text-zinc-500">Overall velocity</div>
-              <div class="text-5xl font-semibold leading-none sm:text-6xl">{overallPercentage}%</div>
+              <div class="text-xs uppercase tracking-[0.22em] text-zinc-500">Current cadence</div>
+              <div class="text-4xl font-semibold leading-none sm:text-5xl">{overallPercentage}%</div>
               <div class="flex items-center gap-2 text-sm text-zinc-400">
                 <ArrowUpRight size={14} />
                 {totalCompleted} / {totalTasks} task tamamlandi
@@ -382,7 +373,7 @@
 
     <Card class="border-zinc-700 bg-zinc-800/60">
       <div class="flex flex-col gap-3">
-        <SectionHeader>Su an odaklan</SectionHeader>
+        <SectionHeader>Bu hafta odak</SectionHeader>
         {#if focusTasks.length > 0}
           <div class="flex flex-col gap-1.5">
             {#each focusTasks as task (task.instance_key)}
@@ -453,6 +444,9 @@
 
       <article class="rounded-[28px] border border-zinc-200 bg-white/95 p-6 shadow-[0_22px_70px_-44px_rgba(15,23,42,0.38)] dark:border-zinc-800 dark:bg-zinc-950/90">
           <SectionHeader>Gecmis Donemler</SectionHeader>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            Kapanmis haftalar ve aylar icin hizli review ozeti.
+          </p>
           <div class="mt-6 space-y-4">
             <div class="rounded-[22px] border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div class="text-xs uppercase tracking-[0.18em] text-zinc-400">Weekly Archive</div>

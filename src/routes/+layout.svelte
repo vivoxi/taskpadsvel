@@ -62,9 +62,12 @@
         >
           <Menu size={18} />
         </button>
-        <div class="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+        <a
+          href="/thisweek"
+          class="text-sm font-semibold tracking-tight text-zinc-900 transition-colors duration-150 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300"
+        >
           TaskpadSvel
-        </div>
+        </a>
         <div class="h-10 w-10"></div>
       </header>
 
