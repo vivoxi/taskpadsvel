@@ -870,8 +870,10 @@ function getBaseSlots(monthKey: string, settings: PlannerSettings): Slot[] {
 function sortTasksForScheduling(tasks: TaskInstance[]): TaskInstance[] {
   return [...tasks].sort((left, right) => {
     return (
-      Number(left.day_name === null) - Number(right.day_name === null) ||
-      Number(left.week_key === null) - Number(right.week_key === null) ||
+      Number((left.day_name ?? left.preferred_day) === null) -
+        Number((right.day_name ?? right.preferred_day) === null) ||
+      Number((left.week_key ?? left.preferred_week) === null) -
+        Number((right.week_key ?? right.preferred_week) === null) ||
       getTaskHours(right) - getTaskHours(left) ||
       left.title_snapshot.localeCompare(right.title_snapshot)
     );
@@ -879,7 +881,8 @@ function sortTasksForScheduling(tasks: TaskInstance[]): TaskInstance[] {
 }
 
 function slotMatchesTask(slot: Slot, task: TaskInstance): boolean {
-  if (task.day_name && slot.dayName !== task.day_name) return false;
+  const targetDay = task.day_name ?? task.preferred_day;
+  if (targetDay && slot.dayName !== targetDay) return false;
   if (task.week_key && slot.weekKey !== task.week_key) return false;
   if (task.preferred_week && inferWeekIndex(slot.weekKey, task.month_key) !== task.preferred_week) return false;
   return true;
