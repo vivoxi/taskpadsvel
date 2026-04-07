@@ -389,7 +389,7 @@
                           {#if instance}
                             <select
                               value={instance.day_name ?? ''}
-                              onchange={(event) =>
+                              oninput={(event) =>
                                 patchInstance(instance.id, {
                                   day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
                                 })}
@@ -440,7 +440,7 @@
                           Week
                           <select
                             value={instance.week_key ?? ''}
-                            onchange={(event) =>
+                            oninput={(event) =>
                               patchInstance(instance.id, {
                                 week_key: (event.currentTarget as HTMLSelectElement).value || null,
                                 month_key: data.view.monthKey
@@ -458,7 +458,7 @@
                           Day
                           <select
                             value={instance.day_name ?? ''}
-                            onchange={(event) =>
+                            oninput={(event) =>
                               patchInstance(instance.id, {
                                 day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
                               })}
