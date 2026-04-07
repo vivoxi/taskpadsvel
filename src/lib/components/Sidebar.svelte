@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { format } from 'date-fns';
-  import { CalendarRange, History, Moon, NotebookPen, Rows3, Sun } from 'lucide-svelte';
+  import { CalendarRange, History, ListChecks, Moon, NotebookPen, Rows3, Sun } from 'lucide-svelte';
   import { getMonthKey, getWeekKey, monthLabel, weekLabel } from '$lib/planner/dates';
   import SyncStatusBadge from '$lib/components/SyncStatusBadge.svelte';
   import { themeMode, toggleTheme } from '$lib/stores/theme';
@@ -25,6 +25,7 @@
   const navItems: NavItem[] = [
     { href: '/week', label: 'Week', eyebrow: weekLabel(getWeekKey()), icon: Rows3 },
     { href: '/month', label: 'Month', eyebrow: monthLabel(getMonthKey()), icon: CalendarRange },
+    { href: '/one-time', label: 'One-time', eyebrow: 'Checklist work', icon: ListChecks },
     { href: '/history', label: 'History', eyebrow: 'Review + archive', icon: History },
     { href: '/notes', label: 'Notes', eyebrow: 'Reference', icon: NotebookPen }
   ];

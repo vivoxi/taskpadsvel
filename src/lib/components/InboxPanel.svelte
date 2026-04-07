@@ -80,6 +80,10 @@
   }
 
   async function archiveItem(item: InboxItem) {
+    if (!confirm('Are you sure you want to archive this inbox item?')) {
+      return;
+    }
+
     localItems = localItems.filter((entry) => entry.id !== item.id);
 
     try {

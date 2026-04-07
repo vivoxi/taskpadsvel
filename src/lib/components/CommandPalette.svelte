@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/stores';
-  import { CalendarRange, History, Moon, NotebookPen, Rows3, Search, Sparkles } from 'lucide-svelte';
+  import { CalendarRange, History, ListChecks, Moon, NotebookPen, Rows3, Search, Sparkles } from 'lucide-svelte';
   import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { apiJson, apiSendJson } from '$lib/client/api';
@@ -45,6 +45,13 @@
       meta: 'Review + archive',
       icon: History,
       run: () => goto('/history')
+    },
+    {
+      id: 'nav-one-time',
+      label: 'Open one-time tasks',
+      meta: 'Checklist workspace',
+      icon: ListChecks,
+      run: () => goto('/one-time')
     },
     {
       id: 'nav-notes',
@@ -128,8 +135,8 @@
       id: `note-${note.id}`,
       label: note.title,
       meta: note.snippet,
-      icon: NotebookPen,
-      run: () => goto(`/notes?doc=${note.id}`)
+      icon: note.kind === 'one-time' ? ListChecks : NotebookPen,
+      run: () => goto(note.kind === 'one-time' ? `/one-time?doc=${note.id}` : `/notes?doc=${note.id}`)
     })),
     ...results.attachments.map((attachment) => ({
       id: `attachment-${attachment.id}`,

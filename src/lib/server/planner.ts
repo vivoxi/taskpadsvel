@@ -10,11 +10,13 @@ import {
   DAY_NAMES,
   type CapacitySnapshot,
   type DayName,
+  type DocumentKind,
   type HistoryViewData,
   type InboxItem,
   type MonthViewData,
   type NotesDocument,
   type NotesViewData,
+  type OneTimeViewData,
   type PlannerBlock,
   type PlannerSettings,
   type ScheduleBlock,
@@ -183,6 +185,17 @@ function normalizeAttachment(row: Partial<TaskAttachment>): TaskAttachment {
     file_path: row.file_path ?? '',
     mime_type: row.mime_type ?? null,
     created_at: row.created_at ?? new Date().toISOString()
+  };
+}
+
+function normalizeDocument(row: Partial<NotesDocument>): NotesDocument {
+  return {
+    id: row.id ?? crypto.randomUUID(),
+    title: row.title ?? 'Untitled',
+    slug: row.slug ?? null,
+    kind: row.kind === 'one-time' ? 'one-time' : 'note',
+    created_at: row.created_at ?? new Date().toISOString(),
+    updated_at: row.updated_at ?? new Date().toISOString()
   };
 }
 
@@ -590,10 +603,14 @@ export async function getMonthViewData(inputMonthKey: string): Promise<MonthView
   };
 }
 
-export async function getNotesViewData(selectedDocumentId: string | null | undefined): Promise<NotesViewData> {
+async function getDocumentWorkspaceData(
+  kind: DocumentKind,
+  selectedDocumentId: string | null | undefined
+): Promise<NotesViewData> {
   const { data: initialDocuments, error: docsError } = await supabaseAdmin
     .from('notes_documents')
     .select('*')
+    .eq('kind', kind)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -601,14 +618,16 @@ export async function getNotesViewData(selectedDocumentId: string | null | undef
     throw error(500, docsError.message);
   }
 
-  let documents = (initialDocuments ?? []) as NotesDocument[];
+  let documents = (initialDocuments ?? []).map((row) => normalizeDocument(row as NotesDocument));
 
   if (documents.length === 0) {
     const now = new Date().toISOString();
+    const seedTitle = kind === 'one-time' ? 'One-time tasks' : 'Workspace';
     const seedDocument = {
       id: crypto.randomUUID(),
-      title: 'Workspace',
-      slug: 'workspace',
+      title: seedTitle,
+      slug: kind === 'one-time' ? 'one-time-tasks' : 'workspace',
+      kind,
       created_at: now,
       updated_at: now
     };
@@ -622,18 +641,24 @@ export async function getNotesViewData(selectedDocumentId: string | null | undef
       {
         id: crypto.randomUUID(),
         document_id: seedDocument.id,
-        type: 'heading',
-        text: 'Workspace',
-        checked: null,
-        level: 1,
+        type: kind === 'one-time' ? 'checklist' : 'heading',
+        text:
+          kind === 'one-time'
+            ? 'First one-time task'
+            : 'Workspace',
+        checked: kind === 'one-time' ? false : null,
+        level: kind === 'one-time' ? null : 1,
         sort_order: 0
       },
       {
         id: crypto.randomUUID(),
         document_id: seedDocument.id,
-        type: 'paragraph',
-        text: 'Use this space for reference material, context, and thought work that should not drive planning logic.',
-        checked: null,
+        type: kind === 'one-time' ? 'checklist' : 'paragraph',
+        text:
+          kind === 'one-time'
+            ? 'Second one-time task'
+            : 'Use this space for reference material, context, and thought work that should not drive planning logic.',
+        checked: kind === 'one-time' ? false : null,
         level: null,
         sort_order: 1
       }
@@ -643,7 +668,7 @@ export async function getNotesViewData(selectedDocumentId: string | null | undef
       throw error(500, blockError.message);
     }
 
-    documents = [seedDocument];
+    documents = [normalizeDocument(seedDocument)];
   }
 
   const selectedId =
@@ -679,6 +704,21 @@ export async function getNotesViewData(selectedDocumentId: string | null | undef
     documents,
     blocks: normalizeBlocks(blockRows),
     attachments: (attachmentRows ?? []).map((row) => normalizeAttachment(row as TaskAttachment))
+  };
+}
+
+export async function getNotesViewData(selectedDocumentId: string | null | undefined): Promise<NotesViewData> {
+  return getDocumentWorkspaceData('note', selectedDocumentId);
+}
+
+export async function getOneTimeViewData(
+  selectedDocumentId: string | null | undefined
+): Promise<OneTimeViewData> {
+  const view = await getDocumentWorkspaceData('one-time', selectedDocumentId);
+  return {
+    selectedDocumentId: view.selectedDocumentId,
+    documents: view.documents,
+    blocks: view.blocks
   };
 }
 
@@ -774,7 +814,7 @@ export async function searchPlannerData(query: string): Promise<SearchResults> {
       .limit(6),
     supabaseAdmin
       .from('note_blocks')
-      .select('document_id, text, notes_documents!inner(id, title)')
+      .select('document_id, text, notes_documents!inner(id, title, kind)')
       .ilike('text', pattern)
       .order('updated_at', { ascending: false })
       .limit(6),
@@ -799,7 +839,8 @@ export async function searchPlannerData(query: string): Promise<SearchResults> {
       return {
         id: String(document.id ?? ''),
         title: String(document.title ?? 'Untitled'),
-        snippet: String(noteRow.text ?? '').slice(0, 120)
+        snippet: String(noteRow.text ?? '').slice(0, 120),
+        kind: document.kind === 'one-time' ? 'one-time' : 'note'
       };
     }),
     attachments: (attachmentsQuery.data ?? []) as SearchResults['attachments']
@@ -1193,8 +1234,8 @@ export async function saveNoteBlocks(documentId: string, blocks: PlannerBlock[])
   }
 }
 
-export function createStarterBlocks(): PlannerBlock[] {
-  return [createBlock('paragraph')];
+export function createStarterBlocks(kind: DocumentKind = 'note'): PlannerBlock[] {
+  return [createBlock(kind === 'one-time' ? 'checklist' : 'paragraph')];
 }
 
 export async function syncTemplateSnapshot(templateId: string, title: string): Promise<void> {

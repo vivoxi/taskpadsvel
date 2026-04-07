@@ -14,12 +14,16 @@
     blocks,
     compact = false,
     emptyLabel = 'Start writing',
+    emptyBlockType = 'paragraph',
+    insertOrder = ['heading', 'paragraph', 'checklist'],
     onCommit
   }: {
     sourceKey: string;
     blocks: PlannerBlock[];
     compact?: boolean;
     emptyLabel?: string;
+    emptyBlockType?: PlannerBlock['type'];
+    insertOrder?: PlannerBlock['type'][];
     onCommit?: (blocks: PlannerBlock[]) => void | Promise<void>;
   } = $props();
 
@@ -86,6 +90,10 @@
   }
 
   function removeBlock(index: number) {
+    if (!confirm('Are you sure you want to delete this block?')) {
+      return;
+    }
+
     const nextBlocks = cloneBlocks(localBlocks);
     nextBlocks.splice(index, 1);
     updateBlock(nextBlocks);
@@ -106,6 +114,12 @@
   function handleBlur() {
     void commit();
   }
+
+  function labelFor(type: PlannerBlock['type']): string {
+    if (type === 'heading') return 'Heading';
+    if (type === 'paragraph') return 'Text';
+    return 'Checklist';
+  }
 </script>
 
 <div class={`space-y-2 ${compact ? '' : 'space-y-3'}`}>
@@ -113,7 +127,7 @@
     <button
       type="button"
       class="w-full rounded-[18px] border border-dashed border-[var(--border-strong)] bg-[var(--panel-soft)] px-4 py-4 text-left text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-primary)]"
-      onclick={() => addBlock('paragraph')}
+      onclick={() => addBlock(emptyBlockType)}
     >
       {emptyLabel}
     </button>
@@ -216,32 +230,24 @@
 
   <div class="flex flex-wrap items-center gap-2 pt-2">
     <span class="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-      {isSaving ? 'Saving' : localBlocks.length > 1 ? 'Drag or add block' : 'Add block'}
+      {isSaving ? 'Saving' : localBlocks.length > 1 ? 'Drag or add block' : `Add ${labelFor(emptyBlockType).toLowerCase()}`}
     </span>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-      onclick={() => addBlock('heading')}
-    >
-      <Heading1 size={12} />
-      Heading
-    </button>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-      onclick={() => addBlock('paragraph')}
-    >
-      <Pilcrow size={12} />
-      Text
-    </button>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-      onclick={() => addBlock('checklist')}
-    >
-      <ListChecks size={12} />
-      Checklist
-    </button>
+    {#each insertOrder as type (type)}
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+        onclick={() => addBlock(type)}
+      >
+        {#if type === 'heading'}
+          <Heading1 size={12} />
+        {:else if type === 'paragraph'}
+          <Pilcrow size={12} />
+        {:else}
+          <ListChecks size={12} />
+        {/if}
+        {labelFor(type)}
+      </button>
+    {/each}
     <Plus size={12} class="text-[var(--text-faint)]" />
   </div>
 </div>

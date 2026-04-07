@@ -15,6 +15,7 @@ export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskSourceType = 'weekly' | 'monthly' | 'inbox';
 export type SyncState = 'saving' | 'synced' | 'offline' | 'conflict';
 export type BlockType = 'heading' | 'paragraph' | 'checklist';
+export type DocumentKind = 'note' | 'one-time';
 
 export type PlannerBlock = {
   id: string;
@@ -82,6 +83,7 @@ export type NotesDocument = {
   id: string;
   title: string;
   slug: string | null;
+  kind: DocumentKind;
   created_at: string;
   updated_at: string;
 };
@@ -224,6 +226,12 @@ export type NotesViewData = {
   attachments: TaskAttachment[];
 };
 
+export type OneTimeViewData = {
+  selectedDocumentId: string;
+  documents: NotesDocument[];
+  blocks: PlannerBlock[];
+};
+
 export type HistoryViewData = {
   completedTasks: TaskInstance[];
   carriedTasks: TaskInstance[];
@@ -242,6 +250,7 @@ export type SearchNoteHit = {
   id: string;
   title: string;
   snippet: string;
+  kind: DocumentKind;
 };
 
 export type SearchAttachmentHit = {

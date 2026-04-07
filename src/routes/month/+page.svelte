@@ -124,6 +124,10 @@
   }
 
   async function deleteTemplate(templateId: string) {
+    if (!confirm('Are you sure you want to delete this recurring template?')) {
+      return;
+    }
+
     busyTemplateId = templateId;
 
     try {

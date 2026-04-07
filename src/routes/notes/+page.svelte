@@ -32,6 +32,10 @@
   }
 
   async function deleteDocument() {
+    if (!confirm('Are you sure you want to delete this note? This will also remove its attachments.')) {
+      return;
+    }
+
     try {
       await apiFetch(`/api/notes/documents/${data.view.selectedDocumentId}`, {
         method: 'DELETE'
@@ -77,6 +81,10 @@
   }
 
   async function deleteAttachment(attachmentId: string) {
+    if (!confirm('Are you sure you want to remove this attachment?')) {
+      return;
+    }
+
     try {
       await apiFetch(
         `/api/notes/documents/${data.view.selectedDocumentId}/attachments/${attachmentId}`,
