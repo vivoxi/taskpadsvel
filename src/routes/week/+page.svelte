@@ -4,7 +4,6 @@
   import { toast } from 'svelte-sonner';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
   import DayNoteEditor from '$lib/components/DayNoteEditor.svelte';
-  import InboxPanel from '$lib/components/InboxPanel.svelte';
   import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
   import { apiSendJson } from '$lib/client/api';
   import { DAY_NAMES, type PlannerBlock, type TaskInstance, type TasksByDay } from '$lib/planner/types';
@@ -218,15 +217,6 @@
       </section>
 
       <aside class="space-y-4 xl:sticky xl:top-6 xl:self-start">
-        <InboxPanel
-          title="Quick capture"
-          description="Drop work here first, then move it into the week or the month when it is clear."
-          items={data.view.inboxItems}
-          monthKey={data.view.monthKey}
-          weekKey={data.view.weekKey}
-          compact
-        />
-
         <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)]">
           <div class="border-b border-[var(--border)] pb-4">
             <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Capacity pulse</div>

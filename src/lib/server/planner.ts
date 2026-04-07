@@ -529,7 +529,7 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
 export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewData> {
   const weekKey = normalizeWeekKey(inputWeekKey);
   const monthKey = getBoardMonthKeyForWeek(weekKey);
-  const [settings, inboxItems] = await Promise.all([ensurePlannerSettings(), listInboxItems(8)]);
+  const settings = await ensurePlannerSettings();
   await ensureMonthPlanInstances(monthKey);
 
   const [{ data: taskRows, error: taskError }, { data: noteRows, error: notesError }, blocks] =
@@ -571,7 +571,6 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
       blocks: cloneBlocks(notesByDay.get(dayName) ?? [])
     })),
     tasks,
-    inboxItems,
     settings,
     capacity,
     schedule: buildScheduleHealth(tasks, weekBlocks, capacity)
@@ -581,9 +580,8 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
 export async function getMonthViewData(inputMonthKey: string): Promise<MonthViewData> {
   const { monthKey, templates, instances } = await ensureMonthPlanInstances(inputMonthKey);
   const activeInstances = instances.filter((task) => task.archived_at === null);
-  const [settings, inboxItems, blocks] = await Promise.all([
+  const [settings, blocks] = await Promise.all([
     ensurePlannerSettings(),
-    listInboxItems(12),
     listScheduleBlocksForMonth(monthKey)
   ]);
   const capacity = buildCapacitySnapshot(activeInstances, settings, {
@@ -596,7 +594,6 @@ export async function getMonthViewData(inputMonthKey: string): Promise<MonthView
     weeks: getBoardWeeksForMonth(monthKey),
     templates,
     instances: activeInstances,
-    inboxItems,
     settings,
     capacity,
     schedule: buildScheduleHealth(activeInstances, blocks, capacity)

@@ -4,7 +4,6 @@
   import { toast } from 'svelte-sonner';
   import { apiFetch, apiSendJson } from '$lib/client/api';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
-  import InboxPanel from '$lib/components/InboxPanel.svelte';
   import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
   import { DAY_NAMES, type DayName, type TaskInstance, type TaskTemplate } from '$lib/planner/types';
   import { getNextMonthKey, getPreviousMonthKey } from '$lib/planner/dates';
@@ -234,13 +233,6 @@
 
     <div class="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
       <aside class="space-y-4">
-        <InboxPanel
-          title="Shared inbox"
-          description="Capture work fast, then move it into the weekly or monthly planning layer when it becomes clear."
-          items={data.view.inboxItems}
-          monthKey={data.view.monthKey}
-        />
-
         <section class={`rounded-[28px] border bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)] ${
           $templateMode ? 'border-[var(--border-strong)] ring-1 ring-[var(--border-strong)]' : 'border-[var(--border)]'
         }`}>

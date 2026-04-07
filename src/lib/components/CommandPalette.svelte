@@ -102,34 +102,12 @@
   ]);
 
   const dynamicCommands = $derived<CommandItem[]>([
-    ...(query.trim().length > 0
-      ? [
-          {
-            id: 'create-inbox',
-            label: `Capture "${query.trim()}"`,
-            meta: 'Send to inbox',
-            icon: Search,
-            run: async () => {
-              await apiSendJson('/api/inbox', 'POST', { title: query.trim() });
-              toast.success('Captured to inbox');
-              await invalidateAll();
-            }
-          }
-        ]
-      : []),
     ...results.tasks.map((task) => ({
       id: `task-${task.id}`,
       label: task.title_snapshot,
       meta: task.week_key ? `Week ${task.week_key}` : `Month ${task.month_key ?? ''}`,
       icon: Rows3,
       run: () => goto(task.week_key ? `/week?week=${task.week_key}` : `/month?month=${task.month_key ?? ''}`)
-    })),
-    ...results.inbox.map((item) => ({
-      id: `inbox-${item.id}`,
-      label: item.title,
-      meta: 'Inbox item',
-      icon: Search,
-      run: () => goto('/week')
     })),
     ...results.notes.map((note) => ({
       id: `note-${note.id}`,

@@ -192,7 +192,6 @@ export type WeekViewData = {
   todayDayName: DayName | null;
   days: WeekDayView[];
   tasks: TaskInstance[];
-  inboxItems: InboxItem[];
   settings: PlannerSettings;
   capacity: CapacitySnapshot;
   schedule: ScheduleHealth;
@@ -213,7 +212,6 @@ export type MonthViewData = {
   weeks: MonthWeekSlot[];
   templates: TaskTemplate[];
   instances: TaskInstance[];
-  inboxItems: InboxItem[];
   settings: PlannerSettings;
   capacity: CapacitySnapshot;
   schedule: ScheduleHealth;
