@@ -5,7 +5,13 @@
   import { apiFetch, apiSendJson } from '$lib/client/api';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
   import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
-  import { DAY_NAMES, type DayName, type TaskInstance, type TaskTemplate } from '$lib/planner/types';
+  import {
+    DAY_NAMES,
+    type DayName,
+    type SoftAssignment,
+    type TaskInstance,
+    type TaskTemplate
+  } from '$lib/planner/types';
   import { getNextMonthKey, getPreviousMonthKey } from '$lib/planner/dates';
   import { templateMode } from '$lib/stores';
   import type { PageData } from './$types';
@@ -13,6 +19,7 @@
   let { data }: { data: PageData } = $props();
   let templates = $state<TaskTemplate[]>([]);
   let instances = $state<TaskInstance[]>([]);
+  let softAssignments = $state<Partial<Record<string, SoftAssignment>>>({});
   let weeklyDraft = $state('');
   let monthlyDraft = $state('');
   let busyTemplateId = $state<string | null>(null);
@@ -22,6 +29,7 @@
   $effect(() => {
     templates = structuredClone(data.view.templates);
     instances = structuredClone(data.view.instances);
+    softAssignments = structuredClone(data.view.softAssignments);
   });
 
   function templateSort(left: TaskTemplate, right: TaskTemplate) {
@@ -54,6 +62,16 @@
     return instances.find(
       (instance) => instance.template_id === templateId && instance.instance_kind === 'monthly'
     );
+  }
+
+  function getSoftAssignment(instanceId: string | null | undefined) {
+    if (!instanceId) return null;
+    return softAssignments[instanceId] ?? null;
+  }
+
+  function weekLabelForKey(weekKey: string | null) {
+    if (!weekKey) return 'Unassigned';
+    return data.view.weeks.find((week) => week.weekKey === weekKey)?.shortLabel ?? weekKey;
   }
 
   function updateTemplateState(templateId: string, updater: (template: TaskTemplate) => TaskTemplate) {
@@ -595,6 +613,7 @@
                       </td>
                       {#each data.view.weeks as week}
                         {@const instance = getWeeklyInstance(template.id, week.weekKey)}
+                        {@const generated = getSoftAssignment(instance?.id)}
                         <td class="px-4 py-4 align-top">
                           {#if instance}
                             <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] p-3">
@@ -611,6 +630,12 @@
                                   <option value={dayName}>{dayName}</option>
                                 {/each}
                               </select>
+
+                              {#if instance.day_name === null && generated?.dayName}
+                                <div class="mt-2 text-[11px] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                                  Generated to {generated.dayName}
+                                </div>
+                              {/if}
 
                               <div class="mt-3">
                                 <input
@@ -654,6 +679,7 @@
             {:else}
               {#each monthlyTemplates as template (template.id)}
                 {@const instance = getMonthlyInstance(template.id)}
+                {@const generated = getSoftAssignment(instance?.id)}
                 <article class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
                   <div class="flex flex-col gap-4">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -684,6 +710,11 @@
                                 <option value={week.weekKey}>{week.shortLabel} · {week.label}</option>
                               {/each}
                             </select>
+                            {#if instance.week_key === null && generated?.weekKey}
+                              <div class="mt-1 text-[11px] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                                Generated {weekLabelForKey(generated.weekKey)}
+                              </div>
+                            {/if}
                           </label>
 
                           <label class="text-xs text-[var(--text-muted)]">
@@ -701,6 +732,11 @@
                                 <option value={dayName}>{dayName}</option>
                               {/each}
                             </select>
+                            {#if instance.day_name === null && generated?.dayName}
+                              <div class="mt-1 text-[11px] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                                Generated {generated.dayName}
+                              </div>
+                            {/if}
                           </label>
                         </div>
                       {/if}

@@ -10,6 +10,10 @@
   let { data }: { data: PageData } = $props();
   let uploading = $state(false);
 
+  function attachmentHref(filePath: string) {
+    return `/uploads/${filePath.replace(/^\/+/, '').replace(/\\/g, '/')}`;
+  }
+
   async function createDocument() {
     try {
       const document = await apiSendJson<{ id: string }>('/api/notes/documents', 'POST', {
@@ -215,7 +219,7 @@
 
                   <div class="flex items-center gap-2">
                     <a
-                      href={`/uploads/${attachment.file_path}`}
+                      href={attachmentHref(attachment.file_path)}
                       target="_blank"
                       rel="noreferrer"
                       class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"

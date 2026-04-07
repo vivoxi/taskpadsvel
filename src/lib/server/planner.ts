@@ -19,6 +19,7 @@ import {
   type ScheduleBlock,
   type ScheduleHealth,
   type SearchResults,
+  type SoftAssignment,
   type TaskAttachment,
   type TaskInstance,
   type TaskSourceType,
@@ -272,7 +273,8 @@ async function listScheduleBlocksForMonth(monthKey: string): Promise<ScheduleBlo
 function buildCapacitySnapshot(
   tasks: TaskInstance[],
   settings: PlannerSettings,
-  scope: { monthKey?: string; weekKey?: string }
+  scope: { monthKey?: string; weekKey?: string },
+  softAssignments: Partial<Record<string, SoftAssignment>> = {}
 ): CapacitySnapshot {
   const activeTasks = tasks.filter((task) => task.archived_at === null);
   const availableHours =
@@ -281,7 +283,12 @@ function buildCapacitySnapshot(
       : getWorkingDaysInWeek(scope.weekKey ?? getWeekKey()).length * getWorkingHoursPerDay(settings);
   const plannedHours = activeTasks.reduce((sum, task) => sum + getTaskHours(task), 0);
   const unassignedHours = activeTasks
-    .filter((task) => task.status === 'open' && task.day_name === null)
+    .filter(
+      (task) =>
+        task.status === 'open' &&
+        task.day_name === null &&
+        !softAssignments[task.id]
+    )
     .reduce((sum, task) => sum + getTaskHours(task), 0);
 
   return {
@@ -306,6 +313,40 @@ function buildScheduleHealth(tasks: TaskInstance[], blocks: ScheduleBlock[], cap
     split_candidate_count: splitCandidateCount,
     overflow_warning: overflowWarning
   };
+}
+
+function buildSoftAssignments(
+  tasks: TaskInstance[],
+  blocks: ScheduleBlock[]
+): Partial<Record<string, SoftAssignment>> {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const assignments = new Map<string, SoftAssignment>();
+
+  const sortedBlocks = [...blocks].sort((left, right) => {
+    return (
+      left.scheduled_for.localeCompare(right.scheduled_for) ||
+      left.starts_at.localeCompare(right.starts_at)
+    );
+  });
+
+  for (const block of sortedBlocks) {
+    if (!block.task_instance_id) continue;
+    if (assignments.has(block.task_instance_id)) continue;
+
+    const task = taskById.get(block.task_instance_id);
+    if (!task || task.archived_at !== null) continue;
+    if (task.day_name !== null && task.week_key !== null) continue;
+
+    assignments.set(block.task_instance_id, {
+      taskInstanceId: block.task_instance_id,
+      weekKey: block.week_key,
+      dayName: block.day_name,
+      scheduledFor: block.scheduled_for,
+      startsAt: block.starts_at
+    });
+  }
+
+  return Object.fromEntries(assignments);
 }
 
 function getDefaultMonthlyWeekKey(
@@ -475,6 +516,10 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
 
   const weekIndex = getWeekIndexForMonth(weekKey, monthKey);
   const weekTasks = sortInstances((taskRows ?? []).map((row) => normalizeTask(row as TaskInstance)));
+  const monthTasksById = new Map(monthPlan.instances.map((task) => [task.id, task]));
+  const weekBlocks = blocks.filter((block) => block.week_key === weekKey);
+  const softAssignments = buildSoftAssignments(monthPlan.instances, weekBlocks);
+  const softAssignedTaskIds = Object.keys(softAssignments);
   const monthlyDayTasks = monthPlan.instances.filter(
     (task) =>
       task.instance_kind === 'monthly' &&
@@ -482,6 +527,15 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
       task.day_name !== null &&
       (task.week_of_month === null || task.week_of_month === weekIndex)
   );
+  const scheduleDayTasks = softAssignedTaskIds
+    .map((taskId) => {
+      const assignment = softAssignments[taskId];
+      if (!assignment?.dayName) return null;
+      const task = monthTasksById.get(taskId);
+      if (!task || task.archived_at !== null) return null;
+      return task;
+    })
+    .filter((task): task is TaskInstance => task !== null);
   const seenTaskIds = new Set<string>();
   const tasksByDay: TasksByDay = {};
 
@@ -493,13 +547,22 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
     seenTaskIds.add(instance.id);
   }
 
+  for (const instance of scheduleDayTasks) {
+    if (seenTaskIds.has(instance.id)) continue;
+    const assignment = softAssignments[instance.id];
+    if (!assignment?.dayName) continue;
+    const bucket = tasksByDay[assignment.dayName] ?? [];
+    bucket.push(instance);
+    tasksByDay[assignment.dayName] = bucket;
+    seenTaskIds.add(instance.id);
+  }
+
   const notesByDay = new Map<string, PlannerBlock[]>();
   for (const row of noteRows ?? []) {
     notesByDay.set(row.day_name, normalizeBlocks(row.blocks_json));
   }
 
-  const weekBlocks = blocks.filter((block) => block.week_key === weekKey);
-  const capacity = buildCapacitySnapshot(weekTasks, settings, { weekKey });
+  const capacity = buildCapacitySnapshot(weekTasks, settings, { weekKey }, softAssignments);
 
   return {
     weekKey,
@@ -515,6 +578,7 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
     })),
     tasks: weekTasks,
     tasksByDay,
+    softAssignedTaskIds,
     settings,
     capacity,
     schedule: buildScheduleHealth(weekTasks, weekBlocks, capacity)
@@ -529,9 +593,10 @@ export async function getMonthViewData(inputMonthKey: string): Promise<MonthView
     listScheduleBlocksForMonth(normalizedMonthKey)
   ]);
   const activeInstances = instances.filter((task) => task.archived_at === null);
+  const softAssignments = buildSoftAssignments(activeInstances, blocks);
   const capacity = buildCapacitySnapshot(activeInstances, settings, {
     monthKey
-  });
+  }, softAssignments);
 
   return {
     monthKey,
@@ -539,6 +604,7 @@ export async function getMonthViewData(inputMonthKey: string): Promise<MonthView
     weeks: getBoardWeeksForMonth(monthKey),
     templates,
     instances: activeInstances,
+    softAssignments,
     settings,
     capacity,
     schedule: buildScheduleHealth(activeInstances, blocks, capacity)

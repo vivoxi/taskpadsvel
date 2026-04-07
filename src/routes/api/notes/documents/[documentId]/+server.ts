@@ -3,7 +3,11 @@ import { rm } from 'fs/promises';
 import path from 'path';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { NORMALIZED_UPLOADS_DIR, UPLOADS_DIR } from '$lib/server/uploads';
+import {
+  NORMALIZED_UPLOADS_DIR,
+  UPLOADS_DIR,
+  normalizeRelativeUploadPath
+} from '$lib/server/uploads';
 import type { RequestHandler } from './$types';
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
@@ -53,7 +57,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 
   if ((attachments ?? []).length > 0) {
     for (const attachment of attachments) {
-      const absolutePath = path.resolve(UPLOADS_DIR, attachment.file_path);
+      const absolutePath = path.resolve(UPLOADS_DIR, normalizeRelativeUploadPath(attachment.file_path));
       if (absolutePath.startsWith(NORMALIZED_UPLOADS_DIR)) {
         await rm(absolutePath, { force: true }).catch(() => undefined);
       }

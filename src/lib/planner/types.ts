@@ -172,12 +172,21 @@ export type WeekViewData = {
   days: WeekDayView[];
   tasks: TaskInstance[];
   tasksByDay: TasksByDay;
+  softAssignedTaskIds: string[];
   settings: PlannerSettings;
   capacity: CapacitySnapshot;
   schedule: ScheduleHealth;
 };
 
 export type TasksByDay = Partial<Record<DayName, TaskInstance[]>>;
+
+export type SoftAssignment = {
+  taskInstanceId: string;
+  weekKey: string | null;
+  dayName: DayName | null;
+  scheduledFor: string;
+  startsAt: string;
+};
 
 export type MonthWeekSlot = {
   index: number;
@@ -192,6 +201,7 @@ export type MonthViewData = {
   weeks: MonthWeekSlot[];
   templates: TaskTemplate[];
   instances: TaskInstance[];
+  softAssignments: Partial<Record<string, SoftAssignment>>;
   settings: PlannerSettings;
   capacity: CapacitySnapshot;
   schedule: ScheduleHealth;

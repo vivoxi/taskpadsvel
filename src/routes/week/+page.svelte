@@ -13,10 +13,12 @@
   let { data }: { data: PageData } = $props();
   let weeklyTasks = $state<TaskInstance[]>([]);
   let dayBuckets = $state<TasksByDay>({});
+  let softAssignedTaskIds = $state<string[]>([]);
 
   $effect(() => {
     weeklyTasks = structuredClone(data.view.tasks);
     dayBuckets = structuredClone(data.byDay);
+    softAssignedTaskIds = structuredClone(data.view.softAssignedTaskIds);
   });
 
   function taskSort(left: PageData['view']['tasks'][number], right: PageData['view']['tasks'][number]) {
@@ -53,7 +55,17 @@
   });
   const completedTasks = $derived(visibleTasks.filter((task) => task.status === 'done').sort(taskSort));
   const openTasks = $derived(visibleTasks.filter((task) => task.status === 'open' && task.archived_at === null).sort(taskSort));
-  const unassignedTasks = $derived(weeklyTasks.filter((task) => task.status === 'open' && task.day_name === null && task.archived_at === null).sort(taskSort));
+  const unassignedTasks = $derived(
+    weeklyTasks
+      .filter(
+        (task) =>
+          task.status === 'open' &&
+          task.day_name === null &&
+          task.archived_at === null &&
+          !softAssignedTaskIds.includes(task.id)
+      )
+      .sort(taskSort)
+  );
 
   async function toggleTask(task: TaskInstance, nextStatus: 'open' | 'done', enableUndo = true) {
     const previousStatus = task.status;
