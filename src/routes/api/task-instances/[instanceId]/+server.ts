@@ -63,12 +63,19 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     updates.week_of_month = inferWeekIndex(weekKey, monthKey);
   }
 
+  updates.updated_at = new Date().toISOString();
+
   if (Object.keys(updates).length === 0) {
     throw error(400, 'No valid updates supplied');
   }
 
-  const { error: updateError } = await supabaseAdmin.from('task_instances').update(updates).eq('id', instanceId);
+  const { data, error: updateError } = await supabaseAdmin
+    .from('task_instances')
+    .update(updates)
+    .eq('id', instanceId)
+    .select('*')
+    .single();
   if (updateError) throw error(500, updateError.message);
 
-  return json({ success: true });
+  return json({ success: true, instance: data });
 };

@@ -15,7 +15,6 @@
   let busyTemplateId = $state<string | null>(null);
 
   $effect(() => {
-    data.view.monthKey;
     templates = structuredClone(data.view.templates);
     instances = structuredClone(data.view.instances);
   });
@@ -83,11 +82,18 @@
     const target = previousInstances.find((instance) => instance.id === instanceId);
 
     try {
-      await apiSendJson(`/api/task-instances/${instanceId}`, 'PATCH', {
+      const response = await apiSendJson<{ success: true; instance: TaskInstance }>(
+        `/api/task-instances/${instanceId}`,
+        'PATCH',
+        {
         ...updates,
         existing_month_key: target?.month_key ?? null,
         existing_week_key: target?.week_key ?? null
-      });
+        }
+      );
+      instances = instances.map((instance) =>
+        instance.id === response.instance.id ? response.instance : instance
+      );
       await invalidateAll();
     } catch (error) {
       instances = previousInstances;
