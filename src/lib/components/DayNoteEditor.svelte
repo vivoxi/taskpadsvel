@@ -73,10 +73,7 @@
               </span>
               <TaskMetaChips
                 compact
-                priority={task.priority}
-                dueDate={task.due_date}
                 hours={task.hours_needed}
-                category={task.category}
                 sourceType={task.source_type}
                 carried={task.carried_from_instance_id !== null}
               />

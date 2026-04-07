@@ -181,11 +181,11 @@
           <div class="mt-1 text-[13px] text-[var(--text-muted)]">Still in motion this week</div>
         </div>
         <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Due pressure</div>
+          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Assigned days</div>
           <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
-            {data.view.capacity.due_soon_count + data.view.capacity.overdue_count}
+            {DAY_NAMES.filter((dayName) => (dayBuckets[dayName] ?? []).length > 0).length}
           </div>
-          <div class="mt-1 text-[13px] text-[var(--text-muted)]">Due soon + overdue items visible now</div>
+          <div class="mt-1 text-[13px] text-[var(--text-muted)]">Days carrying planned work this week</div>
         </div>
         <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
           <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Remaining room</div>
@@ -248,10 +248,7 @@
                     <span class="block text-sm font-medium text-[var(--text-primary)]">{task.title_snapshot}</span>
                     <TaskMetaChips
                       compact
-                      priority={task.priority}
-                      dueDate={task.due_date}
                       hours={task.hours_needed}
-                      category={task.category}
                       sourceType={task.source_type}
                     />
                   </span>
@@ -299,10 +296,7 @@
                     <span class="block text-sm text-[var(--text-muted)] line-through">{task.title_snapshot}</span>
                     <TaskMetaChips
                       compact
-                      priority={task.priority}
-                      dueDate={task.due_date}
                       hours={task.hours_needed}
-                      category={task.category}
                       sourceType={task.source_type}
                       carried={task.carried_from_instance_id !== null}
                     />

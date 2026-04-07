@@ -169,7 +169,7 @@
 
       <div class="pt-5">
         <div class="mb-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
-          Notes are for context and writing. Priority, due dates, capacity, carry-forward, and scheduling now live in structured planner data.
+          Notes are for context and writing. Planning and scheduling decisions stay in the week and month surfaces instead of hiding inside documents.
         </div>
 
         <section class="mb-5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3.5">

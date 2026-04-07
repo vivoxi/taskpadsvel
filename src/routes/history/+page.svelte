@@ -22,12 +22,6 @@
       label: 'Archived',
       description: 'Closed out or intentionally removed from active planning.',
       tasks: data.view.archivedTasks
-    },
-    {
-      key: 'delayed',
-      label: 'Delayed',
-      description: 'Open work that passed its due date.',
-      tasks: data.view.delayedTasks
     }
   ] as const);
 </script>
@@ -43,11 +37,11 @@
         <p class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">History center</p>
         <h1 class="text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)]">Review and archive</h1>
         <p class="max-w-2xl text-sm leading-5 text-[var(--text-muted)]">
-          One place for what was completed, carried, delayed, or archived, without freezing your operational record into snapshots.
+          One place for what was completed, carried, or archived, without freezing your operational record into snapshots.
         </p>
       </div>
 
-      <div class="mt-5 grid gap-2.5 sm:grid-cols-5">
+      <div class="mt-5 grid gap-2.5 sm:grid-cols-4">
         <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
           <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Completed</div>
           <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{data.view.summary.completedCount}</div>
@@ -59,10 +53,6 @@
         <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
           <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Archived</div>
           <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{data.view.summary.archivedCount}</div>
-        </div>
-        <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-          <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Delayed</div>
-          <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{data.view.summary.delayedCount}</div>
         </div>
         <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
           <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Attachments</div>
@@ -89,10 +79,7 @@
                 <article class="rounded-[16px] border border-[var(--border)] px-3.5 py-2.5">
                   <div class="text-sm font-medium text-[var(--text-primary)]">{task.title_snapshot}</div>
                   <TaskMetaChips
-                    priority={task.priority}
-                    dueDate={task.due_date}
                     hours={task.hours_needed}
-                    category={task.category}
                     sourceType={task.source_type}
                     carried={task.carried_from_instance_id !== null}
                     archived={task.archived_at !== null}

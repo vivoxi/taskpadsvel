@@ -315,9 +315,7 @@
                         <div class="mt-1.5">
                           <TaskMetaChips
                             compact
-                            priority={template.priority_default}
                             hours={template.hours_needed_default ?? template.estimate_hours}
-                            category={template.category}
                             sourceType={template.source_type_default}
                           />
                         </div>
@@ -367,47 +365,6 @@
                             onblur={(event) =>
                               patchTemplate(template.id, {
                                 hours_needed_default: parseEstimate((event.currentTarget as HTMLInputElement).value)
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          />
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Priority
-                          <select
-                            value={template.priority_default}
-                            onchange={(event) =>
-                              patchTemplate(template.id, {
-                                priority_default: (event.currentTarget as HTMLSelectElement).value
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          >
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                          </select>
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Category
-                          <input
-                            value={template.category ?? ''}
-                            onblur={(event) =>
-                              patchTemplate(template.id, {
-                                category: (event.currentTarget as HTMLInputElement).value.trim() || null
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          />
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Due offset
-                          <input
-                            value={template.due_day_offset ?? ''}
-                            onblur={(event) =>
-                              patchTemplate(template.id, {
-                                due_day_offset:
-                                  Number.parseInt((event.currentTarget as HTMLInputElement).value, 10) || null
                               })}
                             class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
                           />
@@ -478,9 +435,7 @@
                         <div class="mt-1.5">
                           <TaskMetaChips
                             compact
-                            priority={template.priority_default}
                             hours={template.hours_needed_default ?? template.estimate_hours}
-                            category={template.category}
                             sourceType={template.source_type_default}
                           />
                         </div>
@@ -530,47 +485,6 @@
                             onblur={(event) =>
                               patchTemplate(template.id, {
                                 hours_needed_default: parseEstimate((event.currentTarget as HTMLInputElement).value)
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          />
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Priority
-                          <select
-                            value={template.priority_default}
-                            onchange={(event) =>
-                              patchTemplate(template.id, {
-                                priority_default: (event.currentTarget as HTMLSelectElement).value
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          >
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                          </select>
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Category
-                          <input
-                            value={template.category ?? ''}
-                            onblur={(event) =>
-                              patchTemplate(template.id, {
-                                category: (event.currentTarget as HTMLInputElement).value.trim() || null
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          />
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Due offset
-                          <input
-                            value={template.due_day_offset ?? ''}
-                            onblur={(event) =>
-                              patchTemplate(template.id, {
-                                due_day_offset:
-                                  Number.parseInt((event.currentTarget as HTMLInputElement).value, 10) || null
                               })}
                             class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
                           />
@@ -675,9 +589,7 @@
                         <div class="font-medium text-[var(--text-primary)]">{template.title}</div>
                         <TaskMetaChips
                           compact
-                          priority={template.priority_default}
                           hours={template.hours_needed_default ?? template.estimate_hours}
-                          category={template.category}
                           sourceType={template.source_type_default}
                         />
                       </td>
@@ -700,19 +612,7 @@
                                 {/each}
                               </select>
 
-                              <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                                <select
-                                  value={instance.priority}
-                                  onchange={(event) =>
-                                    patchInstance(instance.id, {
-                                      priority: (event.currentTarget as HTMLSelectElement).value
-                                    })}
-                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                                >
-                                  <option value="high">High</option>
-                                  <option value="medium">Medium</option>
-                                  <option value="low">Low</option>
-                                </select>
+                              <div class="mt-3">
                                 <input
                                   value={instance.hours_needed ?? ''}
                                   onblur={(event) =>
@@ -720,33 +620,12 @@
                                       hours_needed: parseEstimate((event.currentTarget as HTMLInputElement).value)
                                     })}
                                   placeholder="Hours"
-                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                                />
-                                <input
-                                  type="date"
-                                  value={instance.due_date ?? ''}
-                                  onchange={(event) =>
-                                    patchInstance(instance.id, {
-                                      due_date: (event.currentTarget as HTMLInputElement).value || null
-                                    })}
-                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                                />
-                                <input
-                                  value={instance.category ?? ''}
-                                  onblur={(event) =>
-                                    patchInstance(instance.id, {
-                                      category: (event.currentTarget as HTMLInputElement).value.trim() || null
-                                    })}
-                                  placeholder="Category"
-                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                                  class="w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
                                 />
                               </div>
 
                               <TaskMetaChips
-                                priority={instance.priority}
-                                dueDate={instance.due_date}
                                 hours={instance.hours_needed}
-                                category={instance.category}
                                 sourceType={instance.source_type}
                               />
                             </div>
@@ -782,10 +661,7 @@
                         <h3 class="font-medium text-[var(--text-primary)]">{template.title}</h3>
                         <TaskMetaChips
                           compact
-                          priority={instance?.priority ?? template.priority_default}
-                          dueDate={instance?.due_date ?? null}
                           hours={instance?.hours_needed ?? template.hours_needed_default ?? template.estimate_hours}
-                          category={instance?.category ?? template.category}
                           sourceType={instance?.source_type ?? template.source_type_default}
                         />
                       </div>
@@ -831,19 +707,7 @@
                     </div>
 
                     {#if instance}
-                      <div class="grid gap-2 sm:grid-cols-4">
-                        <select
-                          value={instance.priority}
-                          onchange={(event) =>
-                            patchInstance(instance.id, {
-                              priority: (event.currentTarget as HTMLSelectElement).value
-                            })}
-                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                        >
-                          <option value="high">High</option>
-                          <option value="medium">Medium</option>
-                          <option value="low">Low</option>
-                        </select>
+                      <div class="grid gap-2 sm:grid-cols-1">
                         <input
                           value={instance.hours_needed ?? ''}
                           onblur={(event) =>
@@ -851,24 +715,6 @@
                               hours_needed: parseEstimate((event.currentTarget as HTMLInputElement).value)
                             })}
                           placeholder="Hours"
-                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                        />
-                        <input
-                          type="date"
-                          value={instance.due_date ?? ''}
-                          onchange={(event) =>
-                            patchInstance(instance.id, {
-                              due_date: (event.currentTarget as HTMLInputElement).value || null
-                            })}
-                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                        />
-                        <input
-                          value={instance.category ?? ''}
-                          onblur={(event) =>
-                            patchInstance(instance.id, {
-                              category: (event.currentTarget as HTMLInputElement).value.trim() || null
-                            })}
-                          placeholder="Category"
                           class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
                         />
                       </div>

@@ -40,11 +40,8 @@
   </div>
 </div>
 
-{#if schedule.due_pressure_warning || capacity.unassigned_hours > 0}
+{#if capacity.unassigned_hours > 0 || schedule.locked_count > 0}
   <div class="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
-    {#if schedule.due_pressure_warning}
-      <span class="rounded-full border border-[var(--border)] px-2.5 py-0.5">{schedule.due_pressure_warning}</span>
-    {/if}
     {#if capacity.unassigned_hours > 0}
       <span class="rounded-full border border-[var(--border)] px-2.5 py-0.5">{capacity.unassigned_hours}h still unassigned</span>
     {/if}

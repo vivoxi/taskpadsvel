@@ -1,9 +1,7 @@
 import { error } from '@sveltejs/kit';
 import {
   addDays,
-  differenceInCalendarDays,
-  format,
-  parseISO
+  format
 } from 'date-fns';
 import { cloneBlocks, createBlock, normalizeBlocks, toNoteBlockPayload } from '$lib/planner/blocks';
 import {
@@ -23,7 +21,6 @@ import {
   type SearchResults,
   type TaskAttachment,
   type TaskInstance,
-  type TaskPriority,
   type TaskSourceType,
   type TaskTemplate,
   type TasksByDay,
@@ -44,7 +41,6 @@ import {
   monthLabel,
   normalizeMonthKey,
   normalizeWeekKey,
-  parseMonthKey,
   toIsoDate,
   weekLabel
 } from '$lib/planner/dates';
@@ -59,10 +55,6 @@ const SETTINGS_DEFAULTS: Omit<PlannerSettings, 'id' | 'created_at' | 'updated_at
   buffer_minutes: 0,
   theme_mode: 'system'
 };
-
-function priorityWeight(priority: TaskPriority): number {
-  return priority === 'high' ? 0 : priority === 'medium' ? 1 : 2;
-}
 
 function getTaskHours(task: Pick<TaskInstance, 'hours_needed'> | Pick<TaskTemplate, 'hours_needed_default' | 'estimate_hours'>): number {
   if ('hours_needed' in task) {
@@ -192,13 +184,9 @@ function sortInstances(instances: TaskInstance[]): TaskInstance[] {
   return [...instances].sort((left, right) => {
     const leftDayIndex = left.day_name ? DAY_NAMES.indexOf(left.day_name) : Number.MAX_SAFE_INTEGER;
     const rightDayIndex = right.day_name ? DAY_NAMES.indexOf(right.day_name) : Number.MAX_SAFE_INTEGER;
-    const leftDue = left.due_date ? left.due_date : '9999-12-31';
-    const rightDue = right.due_date ? right.due_date : '9999-12-31';
 
     return (
       Number(left.archived_at !== null) - Number(right.archived_at !== null) ||
-      priorityWeight(left.priority) - priorityWeight(right.priority) ||
-      leftDue.localeCompare(rightDue) ||
       (left.week_of_month ?? Number.MAX_SAFE_INTEGER) - (right.week_of_month ?? Number.MAX_SAFE_INTEGER) ||
       leftDayIndex - rightDayIndex ||
       (left.sort_order ?? Number.MAX_SAFE_INTEGER) - (right.sort_order ?? Number.MAX_SAFE_INTEGER) ||
@@ -281,27 +269,6 @@ async function listScheduleBlocksForMonth(monthKey: string): Promise<ScheduleBlo
   return (data ?? []).map((row) => normalizeScheduleBlock(row as ScheduleBlock));
 }
 
-function clampDateToMonth(monthKey: string, offset: number): string {
-  const start = parseMonthKey(monthKey);
-  const candidate = addDays(start, offset);
-  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-  if (candidate > lastDay) return format(lastDay, 'yyyy-MM-dd');
-  if (candidate < start) return format(start, 'yyyy-MM-dd');
-  return format(candidate, 'yyyy-MM-dd');
-}
-
-function getDueDateForTemplate(template: TaskTemplate, monthKey: string, weekKey: string | null): string | null {
-  if (template.due_day_offset === null) return null;
-
-  if (template.kind === 'weekly' && weekKey) {
-    const days = getWeekDays(weekKey);
-    const target = days[Math.max(0, Math.min(6, template.due_day_offset))] ?? days[0];
-    return format(target, 'yyyy-MM-dd');
-  }
-
-  return clampDateToMonth(monthKey, template.due_day_offset);
-}
-
 function buildCapacitySnapshot(
   tasks: TaskInstance[],
   settings: PlannerSettings,
@@ -313,11 +280,6 @@ function buildCapacitySnapshot(
       ? getWorkingDaysInMonth(scope.monthKey).length * getWorkingHoursPerDay(settings)
       : getWorkingDaysInWeek(scope.weekKey ?? getWeekKey()).length * getWorkingHoursPerDay(settings);
   const plannedHours = activeTasks.reduce((sum, task) => sum + getTaskHours(task), 0);
-  const overdueCount = activeTasks.filter((task) => task.status === 'open' && task.due_date && task.due_date < new Date().toISOString().slice(0, 10)).length;
-  const dueSoonCount = activeTasks.filter((task) => {
-    if (task.status !== 'open' || !task.due_date) return false;
-    return differenceInCalendarDays(parseISO(task.due_date), new Date()) <= 3;
-  }).length;
   const unassignedHours = activeTasks
     .filter((task) => task.status === 'open' && task.day_name === null)
     .reduce((sum, task) => sum + getTaskHours(task), 0);
@@ -327,8 +289,6 @@ function buildCapacitySnapshot(
     planned_hours: Number(plannedHours.toFixed(1)),
     remaining_hours: Number(Math.max(availableHours - plannedHours, 0).toFixed(1)),
     overflow_hours: Number(Math.max(plannedHours - availableHours, 0).toFixed(1)),
-    due_soon_count: dueSoonCount,
-    overdue_count: overdueCount,
     unassigned_hours: Number(unassignedHours.toFixed(1))
   };
 }
@@ -339,19 +299,12 @@ function buildScheduleHealth(tasks: TaskInstance[], blocks: ScheduleBlock[], cap
     capacity.overflow_hours > 0
       ? `${capacity.overflow_hours.toFixed(1)}h over capacity`
       : null;
-  const duePressureWarning =
-    capacity.overdue_count > 0
-      ? `${capacity.overdue_count} overdue task${capacity.overdue_count === 1 ? '' : 's'} need attention`
-      : capacity.due_soon_count > 0
-        ? `${capacity.due_soon_count} task${capacity.due_soon_count === 1 ? '' : 's'} due soon`
-        : null;
 
   return {
     block_count: blocks.length,
     locked_count: blocks.filter((block) => block.locked).length,
     split_candidate_count: splitCandidateCount,
-    overflow_warning: overflowWarning,
-    due_pressure_warning: duePressureWarning
+    overflow_warning: overflowWarning
   };
 }
 
@@ -419,9 +372,9 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
         status: 'open',
         completed_at: null,
         priority: template.priority_default,
-        due_date: getDueDateForTemplate(template, monthKey, week.weekKey),
+        due_date: null,
         hours_needed: template.hours_needed_default ?? template.estimate_hours,
-        category: template.category,
+        category: null,
         source_type: template.source_type_default === 'monthly' ? 'weekly' : template.source_type_default,
         preferred_day: template.preferred_day,
         preferred_week: week.index,
@@ -456,9 +409,9 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
       status: 'open',
       completed_at: null,
       priority: template.priority_default,
-      due_date: getDueDateForTemplate(template, monthKey, null),
+      due_date: null,
       hours_needed: template.hours_needed_default ?? template.estimate_hours,
-      category: template.category,
+      category: null,
       source_type: template.source_type_default,
       preferred_day: template.preferred_day,
       preferred_week: defaultPlacement.weekIndex,
@@ -717,12 +670,10 @@ export async function getOneTimeViewData(
 }
 
 export async function getHistoryViewData(): Promise<HistoryViewData> {
-  const today = new Date().toISOString().slice(0, 10);
   const [
     completedQuery,
     carriedQuery,
     archivedQuery,
-    delayedQuery,
     attachmentsQuery
   ] = await Promise.all([
     supabaseAdmin
@@ -743,39 +694,27 @@ export async function getHistoryViewData(): Promise<HistoryViewData> {
       .not('archived_at', 'is', null)
       .order('archived_at', { ascending: false, nullsFirst: false })
       .limit(24),
-    supabaseAdmin
-      .from('task_instances')
-      .select('*')
-      .eq('status', 'open')
-      .is('archived_at', null)
-      .lt('due_date', today)
-      .order('due_date', { ascending: true })
-      .limit(24),
     supabaseAdmin.from('task_attachments').select('*', { count: 'exact', head: true })
   ]);
 
   if (completedQuery.error) throw error(500, completedQuery.error.message);
   if (carriedQuery.error) throw error(500, carriedQuery.error.message);
   if (archivedQuery.error) throw error(500, archivedQuery.error.message);
-  if (delayedQuery.error) throw error(500, delayedQuery.error.message);
   if (attachmentsQuery.error) throw error(500, attachmentsQuery.error.message);
 
   const completedTasks = sortInstances((completedQuery.data ?? []).map((row) => normalizeTask(row as TaskInstance)));
   const carriedTasks = sortInstances((carriedQuery.data ?? []).map((row) => normalizeTask(row as TaskInstance)));
   const archivedTasks = sortInstances((archivedQuery.data ?? []).map((row) => normalizeTask(row as TaskInstance)));
-  const delayedTasks = sortInstances((delayedQuery.data ?? []).map((row) => normalizeTask(row as TaskInstance)));
 
   return {
     completedTasks,
     carriedTasks,
     archivedTasks,
-    delayedTasks,
     attachmentCount: attachmentsQuery.count ?? 0,
     summary: {
       completedCount: completedTasks.length,
       carriedCount: carriedTasks.length,
-      archivedCount: archivedTasks.length,
-      delayedCount: delayedTasks.length
+      archivedCount: archivedTasks.length
     }
   };
 }
@@ -864,12 +803,9 @@ function getBaseSlots(monthKey: string, settings: PlannerSettings): Slot[] {
 
 function sortTasksForScheduling(tasks: TaskInstance[]): TaskInstance[] {
   return [...tasks].sort((left, right) => {
-    const leftDue = left.due_date ?? '9999-12-31';
-    const rightDue = right.due_date ?? '9999-12-31';
-
     return (
-      leftDue.localeCompare(rightDue) ||
-      priorityWeight(left.priority) - priorityWeight(right.priority) ||
+      Number(left.day_name === null) - Number(right.day_name === null) ||
+      Number(left.week_key === null) - Number(right.week_key === null) ||
       getTaskHours(right) - getTaskHours(left) ||
       left.title_snapshot.localeCompare(right.title_snapshot)
     );

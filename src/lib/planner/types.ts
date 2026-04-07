@@ -146,8 +146,6 @@ export type CapacitySnapshot = {
   planned_hours: number;
   remaining_hours: number;
   overflow_hours: number;
-  due_soon_count: number;
-  overdue_count: number;
   unassigned_hours: number;
 };
 
@@ -156,7 +154,6 @@ export type ScheduleHealth = {
   locked_count: number;
   split_candidate_count: number;
   overflow_warning: string | null;
-  due_pressure_warning: string | null;
 };
 
 export type WeekDayView = {
@@ -217,13 +214,11 @@ export type HistoryViewData = {
   completedTasks: TaskInstance[];
   carriedTasks: TaskInstance[];
   archivedTasks: TaskInstance[];
-  delayedTasks: TaskInstance[];
   attachmentCount: number;
   summary: {
     completedCount: number;
     carriedCount: number;
     archivedCount: number;
-    delayedCount: number;
   };
 };
 
