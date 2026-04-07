@@ -1,6 +1,16 @@
 <script lang="ts">
   import { flip } from 'svelte/animate';
-  import { GripVertical, Heading1, ListChecks, Pilcrow, Plus, Trash2 } from 'lucide-svelte';
+  import { tick } from 'svelte';
+  import {
+    ChevronDown,
+    ChevronUp,
+    GripVertical,
+    Heading1,
+    ListChecks,
+    Pilcrow,
+    Plus,
+    Trash2
+  } from 'lucide-svelte';
   import {
     dragHandle,
     dragHandleZone,
@@ -29,11 +39,27 @@
 
   let localBlocks = $state<PlannerBlock[]>([]);
   let isSaving = $state(false);
+  let editorElement = $state<HTMLDivElement | null>(null);
+  let insertMenuIndex = $state<number | null>(null);
+  let slashMenu = $state<{
+    blockId: string;
+    index: number;
+    query: string;
+    selected: number;
+  } | null>(null);
   const flipDurationMs = $derived(compact ? 120 : 160);
+  const availableTypes = $derived(
+    [...new Set(insertOrder)].filter(
+      (type): type is PlannerBlock['type'] =>
+        type === 'heading' || type === 'paragraph' || type === 'checklist'
+    )
+  );
 
   $effect(() => {
     sourceKey;
     localBlocks = cloneBlocks(blocks);
+    insertMenuIndex = null;
+    slashMenu = null;
   });
 
   function updateBlock(nextBlocks: PlannerBlock[]) {
@@ -83,21 +109,77 @@
     void commit(nextBlocks);
   }
 
-  function addBlock(type: PlannerBlock['type']) {
-    const nextBlocks = [...cloneBlocks(localBlocks), createBlock(type)];
-    updateBlock(nextBlocks);
-    void commit(nextBlocks);
+  async function focusBlock(blockId: string, position: 'start' | 'end' = 'end') {
+    await tick();
+    const input = editorElement?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      `[data-block-input="${blockId}"]`
+    );
+    if (!input) return;
+
+    input.focus();
+    const caret = position === 'start' ? 0 : input.value.length;
+    input.setSelectionRange?.(caret, caret);
   }
 
-  function removeBlock(index: number) {
-    if (!confirm('Are you sure you want to delete this block?')) {
+  function addBlock(type: PlannerBlock['type']) {
+    const block = createBlock(type);
+    const nextBlocks = [...cloneBlocks(localBlocks), block];
+    updateBlock(nextBlocks);
+    void commit(nextBlocks);
+    void focusBlock(block.id, 'start');
+  }
+
+  function insertBlockAt(index: number, type: PlannerBlock['type']) {
+    const block = createBlock(type);
+    const nextBlocks = cloneBlocks(localBlocks);
+    nextBlocks.splice(index + 1, 0, block);
+    updateBlock(nextBlocks);
+    insertMenuIndex = null;
+    void commit(nextBlocks);
+    void focusBlock(block.id, 'start');
+  }
+
+  function replaceBlockType(index: number, type: PlannerBlock['type']) {
+    const target = localBlocks[index];
+    if (!target) return;
+
+    const nextBlocks = cloneBlocks(localBlocks);
+    nextBlocks[index] = {
+      ...target,
+      type,
+      text: '',
+      checked: type === 'checklist' ? false : null,
+      level: type === 'heading' ? 2 : null
+    };
+    updateBlock(nextBlocks);
+    slashMenu = null;
+    void commit(nextBlocks);
+    void focusBlock(target.id, 'start');
+  }
+
+  function removeBlock(index: number, requireConfirmation = true) {
+    const target = localBlocks[index];
+    if (!target) return;
+
+    if (requireConfirmation && !confirm('Are you sure you want to delete this block?')) {
       return;
     }
 
+    const previousBlock = localBlocks[index - 1] ?? null;
     const nextBlocks = cloneBlocks(localBlocks);
     nextBlocks.splice(index, 1);
     updateBlock(nextBlocks);
+    if (slashMenu?.blockId === target.id) {
+      slashMenu = null;
+    }
     void commit(nextBlocks);
+    if (previousBlock) {
+      void focusBlock(previousBlock.id, 'end');
+    }
+  }
+
+  function getFollowupType(type: PlannerBlock['type']): PlannerBlock['type'] {
+    return type === 'heading' ? 'paragraph' : type;
   }
 
   function moveBlock(index: number, direction: -1 | 1) {
@@ -115,14 +197,120 @@
     void commit();
   }
 
+  function openSlashMenu(index: number, text: string) {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('/')) {
+      if (slashMenu?.index === index) {
+        slashMenu = null;
+      }
+      return;
+    }
+
+    slashMenu = {
+      blockId: localBlocks[index]?.id ?? crypto.randomUUID(),
+      index,
+      query: trimmed.slice(1).toLowerCase(),
+      selected: 0
+    };
+  }
+
+  function setBlockText(index: number, text: string) {
+    setText(index, text);
+    openSlashMenu(index, text);
+  }
+
+  function getSlashItems(query: string) {
+    if (!query) return availableTypes;
+    return availableTypes.filter((type) => labelFor(type).toLowerCase().includes(query));
+  }
+
+  function hasSelectionAtStart(element: HTMLInputElement | HTMLTextAreaElement) {
+    return (element.selectionStart ?? 0) === 0 && (element.selectionEnd ?? 0) === 0;
+  }
+
+  function handleBackspace(
+    index: number,
+    block: PlannerBlock,
+    event: KeyboardEvent & { currentTarget: EventTarget & (HTMLInputElement | HTMLTextAreaElement) }
+  ) {
+    if (block.text.length > 0) return;
+    if (index === 0 || !hasSelectionAtStart(event.currentTarget)) return;
+
+    event.preventDefault();
+    removeBlock(index, false);
+  }
+
+  function handleEnter(index: number, block: PlannerBlock, event: KeyboardEvent) {
+    if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+
+    const slashItems =
+      slashMenu?.blockId === block.id ? getSlashItems(slashMenu.query) : [];
+    if (slashMenu?.blockId === block.id && slashItems.length > 0) {
+      event.preventDefault();
+      replaceBlockType(index, slashItems[slashMenu.selected] ?? slashItems[0]);
+      return;
+    }
+
+    event.preventDefault();
+    insertBlockAt(index, getFollowupType(block.type));
+  }
+
+  function handleKeydown(
+    index: number,
+    block: PlannerBlock,
+    event: KeyboardEvent & { currentTarget: EventTarget & (HTMLInputElement | HTMLTextAreaElement) }
+  ) {
+    const slashItems =
+      slashMenu?.blockId === block.id ? getSlashItems(slashMenu.query) : [];
+
+    if (slashMenu?.blockId === block.id && slashItems.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        slashMenu = {
+          ...slashMenu,
+          selected: Math.min(slashMenu.selected + 1, slashItems.length - 1)
+        };
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        slashMenu = {
+          ...slashMenu,
+          selected: Math.max(slashMenu.selected - 1, 0)
+        };
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        slashMenu = null;
+        return;
+      }
+    }
+
+    if (event.key === 'Enter') {
+      handleEnter(index, block, event);
+      return;
+    }
+
+    if (event.key === 'Backspace') {
+      handleBackspace(index, block, event);
+    }
+  }
+
   function labelFor(type: PlannerBlock['type']): string {
     if (type === 'heading') return 'Heading';
     if (type === 'paragraph') return 'Text';
     return 'Checklist';
   }
+
+  function toggleInsertMenu(index: number) {
+    insertMenuIndex = insertMenuIndex === index ? null : index;
+  }
 </script>
 
-<div class={`space-y-2 ${compact ? '' : 'space-y-3'}`}>
+<div bind:this={editorElement} class={`space-y-2 ${compact ? '' : 'space-y-3'}`}>
   {#if localBlocks.length === 0}
     <button
       type="button"
@@ -142,13 +330,21 @@
     {#each localBlocks as block, index (block.id)}
       <div
         animate:flip={{ duration: flipDurationMs }}
-        class="group flex items-start gap-3 rounded-[18px] px-2 py-2 transition-colors hover:bg-[var(--panel-soft)]/80"
+        class="group relative flex items-start gap-3 rounded-[18px] px-2 py-2 transition-colors hover:bg-[var(--panel-soft)]/70 focus-within:bg-[var(--panel-soft)]/70"
       >
         <div class="mt-1 flex items-center gap-1 text-[var(--text-faint)]">
           <button
             type="button"
+            class="rounded p-1 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+            aria-label="Insert block"
+            onclick={() => toggleInsertMenu(index)}
+          >
+            <Plus size={14} />
+          </button>
+          <button
+            type="button"
             use:dragHandle
-            class="rounded p-1 opacity-0 transition group-hover:opacity-100 hover:bg-[var(--panel)] cursor-grab active:cursor-grabbing"
+            class="cursor-grab rounded p-1 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--panel)] active:cursor-grabbing"
             aria-label="Drag block"
           >
             <GripVertical size={14} />
@@ -158,8 +354,10 @@
         <div class="min-w-0 flex-1">
           {#if block.type === 'heading'}
             <input
+              data-block-input={block.id}
               value={block.text}
-              oninput={(event) => setText(index, (event.currentTarget as HTMLInputElement).value)}
+              oninput={(event) => setBlockText(index, (event.currentTarget as HTMLInputElement).value)}
+              onkeydown={(event) => handleKeydown(index, block, event)}
               onblur={handleBlur}
               placeholder="Heading"
               class={`w-full border-none bg-transparent p-0 tracking-[-0.03em] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${
@@ -168,9 +366,11 @@
             />
           {:else if block.type === 'paragraph'}
             <textarea
+              data-block-input={block.id}
               value={block.text}
               rows={compact ? 2 : 3}
-              oninput={(event) => setText(index, (event.currentTarget as HTMLTextAreaElement).value)}
+              oninput={(event) => setBlockText(index, (event.currentTarget as HTMLTextAreaElement).value)}
+              onkeydown={(event) => handleKeydown(index, block, event)}
               onblur={handleBlur}
               placeholder="Write a note"
               class="min-h-[3rem] w-full resize-none border-none bg-transparent p-0 text-sm leading-7 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-faint)]"
@@ -184,8 +384,10 @@
                 class="mt-1 h-4 w-4 rounded border-[var(--border-strong)] bg-transparent text-zinc-900 focus:ring-0 dark:text-zinc-100"
               />
               <input
+                data-block-input={block.id}
                 value={block.text}
-                oninput={(event) => setText(index, (event.currentTarget as HTMLInputElement).value)}
+                oninput={(event) => setBlockText(index, (event.currentTarget as HTMLInputElement).value)}
+                onkeydown={(event) => handleKeydown(index, block, event)}
                 onblur={handleBlur}
                 placeholder="Checklist item"
                 class={`w-full border-none bg-transparent p-0 text-sm outline-none placeholder:text-[var(--text-faint)] ${
@@ -196,16 +398,52 @@
               />
             </label>
           {/if}
+
+          {#if slashMenu?.blockId === block.id}
+            {@const slashItems = getSlashItems(slashMenu.query)}
+            {#if slashItems.length > 0}
+              <div class="mt-3 overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
+                <div class="border-b border-[var(--border)] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                  Insert block
+                </div>
+                <div class="p-2">
+                  {#each slashItems as type, slashIndex (type)}
+                    <button
+                      type="button"
+                      class={`flex w-full items-center gap-2 rounded-[14px] px-3 py-2 text-left text-sm transition-colors ${
+                        slashIndex === slashMenu.selected
+                          ? 'bg-[var(--panel-soft)] text-[var(--text-primary)]'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--panel-soft)]/70 hover:text-[var(--text-primary)]'
+                      }`}
+                      onmousedown={(event) => {
+                        event.preventDefault();
+                        replaceBlockType(index, type);
+                      }}
+                    >
+                      {#if type === 'heading'}
+                        <Heading1 size={13} />
+                      {:else if type === 'paragraph'}
+                        <Pilcrow size={13} />
+                      {:else}
+                        <ListChecks size={13} />
+                      {/if}
+                      {labelFor(type)}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          {/if}
         </div>
 
-        <div class="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+        <div class="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"
             class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
             onclick={() => moveBlock(index, -1)}
             aria-label="Move block up"
           >
-            <GripVertical size={14} class="rotate-180" />
+            <ChevronUp size={14} />
           </button>
           <button
             type="button"
@@ -213,7 +451,7 @@
             onclick={() => moveBlock(index, 1)}
             aria-label="Move block down"
           >
-            <GripVertical size={14} />
+            <ChevronDown size={14} />
           </button>
           <button
             type="button"
@@ -224,6 +462,35 @@
             <Trash2 size={14} />
           </button>
         </div>
+
+        {#if insertMenuIndex === index}
+          <div class="absolute left-2 top-full z-10 mt-2 min-w-40 overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
+            <div class="border-b border-[var(--border)] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+              Insert after
+            </div>
+            <div class="p-2">
+              {#each availableTypes as type (type)}
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded-[14px] px-3 py-2 text-left text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
+                  onmousedown={(event) => {
+                    event.preventDefault();
+                    insertBlockAt(index, type);
+                  }}
+                >
+                  {#if type === 'heading'}
+                    <Heading1 size={13} />
+                  {:else if type === 'paragraph'}
+                    <Pilcrow size={13} />
+                  {:else}
+                    <ListChecks size={13} />
+                  {/if}
+                  {labelFor(type)}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
