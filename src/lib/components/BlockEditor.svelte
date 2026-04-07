@@ -1,5 +1,11 @@
 <script lang="ts">
+  import { flip } from 'svelte/animate';
   import { GripVertical, Heading1, ListChecks, Pilcrow, Plus, Trash2 } from 'lucide-svelte';
+  import {
+    dragHandle,
+    dragHandleZone,
+    type DndEvent
+  } from 'svelte-dnd-action';
   import { cloneBlocks, createBlock } from '$lib/planner/blocks';
   import type { PlannerBlock } from '$lib/planner/types';
 
@@ -19,6 +25,7 @@
 
   let localBlocks = $state<PlannerBlock[]>([]);
   let isSaving = $state(false);
+  const flipDurationMs = $derived(compact ? 120 : 160);
 
   $effect(() => {
     sourceKey;
@@ -27,6 +34,16 @@
 
   function updateBlock(nextBlocks: PlannerBlock[]) {
     localBlocks = nextBlocks;
+  }
+
+  function handleDndReorder(event: CustomEvent<DndEvent<PlannerBlock>>) {
+    updateBlock(cloneBlocks(event.detail.items));
+  }
+
+  function finalizeDndReorder(event: CustomEvent<DndEvent<PlannerBlock>>) {
+    const nextBlocks = cloneBlocks(event.detail.items);
+    updateBlock(nextBlocks);
+    void commit(nextBlocks);
   }
 
   async function commit(nextBlocks = localBlocks) {
@@ -102,86 +119,104 @@
     </button>
   {/if}
 
-  {#each localBlocks as block, index (block.id)}
-    <div class="group flex items-start gap-3 rounded-[18px] px-2 py-2 transition-colors hover:bg-[var(--panel-soft)]/80">
-      <div class="mt-1 hidden items-center gap-1 text-[var(--text-faint)] md:flex">
-        <button
-          type="button"
-          class="rounded p-1 opacity-0 transition group-hover:opacity-100 hover:bg-[var(--panel)]"
-          onclick={() => moveBlock(index, -1)}
-          aria-label="Move block up"
-        >
-          <GripVertical size={14} />
-        </button>
-      </div>
+  <div
+    use:dragHandleZone={{ items: localBlocks, flipDurationMs, dragDisabled: localBlocks.length < 2 }}
+    onconsider={handleDndReorder}
+    onfinalize={finalizeDndReorder}
+    class="space-y-2"
+  >
+    {#each localBlocks as block, index (block.id)}
+      <div
+        animate:flip={{ duration: flipDurationMs }}
+        class="group flex items-start gap-3 rounded-[18px] px-2 py-2 transition-colors hover:bg-[var(--panel-soft)]/80"
+      >
+        <div class="mt-1 flex items-center gap-1 text-[var(--text-faint)]">
+          <button
+            type="button"
+            use:dragHandle
+            class="rounded p-1 opacity-0 transition group-hover:opacity-100 hover:bg-[var(--panel)] cursor-grab active:cursor-grabbing"
+            aria-label="Drag block"
+          >
+            <GripVertical size={14} />
+          </button>
+        </div>
 
-      <div class="min-w-0 flex-1">
-        {#if block.type === 'heading'}
-          <input
-            value={block.text}
-            oninput={(event) => setText(index, (event.currentTarget as HTMLInputElement).value)}
-            onblur={handleBlur}
-            placeholder="Heading"
-            class={`w-full border-none bg-transparent p-0 tracking-[-0.03em] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${
-              compact ? 'text-base font-semibold' : 'text-xl font-semibold'
-            }`}
-          />
-        {:else if block.type === 'paragraph'}
-          <textarea
-            value={block.text}
-            rows={compact ? 2 : 3}
-            oninput={(event) => setText(index, (event.currentTarget as HTMLTextAreaElement).value)}
-            onblur={handleBlur}
-            placeholder="Write a note"
-            class="min-h-[3rem] w-full resize-none border-none bg-transparent p-0 text-sm leading-7 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-faint)]"
-          ></textarea>
-        {:else}
-          <label class="flex items-start gap-3">
-            <input
-              type="checkbox"
-              checked={block.checked === true}
-              onchange={() => toggleChecklist(index)}
-              class="mt-1 h-4 w-4 rounded border-[var(--border-strong)] bg-transparent text-zinc-900 focus:ring-0 dark:text-zinc-100"
-            />
+        <div class="min-w-0 flex-1">
+          {#if block.type === 'heading'}
             <input
               value={block.text}
               oninput={(event) => setText(index, (event.currentTarget as HTMLInputElement).value)}
               onblur={handleBlur}
-              placeholder="Checklist item"
-              class={`w-full border-none bg-transparent p-0 text-sm outline-none placeholder:text-[var(--text-faint)] ${
-                block.checked
-                  ? 'text-[var(--text-faint)] line-through'
-                  : 'text-[var(--text-secondary)]'
+              placeholder="Heading"
+              class={`w-full border-none bg-transparent p-0 tracking-[-0.03em] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${
+                compact ? 'text-base font-semibold' : 'text-xl font-semibold'
               }`}
             />
-          </label>
-        {/if}
-      </div>
+          {:else if block.type === 'paragraph'}
+            <textarea
+              value={block.text}
+              rows={compact ? 2 : 3}
+              oninput={(event) => setText(index, (event.currentTarget as HTMLTextAreaElement).value)}
+              onblur={handleBlur}
+              placeholder="Write a note"
+              class="min-h-[3rem] w-full resize-none border-none bg-transparent p-0 text-sm leading-7 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-faint)]"
+            ></textarea>
+          {:else}
+            <label class="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={block.checked === true}
+                onchange={() => toggleChecklist(index)}
+                class="mt-1 h-4 w-4 rounded border-[var(--border-strong)] bg-transparent text-zinc-900 focus:ring-0 dark:text-zinc-100"
+              />
+              <input
+                value={block.text}
+                oninput={(event) => setText(index, (event.currentTarget as HTMLInputElement).value)}
+                onblur={handleBlur}
+                placeholder="Checklist item"
+                class={`w-full border-none bg-transparent p-0 text-sm outline-none placeholder:text-[var(--text-faint)] ${
+                  block.checked
+                    ? 'text-[var(--text-faint)] line-through'
+                    : 'text-[var(--text-secondary)]'
+                }`}
+              />
+            </label>
+          {/if}
+        </div>
 
-      <div class="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-        <button
-          type="button"
-          class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
-          onclick={() => moveBlock(index, 1)}
-          aria-label="Move block down"
-        >
-          <GripVertical size={14} />
-        </button>
-        <button
-          type="button"
-          class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
-          onclick={() => removeBlock(index)}
-          aria-label="Delete block"
-        >
-          <Trash2 size={14} />
-        </button>
+        <div class="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+          <button
+            type="button"
+            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+            onclick={() => moveBlock(index, -1)}
+            aria-label="Move block up"
+          >
+            <GripVertical size={14} class="rotate-180" />
+          </button>
+          <button
+            type="button"
+            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+            onclick={() => moveBlock(index, 1)}
+            aria-label="Move block down"
+          >
+            <GripVertical size={14} />
+          </button>
+          <button
+            type="button"
+            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+            onclick={() => removeBlock(index)}
+            aria-label="Delete block"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
-    </div>
-  {/each}
+    {/each}
+  </div>
 
   <div class="flex flex-wrap items-center gap-2 pt-2">
     <span class="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-      {isSaving ? 'Saving' : 'Add block'}
+      {isSaving ? 'Saving' : localBlocks.length > 1 ? 'Drag or add block' : 'Add block'}
     </span>
     <button
       type="button"
