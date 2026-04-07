@@ -364,13 +364,87 @@ function getDefaultMonthlyWeekKey(
   };
 }
 
+function getTemplateDefaultSyncUpdates(
+  instance: TaskInstance,
+  template: TaskTemplate
+): Partial<TaskInstance> {
+  const updates: Partial<TaskInstance> = {};
+  const previousPreferredDay = instance.preferred_day;
+  const nextPreferredDay = template.preferred_day;
+
+  if (instance.preferred_day !== nextPreferredDay) {
+    updates.preferred_day = nextPreferredDay;
+  }
+
+  if (instance.day_name === null || instance.day_name === previousPreferredDay) {
+    updates.day_name = nextPreferredDay;
+  }
+
+  const previousPreferredWeek = instance.preferred_week;
+  const nextPreferredWeek = template.kind === 'monthly' ? template.preferred_week_of_month : instance.week_of_month;
+
+  if (instance.instance_kind === 'monthly') {
+    if (instance.preferred_week !== nextPreferredWeek) {
+      updates.preferred_week = nextPreferredWeek;
+    }
+
+    if (instance.week_of_month === null || instance.week_of_month === previousPreferredWeek) {
+      updates.week_of_month = nextPreferredWeek;
+      updates.week_key = getWeekKeyForPreferredWeek(instance.month_key, nextPreferredWeek);
+    }
+  }
+
+  return updates;
+}
+
+async function syncExistingInstancesToTemplateDefaults(
+  templates: TaskTemplate[],
+  instances: TaskInstance[]
+): Promise<TaskInstance[]> {
+  const templateById = new Map(templates.map((template) => [template.id, template]));
+  const nextInstances = [...instances];
+
+  for (let index = 0; index < nextInstances.length; index += 1) {
+    const instance = nextInstances[index];
+    if (!instance.template_id || instance.archived_at !== null) continue;
+
+    const template = templateById.get(instance.template_id);
+    if (!template) continue;
+
+    const updates = getTemplateDefaultSyncUpdates(instance, template);
+    if (Object.keys(updates).length === 0) continue;
+
+    const updatedAt = new Date().toISOString();
+    const { error: updateError } = await supabaseAdmin
+      .from('task_instances')
+      .update({
+        ...updates,
+        updated_at: updatedAt
+      })
+      .eq('id', instance.id);
+
+    if (updateError) {
+      throw error(500, updateError.message);
+    }
+
+    nextInstances[index] = normalizeTask({
+      ...instance,
+      ...updates,
+      updated_at: updatedAt
+    });
+  }
+
+  return nextInstances;
+}
+
 export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
   monthKey: string;
   templates: TaskTemplate[];
   instances: TaskInstance[];
 }> {
   const monthKey = normalizeMonthKey(inputMonthKey);
-  const [templates, existingInstances] = await Promise.all([listTemplates(), listInstances(monthKey)]);
+  const [templates, rawExistingInstances] = await Promise.all([listTemplates(), listInstances(monthKey)]);
+  const existingInstances = await syncExistingInstancesToTemplateDefaults(templates, rawExistingInstances);
 
   if (!canAutoMaterializeMonthKey(monthKey)) {
     return {
@@ -1128,6 +1202,74 @@ export async function syncTemplateSnapshot(templateId: string, title: string): P
 
   if (updateError) {
     throw error(500, updateError.message);
+  }
+}
+
+function getWeekKeyForPreferredWeek(monthKey: string | null, preferredWeek: number | null): string | null {
+  if (!monthKey || preferredWeek === null) return null;
+  const targetWeek = getBoardWeeksForMonth(monthKey).find((week) => week.index === preferredWeek);
+  return targetWeek?.weekKey ?? null;
+}
+
+export async function syncTemplatePlanningDefaults(input: {
+  templateId: string;
+  previousPreferredDay: DayName | null;
+  nextPreferredDay: DayName | null;
+  previousPreferredWeekOfMonth: number | null;
+  nextPreferredWeekOfMonth: number | null;
+}): Promise<void> {
+  const { data, error: queryError } = await supabaseAdmin
+    .from('task_instances')
+    .select('*')
+    .eq('template_id', input.templateId)
+    .is('archived_at', null);
+
+  if (queryError) {
+    throw error(500, queryError.message);
+  }
+
+  const instances = (data ?? []).map((row) => normalizeTask(row as TaskInstance));
+
+  for (const instance of instances) {
+    const updates: Record<string, unknown> = {};
+
+    if (
+      instance.day_name === null ||
+      instance.day_name === input.previousPreferredDay
+    ) {
+      updates.day_name = input.nextPreferredDay;
+    }
+
+    if (instance.preferred_day !== input.nextPreferredDay) {
+      updates.preferred_day = input.nextPreferredDay;
+    }
+
+    if (instance.instance_kind === 'monthly') {
+      const shouldSyncWeek =
+        instance.week_of_month === null ||
+        instance.week_of_month === input.previousPreferredWeekOfMonth;
+
+      if (shouldSyncWeek) {
+        updates.week_of_month = input.nextPreferredWeekOfMonth;
+        updates.preferred_week = input.nextPreferredWeekOfMonth;
+        updates.week_key = getWeekKeyForPreferredWeek(instance.month_key, input.nextPreferredWeekOfMonth);
+      } else if (instance.preferred_week !== input.nextPreferredWeekOfMonth) {
+        updates.preferred_week = input.nextPreferredWeekOfMonth;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) continue;
+
+    updates.updated_at = new Date().toISOString();
+
+    const { error: updateError } = await supabaseAdmin
+      .from('task_instances')
+      .update(updates)
+      .eq('id', instance.id);
+
+    if (updateError) {
+      throw error(500, updateError.message);
+    }
   }
 }
 

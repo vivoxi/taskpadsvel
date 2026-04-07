@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { DAY_NAMES, type DayName, type TaskPriority, type TaskSourceType } from '$lib/planner/types';
-import { syncTemplateSnapshot } from '$lib/server/planner';
+import { syncTemplatePlanningDefaults, syncTemplateSnapshot } from '$lib/server/planner';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
 import type { RequestHandler } from './$types';
@@ -83,6 +83,16 @@ export const PATCH: RequestHandler = async ({ request }) => {
   const id = typeof body.id === 'string' ? body.id : '';
   if (!id) throw error(400, 'Template id is required');
 
+  const { data: currentTemplate, error: currentTemplateError } = await supabaseAdmin
+    .from('task_templates')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (currentTemplateError || !currentTemplate) {
+    throw error(404, 'Template not found');
+  }
+
   const updates: Record<string, unknown> = {};
 
   if (typeof body.title === 'string') updates.title = body.title.trim();
@@ -129,6 +139,27 @@ export const PATCH: RequestHandler = async ({ request }) => {
 
   if (typeof updates.title === 'string' && updates.title) {
     await syncTemplateSnapshot(id, updates.title);
+  }
+
+  if ('preferred_day' in updates || 'preferred_week_of_month' in updates) {
+    await syncTemplatePlanningDefaults({
+      templateId: id,
+      previousPreferredDay: parseDayName(currentTemplate.preferred_day),
+      nextPreferredDay:
+        'preferred_day' in updates ? parseDayName(updates.preferred_day) : parseDayName(currentTemplate.preferred_day),
+      previousPreferredWeekOfMonth:
+        typeof currentTemplate.preferred_week_of_month === 'number'
+          ? currentTemplate.preferred_week_of_month
+          : null,
+      nextPreferredWeekOfMonth:
+        typeof updates.preferred_week_of_month === 'number'
+          ? updates.preferred_week_of_month
+          : updates.preferred_week_of_month === null
+            ? null
+            : typeof currentTemplate.preferred_week_of_month === 'number'
+              ? currentTemplate.preferred_week_of_month
+              : null
+    });
   }
 
   return json({ success: true });
