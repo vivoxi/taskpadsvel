@@ -158,7 +158,7 @@
             blocks={data.view.blocks}
             emptyLabel="Start this list with a checklist item"
             emptyBlockType="checklist"
-            insertOrder={['checklist', 'heading', 'paragraph']}
+            insertOrder={['checklist', 'heading', 'paragraph', 'divider']}
             onCommit={saveBlocks}
           />
         </section>

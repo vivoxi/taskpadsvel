@@ -14,7 +14,7 @@ export type TaskInstanceStatus = 'open' | 'done';
 export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskSourceType = 'weekly' | 'monthly' | 'inbox';
 export type SyncState = 'saving' | 'synced' | 'offline' | 'conflict';
-export type BlockType = 'heading' | 'paragraph' | 'checklist';
+export type BlockType = 'heading' | 'paragraph' | 'checklist' | 'divider';
 export type DocumentKind = 'note' | 'one-time';
 
 export type PlannerBlock = {

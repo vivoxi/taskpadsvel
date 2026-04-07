@@ -4,9 +4,11 @@
   import {
     ChevronDown,
     ChevronUp,
+    Copy,
     GripVertical,
     Heading1,
     ListChecks,
+    Minus,
     Pilcrow,
     Plus,
     Trash2
@@ -25,7 +27,7 @@
     compact = false,
     emptyLabel = 'Start writing',
     emptyBlockType = 'paragraph',
-    insertOrder = ['heading', 'paragraph', 'checklist'],
+    insertOrder = ['heading', 'paragraph', 'checklist', 'divider'],
     onCommit
   }: {
     sourceKey: string;
@@ -40,6 +42,7 @@
   let localBlocks = $state<PlannerBlock[]>([]);
   let isSaving = $state(false);
   let editorElement = $state<HTMLDivElement | null>(null);
+  let activeBlockId = $state<string | null>(null);
   let insertMenuIndex = $state<number | null>(null);
   let slashMenu = $state<{
     blockId: string;
@@ -51,13 +54,14 @@
   const availableTypes = $derived(
     [...new Set(insertOrder)].filter(
       (type): type is PlannerBlock['type'] =>
-        type === 'heading' || type === 'paragraph' || type === 'checklist'
+        type === 'heading' || type === 'paragraph' || type === 'checklist' || type === 'divider'
     )
   );
 
   $effect(() => {
     sourceKey;
     localBlocks = cloneBlocks(blocks);
+    activeBlockId = null;
     insertMenuIndex = null;
     slashMenu = null;
   });
@@ -136,7 +140,11 @@
     updateBlock(nextBlocks);
     insertMenuIndex = null;
     void commit(nextBlocks);
-    void focusBlock(block.id, 'start');
+    if (type !== 'divider') {
+      void focusBlock(block.id, 'start');
+    } else {
+      activeBlockId = block.id;
+    }
   }
 
   function replaceBlockType(index: number, type: PlannerBlock['type']) {
@@ -147,14 +155,18 @@
     nextBlocks[index] = {
       ...target,
       type,
-      text: '',
+      text: type === 'divider' ? '' : '',
       checked: type === 'checklist' ? false : null,
       level: type === 'heading' ? 2 : null
     };
     updateBlock(nextBlocks);
     slashMenu = null;
     void commit(nextBlocks);
-    void focusBlock(target.id, 'start');
+    if (type !== 'divider') {
+      void focusBlock(target.id, 'start');
+    } else {
+      activeBlockId = target.id;
+    }
   }
 
   function removeBlock(index: number, requireConfirmation = true) {
@@ -179,7 +191,30 @@
   }
 
   function getFollowupType(type: PlannerBlock['type']): PlannerBlock['type'] {
-    return type === 'heading' ? 'paragraph' : type;
+    if (type === 'heading') return 'paragraph';
+    if (type === 'divider') return 'paragraph';
+    return type;
+  }
+
+  function duplicateBlock(index: number) {
+    const target = localBlocks[index];
+    if (!target) return;
+
+    const duplicate: PlannerBlock = {
+      ...target,
+      id: crypto.randomUUID()
+    };
+
+    const nextBlocks = cloneBlocks(localBlocks);
+    nextBlocks.splice(index + 1, 0, duplicate);
+    updateBlock(nextBlocks);
+    void commit(nextBlocks);
+
+    if (duplicate.type !== 'divider') {
+      void focusBlock(duplicate.id, 'end');
+    } else {
+      activeBlockId = duplicate.id;
+    }
   }
 
   function moveBlock(index: number, direction: -1 | 1) {
@@ -302,7 +337,8 @@
   function labelFor(type: PlannerBlock['type']): string {
     if (type === 'heading') return 'Heading';
     if (type === 'paragraph') return 'Text';
-    return 'Checklist';
+    if (type === 'checklist') return 'Checklist';
+    return 'Divider';
   }
 
   function toggleInsertMenu(index: number) {
@@ -330,12 +366,18 @@
     {#each localBlocks as block, index (block.id)}
       <div
         animate:flip={{ duration: flipDurationMs }}
-        class="group relative flex items-start gap-3 rounded-[18px] px-2 py-2 transition-colors hover:bg-[var(--panel-soft)]/70 focus-within:bg-[var(--panel-soft)]/70"
+        class={`group relative flex items-start gap-2 rounded-[16px] px-1.5 py-1.5 transition-colors ${
+          activeBlockId === block.id
+            ? 'bg-[var(--panel-soft)] ring-1 ring-[var(--border-strong)]'
+            : 'hover:bg-[var(--panel-soft)]/70 focus-within:bg-[var(--panel-soft)]/70'
+        }`}
       >
-        <div class="mt-1 flex items-center gap-1 text-[var(--text-faint)]">
+        <div class="mt-0.5 flex items-center gap-0.5 text-[var(--text-faint)]">
           <button
             type="button"
-            class="rounded p-1 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+            class={`rounded p-1 transition hover:bg-[var(--panel)] hover:text-[var(--text-primary)] ${
+              activeBlockId === block.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+            }`}
             aria-label="Insert block"
             onclick={() => toggleInsertMenu(index)}
           >
@@ -344,7 +386,9 @@
           <button
             type="button"
             use:dragHandle
-            class="cursor-grab rounded p-1 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--panel)] active:cursor-grabbing"
+            class={`cursor-grab rounded p-1 transition hover:bg-[var(--panel)] active:cursor-grabbing ${
+              activeBlockId === block.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+            }`}
             aria-label="Drag block"
           >
             <GripVertical size={14} />
@@ -358,6 +402,7 @@
               value={block.text}
               oninput={(event) => setBlockText(index, (event.currentTarget as HTMLInputElement).value)}
               onkeydown={(event) => handleKeydown(index, block, event)}
+              onfocus={() => (activeBlockId = block.id)}
               onblur={handleBlur}
               placeholder="Heading"
               class={`w-full border-none bg-transparent p-0 tracking-[-0.03em] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${
@@ -368,14 +413,15 @@
             <textarea
               data-block-input={block.id}
               value={block.text}
-              rows={compact ? 2 : 3}
+              rows={compact ? 2 : 2}
               oninput={(event) => setBlockText(index, (event.currentTarget as HTMLTextAreaElement).value)}
               onkeydown={(event) => handleKeydown(index, block, event)}
+              onfocus={() => (activeBlockId = block.id)}
               onblur={handleBlur}
               placeholder="Write a note"
-              class="min-h-[3rem] w-full resize-none border-none bg-transparent p-0 text-sm leading-7 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-faint)]"
+              class="min-h-[2.5rem] w-full resize-none border-none bg-transparent p-0 text-sm leading-6 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-faint)]"
             ></textarea>
-          {:else}
+          {:else if block.type === 'checklist'}
             <label class="flex items-start gap-3">
               <input
                 type="checkbox"
@@ -388,6 +434,7 @@
                 value={block.text}
                 oninput={(event) => setBlockText(index, (event.currentTarget as HTMLInputElement).value)}
                 onkeydown={(event) => handleKeydown(index, block, event)}
+                onfocus={() => (activeBlockId = block.id)}
                 onblur={handleBlur}
                 placeholder="Checklist item"
                 class={`w-full border-none bg-transparent p-0 text-sm outline-none placeholder:text-[var(--text-faint)] ${
@@ -397,6 +444,24 @@
                 }`}
               />
             </label>
+          {:else}
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 py-2 text-left"
+              onclick={() => (activeBlockId = block.id)}
+              onkeydown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  insertBlockAt(index, 'paragraph');
+                } else if (event.key === 'Backspace') {
+                  event.preventDefault();
+                  removeBlock(index, false);
+                }
+              }}
+            >
+              <span class="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Divider</span>
+              <span class="h-px flex-1 bg-[var(--border)]"></span>
+            </button>
           {/if}
 
           {#if slashMenu?.blockId === block.id}
@@ -436,7 +501,9 @@
           {/if}
         </div>
 
-        <div class="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+        <div class={`flex items-center gap-0.5 transition ${
+          activeBlockId === block.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+        }`}>
           <button
             type="button"
             class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
@@ -452,6 +519,14 @@
             aria-label="Move block down"
           >
             <ChevronDown size={14} />
+          </button>
+          <button
+            type="button"
+            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+            onclick={() => duplicateBlock(index)}
+            aria-label="Duplicate block"
+          >
+            <Copy size={14} />
           </button>
           <button
             type="button"
@@ -482,6 +557,8 @@
                     <Heading1 size={13} />
                   {:else if type === 'paragraph'}
                     <Pilcrow size={13} />
+                  {:else if type === 'divider'}
+                    <Minus size={13} />
                   {:else}
                     <ListChecks size={13} />
                   {/if}
@@ -509,6 +586,8 @@
           <Heading1 size={12} />
         {:else if type === 'paragraph'}
           <Pilcrow size={12} />
+        {:else if type === 'divider'}
+          <Minus size={12} />
         {:else}
           <ListChecks size={12} />
         {/if}

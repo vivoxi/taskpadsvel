@@ -20,7 +20,7 @@ export function normalizeBlocks(value: unknown): PlannerBlock[] {
 
     const block = entry as Record<string, unknown>;
     const type = block.type;
-    if (type !== 'heading' && type !== 'paragraph' && type !== 'checklist') {
+    if (type !== 'heading' && type !== 'paragraph' && type !== 'checklist' && type !== 'divider') {
       return [];
     }
 
@@ -47,7 +47,7 @@ export function toNoteBlockPayload(blocks: PlannerBlock[]) {
   return blocks.map((block, index) => ({
     id: block.id,
     type: block.type,
-    text: block.text,
+    text: block.type === 'divider' ? '' : block.text,
     checked: block.type === 'checklist' ? block.checked === true : null,
     level: block.type === 'heading' ? block.level ?? 2 : null,
     sort_order: index
