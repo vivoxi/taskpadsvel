@@ -12,7 +12,6 @@ import {
   type DayName,
   type DocumentKind,
   type HistoryViewData,
-  type InboxItem,
   type MonthViewData,
   type NotesDocument,
   type NotesViewData,
@@ -27,6 +26,7 @@ import {
   type TaskPriority,
   type TaskSourceType,
   type TaskTemplate,
+  type TasksByDay,
   type WeekViewData
 } from '$lib/planner/types';
 import {
@@ -118,26 +118,6 @@ function normalizeTask(row: Partial<TaskInstance>): TaskInstance {
     linked_schedule_block_id: row.linked_schedule_block_id ?? null,
     sort_order: row.sort_order ?? null,
     source_context: row.source_context ?? null,
-    created_at: row.created_at ?? new Date().toISOString(),
-    updated_at: row.updated_at ?? new Date().toISOString()
-  };
-}
-
-function normalizeInboxItem(row: Partial<InboxItem>): InboxItem {
-  return {
-    id: row.id ?? crypto.randomUUID(),
-    title: row.title ?? 'Untitled inbox item',
-    notes: row.notes ?? null,
-    priority: row.priority === 'high' || row.priority === 'low' ? row.priority : 'medium',
-    due_date: row.due_date ?? null,
-    hours_needed: row.hours_needed ?? null,
-    category: row.category ?? null,
-    preferred_day: DAY_NAMES.includes(row.preferred_day as DayName) ? (row.preferred_day as DayName) : null,
-    preferred_week: row.preferred_week ?? null,
-    source_type: 'inbox',
-    promoted_to_instance_id: row.promoted_to_instance_id ?? null,
-    promoted_to_template_id: row.promoted_to_template_id ?? null,
-    archived_at: row.archived_at ?? null,
     created_at: row.created_at ?? new Date().toISOString(),
     updated_at: row.updated_at ?? new Date().toISOString()
   };
@@ -286,21 +266,6 @@ async function listInstances(monthKey: string): Promise<TaskInstance[]> {
   return sortInstances((data ?? []).map((row) => normalizeTask(row as TaskInstance)));
 }
 
-async function listInboxItems(limit = 12): Promise<InboxItem[]> {
-  const { data, error: queryError } = await supabaseAdmin
-    .from('inbox_items')
-    .select('*')
-    .is('archived_at', null)
-    .order('updated_at', { ascending: false })
-    .limit(limit);
-
-  if (queryError) {
-    throw error(500, queryError.message);
-  }
-
-  return (data ?? []).map((row) => normalizeInboxItem(row as InboxItem));
-}
-
 async function listScheduleBlocksForMonth(monthKey: string): Promise<ScheduleBlock[]> {
   const { data, error: queryError } = await supabaseAdmin
     .from('schedule_blocks')
@@ -423,21 +388,24 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
 
   const weeks = getBoardWeeksForMonth(monthKey);
   const missingRows: Omit<TaskInstance, 'created_at' | 'updated_at'>[] = [];
+  const existingWeeklyKeys = new Set(
+    existingInstances
+      .filter((instance) => instance.instance_kind === 'weekly' && instance.template_id && instance.week_key)
+      .map((instance) => `${instance.template_id}:${instance.week_key}`)
+  );
+  const existingMonthlyTemplateIds = new Set(
+    existingInstances
+      .filter((instance) => instance.instance_kind === 'monthly' && instance.template_id)
+      .map((instance) => instance.template_id as string)
+  );
 
   const activeWeeklyTemplates = templates.filter((template) => template.active && template.kind === 'weekly');
   const activeMonthlyTemplates = templates.filter((template) => template.active && template.kind === 'monthly');
 
   for (const template of activeWeeklyTemplates) {
     for (const week of weeks) {
-      const existing = existingInstances.find(
-        (instance) =>
-          instance.instance_kind === 'weekly' &&
-          instance.template_id === template.id &&
-          instance.month_key === monthKey &&
-          instance.week_key === week.weekKey
-      );
-
-      if (existing) continue;
+      const weeklyKey = `${template.id}:${week.weekKey}`;
+      if (existingWeeklyKeys.has(weeklyKey)) continue;
 
       missingRows.push({
         id: crypto.randomUUID(),
@@ -467,18 +435,12 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
           created_from: 'template-default'
         }
       });
+      existingWeeklyKeys.add(weeklyKey);
     }
   }
 
   for (const template of activeMonthlyTemplates) {
-    const existing = existingInstances.find(
-      (instance) =>
-        instance.instance_kind === 'monthly' &&
-        instance.template_id === template.id &&
-        instance.month_key === monthKey
-    );
-
-    if (existing) continue;
+    if (existingMonthlyTemplateIds.has(template.id)) continue;
 
     const defaultPlacement = getDefaultMonthlyWeekKey(template, monthKey);
 
@@ -510,27 +472,36 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
         created_from: 'template-default'
       }
     });
+    existingMonthlyTemplateIds.add(template.id);
   }
 
+  let insertedRows: TaskInstance[] = [];
   if (missingRows.length > 0) {
-    const { error: insertError } = await supabaseAdmin.from('task_instances').insert(missingRows);
+    const { data, error: insertError } = await supabaseAdmin
+      .from('task_instances')
+      .insert(missingRows)
+      .select('*');
     if (insertError) {
       throw error(500, insertError.message);
     }
+
+    insertedRows = (data ?? []).map((row) => normalizeTask(row as TaskInstance));
   }
 
   return {
     monthKey,
     templates,
-    instances: missingRows.length > 0 ? await listInstances(monthKey) : existingInstances
+    instances: missingRows.length > 0 ? sortInstances([...existingInstances, ...insertedRows]) : existingInstances
   };
 }
 
 export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewData> {
   const weekKey = normalizeWeekKey(inputWeekKey);
   const monthKey = getBoardMonthKeyForWeek(weekKey);
-  const settings = await ensurePlannerSettings();
-  await ensureMonthPlanInstances(monthKey);
+  const [settings, monthPlan] = await Promise.all([
+    ensurePlannerSettings(),
+    ensureMonthPlanInstances(monthKey)
+  ]);
 
   const [{ data: taskRows, error: taskError }, { data: noteRows, error: notesError }, blocks] =
     await Promise.all([
@@ -549,14 +520,33 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
   if (taskError) throw error(500, taskError.message);
   if (notesError) throw error(500, notesError.message);
 
-  const tasks = sortInstances((taskRows ?? []).map((row) => normalizeTask(row as TaskInstance)));
+  const weekIndex = getWeekIndexForMonth(weekKey, monthKey);
+  const weekTasks = sortInstances((taskRows ?? []).map((row) => normalizeTask(row as TaskInstance)));
+  const monthlyDayTasks = monthPlan.instances.filter(
+    (task) =>
+      task.instance_kind === 'monthly' &&
+      task.archived_at === null &&
+      task.day_name !== null &&
+      (task.week_of_month === null || task.week_of_month === weekIndex)
+  );
+  const seenTaskIds = new Set<string>();
+  const tasksByDay: TasksByDay = {};
+
+  for (const instance of [...weekTasks, ...monthlyDayTasks]) {
+    if (!instance.day_name || seenTaskIds.has(instance.id)) continue;
+    const bucket = tasksByDay[instance.day_name] ?? [];
+    bucket.push(instance);
+    tasksByDay[instance.day_name] = bucket;
+    seenTaskIds.add(instance.id);
+  }
+
   const notesByDay = new Map<string, PlannerBlock[]>();
   for (const row of noteRows ?? []) {
     notesByDay.set(row.day_name, normalizeBlocks(row.blocks_json));
   }
 
   const weekBlocks = blocks.filter((block) => block.week_key === weekKey);
-  const capacity = buildCapacitySnapshot(tasks, settings, { weekKey });
+  const capacity = buildCapacitySnapshot(weekTasks, settings, { weekKey });
 
   return {
     weekKey,
@@ -570,20 +560,22 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
       isoDate: toIsoDate(weekKey, dayName),
       blocks: cloneBlocks(notesByDay.get(dayName) ?? [])
     })),
-    tasks,
+    tasks: weekTasks,
+    tasksByDay,
     settings,
     capacity,
-    schedule: buildScheduleHealth(tasks, weekBlocks, capacity)
+    schedule: buildScheduleHealth(weekTasks, weekBlocks, capacity)
   };
 }
 
 export async function getMonthViewData(inputMonthKey: string): Promise<MonthViewData> {
-  const { monthKey, templates, instances } = await ensureMonthPlanInstances(inputMonthKey);
-  const activeInstances = instances.filter((task) => task.archived_at === null);
-  const [settings, blocks] = await Promise.all([
+  const normalizedMonthKey = normalizeMonthKey(inputMonthKey);
+  const [{ monthKey, templates, instances }, settings, blocks] = await Promise.all([
+    ensureMonthPlanInstances(normalizedMonthKey),
     ensurePlannerSettings(),
-    listScheduleBlocksForMonth(monthKey)
+    listScheduleBlocksForMonth(normalizedMonthKey)
   ]);
+  const activeInstances = instances.filter((task) => task.archived_at === null);
   const capacity = buildCapacitySnapshot(activeInstances, settings, {
     monthKey
   });
@@ -686,21 +678,26 @@ async function getDocumentWorkspaceData(
     throw error(500, blockQueryError.message);
   }
 
-  const { data: attachmentRows, error: attachmentError } = await supabaseAdmin
-    .from('task_attachments')
-    .select('*')
-    .eq('note_document_id', selectedId)
-    .order('created_at', { ascending: false });
+  let attachments: TaskAttachment[] = [];
+  if (kind === 'note') {
+    const { data: attachmentRows, error: attachmentError } = await supabaseAdmin
+      .from('task_attachments')
+      .select('*')
+      .eq('note_document_id', selectedId)
+      .order('created_at', { ascending: false });
 
-  if (attachmentError) {
-    throw error(500, attachmentError.message);
+    if (attachmentError) {
+      throw error(500, attachmentError.message);
+    }
+
+    attachments = (attachmentRows ?? []).map((row) => normalizeAttachment(row as TaskAttachment));
   }
 
   return {
     selectedDocumentId: selectedId,
     documents,
     blocks: normalizeBlocks(blockRows),
-    attachments: (attachmentRows ?? []).map((row) => normalizeAttachment(row as TaskAttachment))
+    attachments
   };
 }
 
@@ -788,27 +785,19 @@ export async function searchPlannerData(query: string): Promise<SearchResults> {
   if (trimmed.length < 2) {
     return {
       tasks: [],
-      inbox: [],
       notes: [],
       attachments: []
     };
   }
 
   const pattern = `%${trimmed}%`;
-  const [tasksQuery, inboxQuery, notesQuery, attachmentsQuery] = await Promise.all([
+  const [tasksQuery, notesQuery, attachmentsQuery] = await Promise.all([
     supabaseAdmin
       .from('task_instances')
       .select('*')
       .ilike('title_snapshot', pattern)
       .order('updated_at', { ascending: false })
       .limit(8),
-    supabaseAdmin
-      .from('inbox_items')
-      .select('*')
-      .ilike('title', pattern)
-      .is('archived_at', null)
-      .order('updated_at', { ascending: false })
-      .limit(6),
     supabaseAdmin
       .from('note_blocks')
       .select('document_id, text, notes_documents!inner(id, title, kind)')
@@ -823,13 +812,11 @@ export async function searchPlannerData(query: string): Promise<SearchResults> {
   ]);
 
   if (tasksQuery.error) throw error(500, tasksQuery.error.message);
-  if (inboxQuery.error) throw error(500, inboxQuery.error.message);
   if (notesQuery.error) throw error(500, notesQuery.error.message);
   if (attachmentsQuery.error) throw error(500, attachmentsQuery.error.message);
 
   return {
     tasks: (tasksQuery.data ?? []).map((row) => normalizeTask(row as TaskInstance)),
-    inbox: (inboxQuery.data ?? []).map((row) => normalizeInboxItem(row as InboxItem)),
     notes: (notesQuery.data ?? []).map((row) => {
       const noteRow = row as Record<string, unknown>;
       const document = (noteRow.notes_documents ?? {}) as Record<string, unknown>;
@@ -842,139 +829,6 @@ export async function searchPlannerData(query: string): Promise<SearchResults> {
     }),
     attachments: (attachmentsQuery.data ?? []) as SearchResults['attachments']
   };
-}
-
-export async function createInboxItem(payload: {
-  title: string;
-  notes?: string | null;
-  priority?: TaskPriority;
-  due_date?: string | null;
-  hours_needed?: number | null;
-  category?: string | null;
-  preferred_day?: DayName | null;
-  preferred_week?: number | null;
-}): Promise<InboxItem> {
-  const title = payload.title.trim();
-  if (!title) {
-    throw error(400, 'Title is required');
-  }
-
-  const { data, error: insertError } = await supabaseAdmin
-    .from('inbox_items')
-    .insert({
-      title,
-      notes: payload.notes ?? null,
-      priority: payload.priority ?? 'medium',
-      due_date: payload.due_date ?? null,
-      hours_needed: payload.hours_needed ?? null,
-      category: payload.category ?? null,
-      preferred_day: payload.preferred_day ?? null,
-      preferred_week: payload.preferred_week ?? null,
-      source_type: 'inbox'
-    })
-    .select('*')
-    .single();
-
-  if (insertError) throw error(500, insertError.message);
-
-  return normalizeInboxItem(data as InboxItem);
-}
-
-export async function updateInboxItem(
-  id: string,
-  updates: Partial<Pick<InboxItem, 'title' | 'notes' | 'priority' | 'due_date' | 'hours_needed' | 'category' | 'preferred_day' | 'preferred_week' | 'archived_at'>>
-): Promise<InboxItem> {
-  const { data, error: updateError } = await supabaseAdmin
-    .from('inbox_items')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', id)
-    .select('*')
-    .single();
-
-  if (updateError) throw error(500, updateError.message);
-
-  return normalizeInboxItem(data as InboxItem);
-}
-
-export async function promoteInboxItem(input: {
-  inboxItemId: string;
-  kind: 'weekly' | 'monthly';
-  monthKey: string;
-  weekKey?: string | null;
-  dayName?: DayName | null;
-}): Promise<TaskInstance> {
-  const normalizedMonthKey = normalizeMonthKey(input.monthKey);
-  const normalizedWeekKey =
-    input.kind === 'weekly' ? normalizeWeekKey(input.weekKey ?? getWeekKey()) : input.weekKey ?? null;
-
-  const { data: inboxRow, error: inboxError } = await supabaseAdmin
-    .from('inbox_items')
-    .select('*')
-    .eq('id', input.inboxItemId)
-    .single();
-
-  if (inboxError || !inboxRow) {
-    throw error(404, 'Inbox item not found');
-  }
-
-  const inboxItem = normalizeInboxItem(inboxRow as InboxItem);
-  const instanceId = crypto.randomUUID();
-
-  const payload = {
-    id: instanceId,
-    template_id: null,
-    title_snapshot: inboxItem.title,
-    instance_kind: input.kind,
-    week_key: input.kind === 'weekly' ? normalizedWeekKey : input.weekKey ?? null,
-    month_key: normalizedMonthKey,
-    week_of_month: inferWeekIndex(input.kind === 'weekly' ? normalizedWeekKey : input.weekKey ?? null, normalizedMonthKey),
-    day_name: input.dayName ?? inboxItem.preferred_day,
-    status: 'open',
-    completed_at: null,
-    priority: inboxItem.priority,
-    due_date: inboxItem.due_date,
-    hours_needed: inboxItem.hours_needed,
-    category: inboxItem.category,
-    source_type: 'inbox',
-    preferred_day: inboxItem.preferred_day,
-    preferred_week: inboxItem.preferred_week,
-    carried_from_instance_id: null,
-    archived_at: null,
-    archive_reason: null,
-    linked_schedule_block_id: null,
-    sort_order: null,
-    source_context: {
-      promoted_from: 'inbox',
-      inbox_item_id: inboxItem.id
-    }
-  } satisfies Omit<TaskInstance, 'created_at' | 'updated_at'>;
-
-  const { data: inserted, error: insertError } = await supabaseAdmin
-    .from('task_instances')
-    .insert(payload)
-    .select('*')
-    .single();
-
-  if (insertError) throw error(500, insertError.message);
-
-  await updateInboxItem(inboxItem.id, {
-    archived_at: new Date().toISOString()
-  });
-
-  const { error: linkError } = await supabaseAdmin
-    .from('inbox_items')
-    .update({
-      promoted_to_instance_id: instanceId,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', inboxItem.id);
-
-  if (linkError) throw error(500, linkError.message);
-
-  return normalizeTask(inserted as TaskInstance);
 }
 
 type Slot = { date: string; dayName: DayName; weekKey: string; startMinutes: number; endMinutes: number };

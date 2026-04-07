@@ -19,7 +19,7 @@
   };
 
   let query = $state('');
-  let results = $state<SearchResults>({ tasks: [], inbox: [], notes: [], attachments: [] });
+  let results = $state<SearchResults>({ tasks: [], notes: [], attachments: [] });
   let selectionIndex = $state(0);
   let searchVersion = 0;
   let inputEl = $state<HTMLInputElement | null>(null);
@@ -142,7 +142,7 @@
     const version = ++searchVersion;
 
     if (!$commandPaletteOpen || currentQuery.length < 2) {
-      results = { tasks: [], inbox: [], notes: [], attachments: [] };
+      results = { tasks: [], notes: [], attachments: [] };
       return;
     }
 
@@ -154,7 +154,7 @@
         }
       } catch (error) {
         if (version === searchVersion) {
-          results = { tasks: [], inbox: [], notes: [], attachments: [] };
+          results = { tasks: [], notes: [], attachments: [] };
         }
       }
     }, 140);
@@ -165,7 +165,7 @@
   function closePalette() {
     commandPaletteOpen.set(false);
     query = '';
-    results = { tasks: [], inbox: [], notes: [], attachments: [] };
+    results = { tasks: [], notes: [], attachments: [] };
     selectionIndex = 0;
   }
 

@@ -110,24 +110,6 @@ export type TaskAttachment = {
   created_at: string;
 };
 
-export type InboxItem = {
-  id: string;
-  title: string;
-  notes: string | null;
-  priority: TaskPriority;
-  due_date: string | null;
-  hours_needed: number | null;
-  category: string | null;
-  preferred_day: DayName | null;
-  preferred_week: number | null;
-  source_type: 'inbox';
-  promoted_to_instance_id: string | null;
-  promoted_to_template_id: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 export type PlannerSettings = {
   id: string;
   label: string;
@@ -192,6 +174,7 @@ export type WeekViewData = {
   todayDayName: DayName | null;
   days: WeekDayView[];
   tasks: TaskInstance[];
+  tasksByDay: TasksByDay;
   settings: PlannerSettings;
   capacity: CapacitySnapshot;
   schedule: ScheduleHealth;
@@ -259,7 +242,6 @@ export type SearchAttachmentHit = {
 
 export type SearchResults = {
   tasks: TaskInstance[];
-  inbox: InboxItem[];
   notes: SearchNoteHit[];
   attachments: SearchAttachmentHit[];
 };
