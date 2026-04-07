@@ -88,6 +88,7 @@
         existing_month_key: target?.month_key ?? null,
         existing_week_key: target?.week_key ?? null
       });
+      await invalidateAll();
     } catch (error) {
       instances = previousInstances;
       toast.error(error instanceof Error ? error.message : 'Failed to update placement');
