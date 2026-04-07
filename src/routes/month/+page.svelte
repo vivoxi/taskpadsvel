@@ -74,6 +74,7 @@
   }
 
   async function patchInstance(instanceId: string, updates: Record<string, unknown>) {
+    console.log('[patchInstance] called', instanceId, updates);
     const previousInstances = structuredClone(instances);
     instances = instances.map((instance) =>
       instance.id === instanceId ? { ...instance, ...updates } : instance
@@ -82,6 +83,7 @@
     const target = previousInstances.find((instance) => instance.id === instanceId);
 
     try {
+      console.log('[patchInstance] sending PATCH...');
       const response = await apiSendJson<{ success: true; instance: TaskInstance }>(
         `/api/task-instances/${instanceId}`,
         'PATCH',
@@ -91,11 +93,13 @@
         existing_week_key: target?.week_key ?? null
         }
       );
+      console.log('[patchInstance] PATCH success', response);
       instances = instances.map((instance) =>
         instance.id === response.instance.id ? response.instance : instance
       );
       await invalidateAll();
     } catch (error) {
+      console.error('[patchInstance] PATCH error', error);
       instances = previousInstances;
       toast.error(error instanceof Error ? error.message : 'Failed to update placement');
     }
@@ -389,7 +393,7 @@
                           {#if instance}
                             <select
                               value={instance.day_name ?? ''}
-                              oninput={(event) =>
+                              onchange={(event) =>
                                 patchInstance(instance.id, {
                                   day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
                                 })}
@@ -440,7 +444,7 @@
                           Week
                           <select
                             value={instance.week_key ?? ''}
-                            oninput={(event) =>
+                            onchange={(event) =>
                               patchInstance(instance.id, {
                                 week_key: (event.currentTarget as HTMLSelectElement).value || null,
                                 month_key: data.view.monthKey
@@ -458,7 +462,7 @@
                           Day
                           <select
                             value={instance.day_name ?? ''}
-                            oninput={(event) =>
+                            onchange={(event) =>
                               patchInstance(instance.id, {
                                 day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
                               })}

@@ -24,8 +24,12 @@ function parseStatus(value: unknown): TaskInstanceStatus | null {
 }
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
+  console.log('[PATCH task-instance] request received, instanceId param:', params.instanceId);
   const authError = requireAuth(request);
-  if (authError) return authError;
+  if (authError) {
+    console.log('[PATCH task-instance] auth failed');
+    return authError;
+  }
 
   const instanceId = params.instanceId;
   if (!instanceId) throw error(400, 'Instance id is required');
@@ -69,12 +73,17 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     throw error(400, 'No valid updates supplied');
   }
 
+  console.log('[PATCH task-instance] instanceId:', instanceId, 'updates:', JSON.stringify(updates));
+
   const { data, error: updateError } = await supabaseAdmin
     .from('task_instances')
     .update(updates)
     .eq('id', instanceId)
     .select('*')
     .single();
+
+  console.log('[PATCH task-instance] result:', JSON.stringify({ data, error: updateError?.message }));
+
   if (updateError) throw error(500, updateError.message);
 
   return json({ success: true, instance: data });
