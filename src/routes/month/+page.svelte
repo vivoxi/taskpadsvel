@@ -56,7 +56,7 @@
   }
 
   async function patchTemplate(templateId: string, updates: Record<string, unknown>) {
-    const previousTemplates = structuredClone(templates);
+    const previousTemplates = $state.snapshot(templates);
     updateTemplateState(templateId, (template) => ({ ...template, ...updates }));
 
     try {
@@ -74,8 +74,7 @@
   }
 
   async function patchInstance(instanceId: string, updates: Record<string, unknown>) {
-    console.log('[patchInstance] called', instanceId, updates);
-    const previousInstances = structuredClone(instances);
+    const previousInstances = $state.snapshot(instances);
     instances = instances.map((instance) =>
       instance.id === instanceId ? { ...instance, ...updates } : instance
     );
@@ -83,7 +82,6 @@
     const target = previousInstances.find((instance) => instance.id === instanceId);
 
     try {
-      console.log('[patchInstance] sending PATCH...');
       const response = await apiSendJson<{ success: true; instance: TaskInstance }>(
         `/api/task-instances/${instanceId}`,
         'PATCH',
@@ -93,13 +91,11 @@
         existing_week_key: target?.week_key ?? null
         }
       );
-      console.log('[patchInstance] PATCH success', response);
       instances = instances.map((instance) =>
         instance.id === response.instance.id ? response.instance : instance
       );
       await invalidateAll();
     } catch (error) {
-      console.error('[patchInstance] PATCH error', error);
       instances = previousInstances;
       toast.error(error instanceof Error ? error.message : 'Failed to update placement');
     }

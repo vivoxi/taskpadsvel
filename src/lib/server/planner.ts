@@ -78,8 +78,6 @@ async function listInstances(monthKey: string): Promise<TaskInstance[]> {
     throw error(500, queryError.message);
   }
 
-  console.log('[listInstances]', monthKey, (data ?? []).map((i: Record<string, unknown>) => ({ id: i.id, day_name: i.day_name })));
-
   return sortInstances((data ?? []) as TaskInstance[]);
 }
 
