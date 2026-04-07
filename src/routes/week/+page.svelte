@@ -134,16 +134,16 @@
   <title>Week · Taskpad</title>
 </svelte:head>
 
-<div class="px-4 py-4 sm:px-6 sm:py-6">
-  <div class="mx-auto flex max-w-[1400px] flex-col gap-6">
-    <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-soft)] sm:px-7 sm:py-6">
-      <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+<div class="px-4 py-4 sm:px-5 sm:py-5">
+  <div class="mx-auto flex max-w-[1400px] flex-col gap-5">
+    <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-6 sm:py-5">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="space-y-2">
           <p class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Weekly workspace</p>
-          <h1 class="text-3xl font-semibold tracking-[-0.05em] text-[var(--text-primary)]">
+          <h1 class="text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)]">
             {data.view.label}
           </h1>
-          <p class="max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
+          <p class="max-w-2xl text-sm leading-5 text-[var(--text-muted)]">
             Daily notes live beside the work itself, and past weeks stay editable like any other working record.
           </p>
         </div>
@@ -172,34 +172,34 @@
         </div>
       </div>
 
-      <div class="mt-6 grid gap-3 sm:grid-cols-3">
-        <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
+      <div class="mt-5 grid gap-2.5 sm:grid-cols-3">
+        <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
           <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Open work</div>
-          <div class="mt-3 text-2xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
+          <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
             {openTasks.length}
           </div>
-          <div class="mt-1 text-sm text-[var(--text-muted)]">Still in motion this week</div>
+          <div class="mt-1 text-[13px] text-[var(--text-muted)]">Still in motion this week</div>
         </div>
-        <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
+        <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
           <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Due pressure</div>
-          <div class="mt-3 text-2xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
+          <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
             {data.view.capacity.due_soon_count + data.view.capacity.overdue_count}
           </div>
-          <div class="mt-1 text-sm text-[var(--text-muted)]">Due soon + overdue items visible now</div>
+          <div class="mt-1 text-[13px] text-[var(--text-muted)]">Due soon + overdue items visible now</div>
         </div>
-        <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
+        <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
           <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Remaining room</div>
-          <div class="mt-3 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
+          <div class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
             {data.view.capacity.remaining_hours}h
           </div>
-          <div class="mt-1 text-sm text-[var(--text-muted)]">
+          <div class="mt-1 text-[13px] text-[var(--text-muted)]">
             {data.view.schedule.overflow_warning ?? `Month context ${data.view.monthKey}`}
           </div>
         </div>
       </div>
     </section>
 
-    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_24rem]">
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_22rem]">
       <section class="space-y-4">
         {#each data.view.days as day}
           <DayNoteEditor
@@ -216,34 +216,34 @@
         {/each}
       </section>
 
-      <aside class="space-y-4 xl:sticky xl:top-6 xl:self-start">
-        <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)]">
+      <aside class="space-y-3.5 xl:sticky xl:top-6 xl:self-start">
+        <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-card)]">
           <div class="border-b border-[var(--border)] pb-4">
             <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Capacity pulse</div>
-            <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Weekly pressure</h2>
+            <h2 class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Weekly pressure</h2>
           </div>
 
-          <div class="pt-4">
+          <div class="pt-3">
             <CapacitySummary compact capacity={data.view.capacity} schedule={data.view.schedule} />
           </div>
         </section>
 
-        <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)]">
+        <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-card)]">
           <div class="border-b border-[var(--border)] pb-4">
             <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">This week</div>
-            <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
+            <h2 class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
               Unassigned this week
             </h2>
           </div>
 
-          <div class="space-y-2 pt-4">
+          <div class="space-y-2 pt-3">
             {#if unassignedTasks.length === 0}
-              <p class="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
+              <p class="rounded-[16px] border border-dashed border-[var(--border)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
                 No unassigned tasks for this week.
               </p>
             {:else}
               {#each unassignedTasks as task (task.id)}
-                <div class="flex items-start justify-between gap-3 rounded-[18px] border border-[var(--border)] px-4 py-3 transition-colors hover:bg-[var(--panel-soft)]">
+                <div class="flex items-start justify-between gap-3 rounded-[16px] border border-[var(--border)] px-3.5 py-2.5 transition-colors hover:bg-[var(--panel-soft)]">
                   <span class="min-w-0">
                     <span class="block text-sm font-medium text-[var(--text-primary)]">{task.title_snapshot}</span>
                     <TaskMetaChips
@@ -277,22 +277,22 @@
           </div>
         </section>
 
-        <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)]">
+        <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-card)]">
           <div class="border-b border-[var(--border)] pb-4">
             <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Completed</div>
-            <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Done and revisitable</h2>
+            <h2 class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Done and revisitable</h2>
           </div>
 
-          <div class="space-y-2 pt-4">
+          <div class="space-y-2 pt-3">
             {#if completedTasks.length === 0}
-              <p class="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
+              <p class="rounded-[16px] border border-dashed border-[var(--border)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
                 No completed items yet.
               </p>
             {:else}
               {#each completedTasks as task (task.id)}
                 <button
                   type="button"
-                  class="flex w-full items-start justify-between gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)]/70 px-4 py-3 text-left opacity-80 transition-colors hover:opacity-100"
+                  class="flex w-full items-start justify-between gap-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)]/70 px-3.5 py-2.5 text-left opacity-80 transition-colors hover:opacity-100"
                   onclick={() => toggleTask(task, 'open')}
                 >
                   <span class="min-w-0">

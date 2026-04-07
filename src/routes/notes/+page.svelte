@@ -107,31 +107,31 @@
   <title>Notes · Taskpad</title>
 </svelte:head>
 
-<div class="px-4 py-4 sm:px-6 sm:py-6">
-  <div class="mx-auto grid max-w-[1440px] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-    <aside class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-5">
+<div class="px-4 py-4 sm:px-5 sm:py-5">
+  <div class="mx-auto grid max-w-[1440px] gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
+    <aside class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)]">
       <div class="border-b border-[var(--border)] pb-4">
         <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Notes space</div>
-        <h1 class="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">Documents</h1>
-        <p class="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+        <h1 class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">Documents</h1>
+        <p class="mt-1.5 text-sm leading-5 text-[var(--text-muted)]">
           Long-form notes, reference material, and thinking that should stay separate from structured planning metadata.
         </p>
       </div>
 
       <button
         type="button"
-        class="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+        class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-2.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         onclick={createDocument}
       >
         <Plus size={14} />
         New note
       </button>
 
-      <div class="mt-4 space-y-2">
+      <div class="mt-3 space-y-1.5">
         {#each data.view.documents as document (document.id)}
           <a
             href={`/notes?doc=${document.id}`}
-            class={`block rounded-[18px] border px-4 py-3 transition-colors ${
+            class={`block rounded-[16px] border px-3.5 py-2.5 transition-colors ${
               document.id === data.view.selectedDocumentId
                 ? 'border-[var(--border-strong)] bg-[var(--panel-soft)]'
                 : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--panel-soft)]/70'
@@ -146,14 +146,14 @@
       </div>
     </aside>
 
-    <section class="rounded-[32px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-soft)] sm:px-8 sm:py-7">
+    <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-6 sm:py-5">
       <div class="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0 flex-1">
         <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Current note</div>
         <input
             value={data.view.documents.find((document) => document.id === data.view.selectedDocumentId)?.title ?? 'Untitled'}
             onblur={(event) => renameDocument((event.currentTarget as HTMLInputElement).value)}
-            class="mt-3 w-full border-none bg-transparent p-0 text-3xl font-semibold tracking-[-0.05em] text-[var(--text-primary)] outline-none"
+            class="mt-2.5 w-full border-none bg-transparent p-0 text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)] outline-none"
           />
         </div>
 
@@ -167,21 +167,21 @@
         </button>
       </div>
 
-      <div class="pt-6">
-        <div class="mb-4 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4 text-sm text-[var(--text-muted)]">
+      <div class="pt-5">
+        <div class="mb-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
           Notes are for context and writing. Priority, due dates, capacity, carry-forward, and scheduling now live in structured planner data.
         </div>
 
-        <section class="mb-6 rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
+        <section class="mb-5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3.5">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Attachments</div>
-              <p class="mt-2 text-sm text-[var(--text-muted)]">
+              <p class="mt-1.5 text-sm text-[var(--text-muted)]">
                 Keep source files, references, or exports close to the note without turning notes into a planner surface.
               </p>
             </div>
 
-            <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
+            <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
               <Upload size={14} />
               {uploading ? 'Uploading...' : 'Attach file'}
               <input
@@ -193,14 +193,14 @@
             </label>
           </div>
 
-          <div class="mt-4 space-y-2">
+          <div class="mt-3 space-y-2">
             {#if data.view.attachments.length === 0}
-              <div class="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
+              <div class="rounded-[16px] border border-dashed border-[var(--border)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
                 No files attached to this note yet.
               </div>
             {:else}
               {#each data.view.attachments as attachment (attachment.id)}
-                <div class="flex items-center justify-between gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
+                <div class="flex items-center justify-between gap-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3.5 py-2.5">
                   <div class="min-w-0 flex items-center gap-3">
                     <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-faint)]">
                       <Paperclip size={14} />
