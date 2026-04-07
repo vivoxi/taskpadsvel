@@ -16,6 +16,7 @@ export const load: PageServerLoad = async ({ url }) => {
     .select('*')
     .eq('month_key', monthKey)
     .eq('instance_kind', 'monthly')
+    .is('archived_at', null)
     .not('day_name', 'is', null);
 
   if (monthlyError) throw error(500, monthlyError.message);

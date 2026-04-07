@@ -1,10 +1,14 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
-  import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-svelte';
+  import { ChevronLeft, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { apiFetch, apiSendJson } from '$lib/client/api';
+  import CapacitySummary from '$lib/components/CapacitySummary.svelte';
+  import InboxPanel from '$lib/components/InboxPanel.svelte';
+  import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
   import { DAY_NAMES, type DayName, type TaskInstance, type TaskTemplate } from '$lib/planner/types';
   import { getNextMonthKey, getPreviousMonthKey } from '$lib/planner/dates';
+  import { templateMode } from '$lib/stores';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -13,6 +17,7 @@
   let weeklyDraft = $state('');
   let monthlyDraft = $state('');
   let busyTemplateId = $state<string | null>(null);
+  let isGenerating = $state(false);
 
   $effect(() => {
     templates = structuredClone(data.view.templates);
@@ -86,9 +91,9 @@
         `/api/task-instances/${instanceId}`,
         'PATCH',
         {
-        ...updates,
-        existing_month_key: target?.month_key ?? null,
-        existing_week_key: target?.week_key ?? null
+          ...updates,
+          existing_month_key: target?.month_key ?? null,
+          existing_week_key: target?.week_key ?? null
         }
       );
       instances = instances.map((instance) =>
@@ -125,11 +130,38 @@
       await apiFetch(`/api/task-templates/${templateId}`, {
         method: 'DELETE'
       });
+      toast('Template deleted', {
+        action: {
+          label: 'Undo',
+          onClick: () => toast('Template deletion is permanent after refresh.')
+        }
+      });
       await invalidateAll();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete template');
     } finally {
       busyTemplateId = null;
+    }
+  }
+
+  async function generateSchedule() {
+    isGenerating = true;
+
+    try {
+      const response = await apiSendJson<{ createdBlocks: number; warnings: string[] }>(
+        '/api/schedule/generate',
+        'POST',
+        { monthKey: data.view.monthKey }
+      );
+      toast.success(`Generated ${response.createdBlocks} schedule block${response.createdBlocks === 1 ? '' : 's'}`);
+      if (response.warnings[0]) {
+        toast(response.warnings[0]);
+      }
+      await invalidateAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate schedule');
+    } finally {
+      isGenerating = false;
     }
   }
 
@@ -154,11 +186,20 @@
             {data.view.label}
           </h1>
           <p class="max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-            Assign recurring work to this month’s weeks without turning the planning layer into another execution screen.
+            Place recurring work, compare it against real capacity, and generate a schedule without leaving the month surface.
           </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            onclick={generateSchedule}
+            disabled={isGenerating}
+          >
+            <Sparkles size={15} />
+            {isGenerating ? 'Generating' : 'Generate'}
+          </button>
           <a
             href={`/month?month=${getPreviousMonthKey(data.view.monthKey)}`}
             class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
@@ -182,28 +223,31 @@
         </div>
       </div>
 
-      <div class="mt-6 grid gap-3 sm:grid-cols-3">
-        <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Weekly templates</div>
-          <div class="mt-3 text-2xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{weeklyTemplates.length}</div>
-        </div>
-        <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Monthly templates</div>
-          <div class="mt-3 text-2xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{monthlyTemplates.length}</div>
-        </div>
-        <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Weeks in play</div>
-          <div class="mt-3 text-2xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{data.view.weeks.length}</div>
-        </div>
+      <div class="mt-6">
+        <CapacitySummary capacity={data.view.capacity} schedule={data.view.schedule} />
       </div>
     </section>
 
-    <div class="grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
+    <div class="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
       <aside class="space-y-4">
-        <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)]">
+        <InboxPanel
+          title="Shared inbox"
+          description="Capture work fast, then move it into the weekly or monthly planning layer when it becomes clear."
+          items={data.view.inboxItems}
+          monthKey={data.view.monthKey}
+        />
+
+        <section class={`rounded-[28px] border bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)] ${
+          $templateMode ? 'border-[var(--border-strong)] ring-1 ring-[var(--border-strong)]' : 'border-[var(--border)]'
+        }`}>
           <div class="border-b border-[var(--border)] pb-4">
             <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Recurring work</div>
             <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Templates</h2>
+            <p class="mt-2 text-sm text-[var(--text-muted)]">
+              {$templateMode
+                ? 'Template mode is on. Defaults here directly shape new monthly materialization.'
+                : 'Use templates to keep recurring work structured instead of burying metadata in notes.'}
+            </p>
           </div>
 
           <div class="space-y-3 pt-4">
@@ -255,9 +299,13 @@
                         })}
                       class="w-full border-none bg-transparent p-0 text-sm font-medium text-[var(--text-primary)] outline-none"
                     />
-                    <div class="mt-1 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                      {template.kind}
-                    </div>
+                    <TaskMetaChips
+                      compact
+                      priority={template.priority_default}
+                      hours={template.hours_needed_default ?? template.estimate_hours}
+                      category={template.category}
+                      sourceType={template.source_type_default}
+                    />
                   </div>
 
                   <button
@@ -278,6 +326,59 @@
                       onblur={(event) =>
                         patchTemplate(template.id, {
                           estimate_hours: parseEstimate((event.currentTarget as HTMLInputElement).value)
+                        })}
+                      class="mt-1 w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                    />
+                  </label>
+
+                  <label class="text-xs text-[var(--text-muted)]">
+                    Hours default
+                    <input
+                      value={template.hours_needed_default ?? ''}
+                      onblur={(event) =>
+                        patchTemplate(template.id, {
+                          hours_needed_default: parseEstimate((event.currentTarget as HTMLInputElement).value)
+                        })}
+                      class="mt-1 w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                    />
+                  </label>
+
+                  <label class="text-xs text-[var(--text-muted)]">
+                    Priority
+                    <select
+                      value={template.priority_default}
+                      onchange={(event) =>
+                        patchTemplate(template.id, {
+                          priority_default: (event.currentTarget as HTMLSelectElement).value
+                        })}
+                      class="mt-1 w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                    >
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                  </label>
+
+                  <label class="text-xs text-[var(--text-muted)]">
+                    Category
+                    <input
+                      value={template.category ?? ''}
+                      onblur={(event) =>
+                        patchTemplate(template.id, {
+                          category: (event.currentTarget as HTMLInputElement).value.trim() || null
+                        })}
+                      class="mt-1 w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                    />
+                  </label>
+
+                  <label class="text-xs text-[var(--text-muted)]">
+                    Due offset
+                    <input
+                      value={template.due_day_offset ?? ''}
+                      onblur={(event) =>
+                        patchTemplate(template.id, {
+                          due_day_offset:
+                            Number.parseInt((event.currentTarget as HTMLInputElement).value, 10) || null
                         })}
                       class="mt-1 w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
                     />
@@ -316,7 +417,7 @@
                   </label>
 
                   {#if template.kind === 'monthly'}
-                    <label class="text-xs text-[var(--text-muted)]">
+                    <label class="text-xs text-[var(--text-muted)] sm:col-span-2">
                       Default week
                       <select
                         value={template.preferred_week_of_month ?? ''}
@@ -340,7 +441,7 @@
 
             {#if inactiveTemplates.length > 0}
               <div class="rounded-[22px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
-                {inactiveTemplates.length} inactive template{inactiveTemplates.length === 1 ? '' : 's'} are hidden from the planner but remain available for history.
+                {inactiveTemplates.length} inactive template{inactiveTemplates.length === 1 ? '' : 's'} stay in history but no longer materialize into planning.
               </div>
             {/if}
           </div>
@@ -360,7 +461,7 @@
                 <tr class="border-b border-[var(--border)] bg-[var(--panel-soft)]">
                   <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Template</th>
                   {#each data.view.weeks as week}
-                    <th class="min-w-44 px-4 py-3 text-left">
+                    <th class="min-w-[18rem] px-4 py-3 text-left">
                       <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">{week.shortLabel}</div>
                       <div class="mt-1 text-sm font-medium text-[var(--text-primary)]">{week.label}</div>
                     </th>
@@ -379,27 +480,83 @@
                     <tr class="border-b border-[var(--border)] last:border-none">
                       <td class="px-4 py-4 align-top">
                         <div class="font-medium text-[var(--text-primary)]">{template.title}</div>
-                        <div class="mt-1 text-xs text-[var(--text-muted)]">
-                          {template.estimate_hours ? `${template.estimate_hours}h` : 'No estimate'}
-                        </div>
+                        <TaskMetaChips
+                          compact
+                          priority={template.priority_default}
+                          hours={template.hours_needed_default ?? template.estimate_hours}
+                          category={template.category}
+                          sourceType={template.source_type_default}
+                        />
                       </td>
                       {#each data.view.weeks as week}
                         {@const instance = getWeeklyInstance(template.id, week.weekKey)}
                         <td class="px-4 py-4 align-top">
                           {#if instance}
-                            <select
-                              value={instance.day_name ?? ''}
-                              onchange={(event) =>
-                                patchInstance(instance.id, {
-                                  day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
-                                })}
-                              class="w-full rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                            >
-                              <option value="">Unassigned</option>
-                              {#each DAY_NAMES as dayName}
-                                <option value={dayName}>{dayName}</option>
-                              {/each}
-                            </select>
+                            <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+                              <select
+                                value={instance.day_name ?? ''}
+                                onchange={(event) =>
+                                  patchInstance(instance.id, {
+                                    day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
+                                  })}
+                                class="w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                              >
+                                <option value="">Unassigned</option>
+                                {#each DAY_NAMES as dayName}
+                                  <option value={dayName}>{dayName}</option>
+                                {/each}
+                              </select>
+
+                              <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                                <select
+                                  value={instance.priority}
+                                  onchange={(event) =>
+                                    patchInstance(instance.id, {
+                                      priority: (event.currentTarget as HTMLSelectElement).value
+                                    })}
+                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                                >
+                                  <option value="high">High</option>
+                                  <option value="medium">Medium</option>
+                                  <option value="low">Low</option>
+                                </select>
+                                <input
+                                  value={instance.hours_needed ?? ''}
+                                  onblur={(event) =>
+                                    patchInstance(instance.id, {
+                                      hours_needed: parseEstimate((event.currentTarget as HTMLInputElement).value)
+                                    })}
+                                  placeholder="Hours"
+                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                                />
+                                <input
+                                  type="date"
+                                  value={instance.due_date ?? ''}
+                                  onchange={(event) =>
+                                    patchInstance(instance.id, {
+                                      due_date: (event.currentTarget as HTMLInputElement).value || null
+                                    })}
+                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                                />
+                                <input
+                                  value={instance.category ?? ''}
+                                  onblur={(event) =>
+                                    patchInstance(instance.id, {
+                                      category: (event.currentTarget as HTMLInputElement).value.trim() || null
+                                    })}
+                                  placeholder="Category"
+                                  class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                                />
+                              </div>
+
+                              <TaskMetaChips
+                                priority={instance.priority}
+                                dueDate={instance.due_date}
+                                hours={instance.hours_needed}
+                                category={instance.category}
+                                sourceType={instance.source_type}
+                              />
+                            </div>
                           {/if}
                         </td>
                       {/each}
@@ -426,50 +583,101 @@
               {#each monthlyTemplates as template (template.id)}
                 {@const instance = getMonthlyInstance(template.id)}
                 <article class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
-                  <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <h3 class="font-medium text-[var(--text-primary)]">{template.title}</h3>
-                      <p class="mt-1 text-sm text-[var(--text-muted)]">
-                        {template.estimate_hours ? `${template.estimate_hours}h estimate` : 'No estimate'}
-                      </p>
+                  <div class="flex flex-col gap-4">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div class="min-w-0">
+                        <h3 class="font-medium text-[var(--text-primary)]">{template.title}</h3>
+                        <TaskMetaChips
+                          compact
+                          priority={instance?.priority ?? template.priority_default}
+                          dueDate={instance?.due_date ?? null}
+                          hours={instance?.hours_needed ?? template.hours_needed_default ?? template.estimate_hours}
+                          category={instance?.category ?? template.category}
+                          sourceType={instance?.source_type ?? template.source_type_default}
+                        />
+                      </div>
+
+                      {#if instance}
+                        <div class="grid gap-2 sm:grid-cols-2">
+                          <label class="text-xs text-[var(--text-muted)]">
+                            Week
+                            <select
+                              value={instance.week_key ?? ''}
+                              onchange={(event) =>
+                                patchInstance(instance.id, {
+                                  week_key: (event.currentTarget as HTMLSelectElement).value || null,
+                                  month_key: data.view.monthKey
+                                })}
+                              class="mt-1 min-w-44 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                            >
+                              <option value="">Unassigned</option>
+                              {#each data.view.weeks as week}
+                                <option value={week.weekKey}>{week.shortLabel} · {week.label}</option>
+                              {/each}
+                            </select>
+                          </label>
+
+                          <label class="text-xs text-[var(--text-muted)]">
+                            Day
+                            <select
+                              value={instance.day_name ?? ''}
+                              onchange={(event) =>
+                                patchInstance(instance.id, {
+                                  day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
+                                })}
+                              class="mt-1 min-w-40 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                            >
+                              <option value="">Unassigned</option>
+                              {#each DAY_NAMES as dayName}
+                                <option value={dayName}>{dayName}</option>
+                              {/each}
+                            </select>
+                          </label>
+                        </div>
+                      {/if}
                     </div>
 
                     {#if instance}
-                      <div class="grid gap-2 sm:grid-cols-2">
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Week
-                          <select
-                            value={instance.week_key ?? ''}
-                            onchange={(event) =>
-                              patchInstance(instance.id, {
-                                week_key: (event.currentTarget as HTMLSelectElement).value || null,
-                                month_key: data.view.monthKey
-                              })}
-                            class="mt-1 min-w-44 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          >
-                            <option value="">Unassigned</option>
-                            {#each data.view.weeks as week}
-                              <option value={week.weekKey}>{week.shortLabel} · {week.label}</option>
-                            {/each}
-                          </select>
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Day
-                          <select
-                            value={instance.day_name ?? ''}
-                            onchange={(event) =>
-                              patchInstance(instance.id, {
-                                day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
-                              })}
-                            class="mt-1 min-w-40 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          >
-                            <option value="">Unassigned</option>
-                            {#each DAY_NAMES as dayName}
-                              <option value={dayName}>{dayName}</option>
-                            {/each}
-                          </select>
-                        </label>
+                      <div class="grid gap-2 sm:grid-cols-4">
+                        <select
+                          value={instance.priority}
+                          onchange={(event) =>
+                            patchInstance(instance.id, {
+                              priority: (event.currentTarget as HTMLSelectElement).value
+                            })}
+                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                        >
+                          <option value="high">High</option>
+                          <option value="medium">Medium</option>
+                          <option value="low">Low</option>
+                        </select>
+                        <input
+                          value={instance.hours_needed ?? ''}
+                          onblur={(event) =>
+                            patchInstance(instance.id, {
+                              hours_needed: parseEstimate((event.currentTarget as HTMLInputElement).value)
+                            })}
+                          placeholder="Hours"
+                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                        />
+                        <input
+                          type="date"
+                          value={instance.due_date ?? ''}
+                          onchange={(event) =>
+                            patchInstance(instance.id, {
+                              due_date: (event.currentTarget as HTMLInputElement).value || null
+                            })}
+                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                        />
+                        <input
+                          value={instance.category ?? ''}
+                          onblur={(event) =>
+                            patchInstance(instance.id, {
+                              category: (event.currentTarget as HTMLInputElement).value.trim() || null
+                            })}
+                          placeholder="Category"
+                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                        />
                       </div>
                     {/if}
                   </div>

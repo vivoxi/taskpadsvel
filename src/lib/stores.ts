@@ -1,26 +1,46 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
+import type { SyncState } from '$lib/planner/types';
 
-export type ActiveView = 'weekly' | 'monthly' | 'random' | 'thisweek';
+function persistedStringStore(key: string, storage: Storage, initial = '') {
+  const store = writable<string>(browser ? storage.getItem(key) ?? initial : initial);
 
-export const activeView = writable<ActiveView>('weekly');
-export const weekOffset = writable<number>(0);
-export const generatedWeeks = writable<Set<string>>(new Set());
+  if (browser) {
+    store.subscribe((value) => {
+      const trimmed = value.trim();
+
+      if (trimmed) {
+        storage.setItem(key, trimmed);
+      } else {
+        storage.removeItem(key);
+      }
+    });
+  }
+
+  return store;
+}
+
+function persistedBooleanStore(key: string, initial = false) {
+  const store = writable<boolean>(
+    browser ? window.localStorage.getItem(key) === 'true' : initial
+  );
+
+  if (browser) {
+    store.subscribe((value) => {
+      window.localStorage.setItem(key, value ? 'true' : 'false');
+    });
+  }
+
+  return store;
+}
 
 const AUTH_PASSWORD_STORAGE_KEY = 'taskpad-admin-password';
-const initialAuthPassword = browser ? sessionStorage.getItem(AUTH_PASSWORD_STORAGE_KEY) ?? '' : '';
 
-export const authPassword = writable<string>(initialAuthPassword);
+export const authPassword = persistedStringStore(
+  AUTH_PASSWORD_STORAGE_KEY,
+  browser ? sessionStorage : ({} as Storage)
+);
 
-if (browser) {
-  authPassword.subscribe((value) => {
-    const password = value.trim();
-
-    if (password) {
-      sessionStorage.setItem(AUTH_PASSWORD_STORAGE_KEY, password);
-      return;
-    }
-
-    sessionStorage.removeItem(AUTH_PASSWORD_STORAGE_KEY);
-  });
-}
+export const commandPaletteOpen = writable(false);
+export const templateMode = persistedBooleanStore('taskpad-template-mode');
+export const syncState = writable<SyncState>('synced');

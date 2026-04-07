@@ -1,9 +1,7 @@
 <script lang="ts">
-  import { invalidateAll } from '$app/navigation';
   import { Check } from 'lucide-svelte';
-  import { toast } from 'svelte-sonner';
-  import { apiSendJson } from '$lib/client/api';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
+  import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
   import type { DayName, PlannerBlock, TaskInstance } from '$lib/planner/types';
 
   let {
@@ -14,7 +12,8 @@
     isToday = false,
     blocks,
     tasks,
-    onSaveBlocks
+    onSaveBlocks,
+    onToggleTask
   }: {
     weekKey: string;
     isoDate: string;
@@ -24,21 +23,11 @@
     blocks: PlannerBlock[];
     tasks: TaskInstance[];
     onSaveBlocks: (dayName: DayName, blocks: PlannerBlock[]) => void | Promise<void>;
+    onToggleTask: (task: TaskInstance, nextStatus: 'open' | 'done') => void | Promise<void>;
   } = $props();
 
   const hasTasks = $derived(tasks.length > 0);
   const hasBlocks = $derived(blocks.length > 0);
-
-  async function toggleTask(task: TaskInstance) {
-    try {
-      await apiSendJson(`/api/task-instances/${task.id}`, 'PATCH', {
-        status: task.status === 'done' ? 'open' : 'done'
-      });
-      await invalidateAll();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update task');
-    }
-  }
 </script>
 
 <article class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)] sm:px-6">
@@ -66,10 +55,10 @@
         {#each tasks as task (task.id)}
           <button
             type="button"
-            class="flex w-full items-center gap-3 py-1.5 text-left text-sm transition-colors hover:text-[var(--text-primary)]"
-            onclick={() => toggleTask(task)}
+            class="flex w-full items-start gap-3 rounded-[16px] py-2 text-left text-sm transition-colors hover:bg-[var(--panel-soft)]/70"
+            onclick={() => onToggleTask(task, task.status === 'done' ? 'open' : 'done')}
           >
-            <span class={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${
+            <span class={`mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border ${
               task.status === 'done'
                 ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
                 : 'border-[var(--border-strong)] text-transparent'
@@ -78,8 +67,19 @@
                 <Check size={11} />
               {/if}
             </span>
-            <span class={task.status === 'done' ? 'text-zinc-400 line-through' : 'text-[var(--text-primary)]'}>
-              {task.title_snapshot}
+            <span class="min-w-0 flex-1">
+              <span class={`block ${task.status === 'done' ? 'text-zinc-400 line-through' : 'text-[var(--text-primary)]'}`}>
+                {task.title_snapshot}
+              </span>
+              <TaskMetaChips
+                compact
+                priority={task.priority}
+                dueDate={task.due_date}
+                hours={task.hours_needed}
+                category={task.category}
+                sourceType={task.source_type}
+                carried={task.carried_from_instance_id !== null}
+              />
             </span>
           </button>
         {/each}

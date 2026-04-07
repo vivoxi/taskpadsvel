@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit';
-import { DAY_NAMES, type DayName, type TaskInstanceStatus } from '$lib/planner/types';
+import { DAY_NAMES, type DayName, type TaskInstanceStatus, type TaskPriority } from '$lib/planner/types';
 import { inferWeekIndex } from '$lib/server/planner';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
@@ -21,6 +21,21 @@ function parseDayName(value: unknown): DayName | null {
 
 function parseStatus(value: unknown): TaskInstanceStatus | null {
   return value === 'open' || value === 'done' ? value : null;
+}
+
+function parsePriority(value: unknown): TaskPriority | null {
+  return value === 'high' || value === 'medium' || value === 'low' ? value : null;
+}
+
+function parseNullableDate(value: unknown): string | null {
+  if (value === null || value === '') return null;
+  return typeof value === 'string' ? value : null;
+}
+
+function parseNullableNumber(value: unknown): number | null {
+  if (value === null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return null;
 }
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
@@ -52,6 +67,53 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
   if ('month_key' in body && (typeof body.month_key === 'string' || body.month_key === null)) {
     updates.month_key = body.month_key;
+  }
+
+  if ('priority' in body) {
+    const priority = parsePriority(body.priority);
+    if (!priority) throw error(400, 'Invalid priority');
+    updates.priority = priority;
+  }
+
+  if ('due_date' in body) {
+    updates.due_date = parseNullableDate(body.due_date);
+  }
+
+  if ('hours_needed' in body) {
+    updates.hours_needed = parseNullableNumber(body.hours_needed);
+  }
+
+  if ('category' in body) {
+    updates.category = typeof body.category === 'string' && body.category.trim() ? body.category.trim() : null;
+  }
+
+  if ('preferred_day' in body) {
+    updates.preferred_day = parseDayName(body.preferred_day);
+  }
+
+  if ('preferred_week' in body) {
+    updates.preferred_week =
+      typeof body.preferred_week === 'number' && Number.isFinite(body.preferred_week)
+        ? body.preferred_week
+        : null;
+  }
+
+  if ('archive_reason' in body) {
+    updates.archive_reason =
+      typeof body.archive_reason === 'string' && body.archive_reason.trim()
+        ? body.archive_reason.trim()
+        : null;
+  }
+
+  if ('archived_at' in body) {
+    updates.archived_at = typeof body.archived_at === 'string' && body.archived_at ? body.archived_at : null;
+  }
+
+  if ('linked_schedule_block_id' in body) {
+    updates.linked_schedule_block_id =
+      typeof body.linked_schedule_block_id === 'string' && body.linked_schedule_block_id
+        ? body.linked_schedule_block_id
+        : null;
   }
 
   const monthKey =

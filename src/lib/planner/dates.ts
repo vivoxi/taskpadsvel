@@ -2,16 +2,23 @@ import {
   addDays,
   addMonths,
   addWeeks,
+  eachDayOfInterval,
   endOfMonth,
   format,
   getISOWeek,
   getISOWeekYear,
+  isWeekend,
   isSameDay,
   parseISO,
   startOfISOWeek,
   startOfMonth
 } from 'date-fns';
-import { DAY_NAMES, type DayName, type MonthWeekSlot } from '$lib/planner/types';
+import {
+  DAY_NAMES,
+  type DayName,
+  type MonthWeekSlot,
+  type PlannerSettings
+} from '$lib/planner/types';
 
 export function getWeekKey(date: Date = new Date()): string {
   return `${getISOWeekYear(date)}-W${String(getISOWeek(date)).padStart(2, '0')}`;
@@ -162,4 +169,26 @@ export function toIsoDate(weekKey: string, dayName: DayName): string {
   const dayIndex = DAY_NAMES.indexOf(dayName);
   const date = getWeekDays(weekKey)[dayIndex];
   return date ? format(date, 'yyyy-MM-dd') : '';
+}
+
+export function getWorkingHoursPerDay(settings: PlannerSettings): number {
+  const [startHour, startMinute] = settings.working_day_start.split(':').map((value) => Number.parseInt(value, 10));
+  const [endHour, endMinute] = settings.working_day_end.split(':').map((value) => Number.parseInt(value, 10));
+  const [breakStartHour, breakStartMinute] = settings.break_start.split(':').map((value) => Number.parseInt(value, 10));
+  const [breakEndHour, breakEndMinute] = settings.break_end.split(':').map((value) => Number.parseInt(value, 10));
+
+  const workMinutes = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+  const breakMinutes = breakEndHour * 60 + breakEndMinute - (breakStartHour * 60 + breakStartMinute);
+
+  return Math.max(0, (workMinutes - breakMinutes) / 60);
+}
+
+export function getWorkingDaysInMonth(monthKey: string): Date[] {
+  const start = startOfMonth(parseMonthKey(monthKey));
+  const finish = endOfMonth(start);
+  return eachDayOfInterval({ start, end: finish }).filter((date) => !isWeekend(date));
+}
+
+export function getWorkingDaysInWeek(weekKey: string): Date[] {
+  return getWeekDays(weekKey).filter((date) => !isWeekend(date));
 }

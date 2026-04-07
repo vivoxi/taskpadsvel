@@ -63,7 +63,7 @@
         <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Notes space</div>
         <h1 class="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">Documents</h1>
         <p class="mt-2 text-sm leading-6 text-[var(--text-muted)]">
-          Long-form notes, reference material, and thinking that should stay separate from the weekly workspace.
+          Long-form notes, reference material, and thinking that should stay separate from structured planning metadata.
         </p>
       </div>
 
@@ -98,8 +98,8 @@
     <section class="rounded-[32px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-soft)] sm:px-8 sm:py-7">
       <div class="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0 flex-1">
-          <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Current note</div>
-          <input
+        <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Current note</div>
+        <input
             value={data.view.documents.find((document) => document.id === data.view.selectedDocumentId)?.title ?? 'Untitled'}
             onblur={(event) => renameDocument((event.currentTarget as HTMLInputElement).value)}
             class="mt-3 w-full border-none bg-transparent p-0 text-3xl font-semibold tracking-[-0.05em] text-[var(--text-primary)] outline-none"
@@ -117,6 +117,9 @@
       </div>
 
       <div class="pt-6">
+        <div class="mb-4 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4 text-sm text-[var(--text-muted)]">
+          Notes are for context and writing. Priority, due dates, capacity, carry-forward, and scheduling now live in structured planner data.
+        </div>
         <BlockEditor
           sourceKey={data.view.selectedDocumentId}
           blocks={data.view.blocks}
