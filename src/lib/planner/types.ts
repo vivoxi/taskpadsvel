@@ -98,6 +98,16 @@ export type NoteBlock = {
   updated_at: string;
 };
 
+export type TaskAttachment = {
+  id: string;
+  task_instance_id: string | null;
+  note_document_id: string | null;
+  file_name: string;
+  file_path: string;
+  mime_type: string | null;
+  created_at: string;
+};
+
 export type InboxItem = {
   id: string;
   title: string;
@@ -211,6 +221,7 @@ export type NotesViewData = {
   selectedDocumentId: string;
   documents: NotesDocument[];
   blocks: PlannerBlock[];
+  attachments: TaskAttachment[];
 };
 
 export type HistoryViewData = {

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { Plus, Trash2 } from 'lucide-svelte';
+  import { goto, invalidateAll } from '$app/navigation';
+  import { Download, Paperclip, Plus, Trash2, Upload } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import { apiFetch, apiSendJson } from '$lib/client/api';
@@ -8,6 +8,7 @@
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
+  let uploading = $state(false);
 
   async function createDocument() {
     try {
@@ -48,6 +49,48 @@
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save note');
+    }
+  }
+
+  async function uploadAttachment(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    uploading = true;
+
+    try {
+      const form = new FormData();
+      form.set('file', file);
+      await apiFetch(`/api/notes/documents/${data.view.selectedDocumentId}/attachments`, {
+        method: 'POST',
+        body: form
+      });
+      toast.success('Attachment uploaded');
+      await invalidateAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to upload attachment');
+    } finally {
+      input.value = '';
+      uploading = false;
+    }
+  }
+
+  async function deleteAttachment(attachmentId: string) {
+    try {
+      await apiFetch(
+        `/api/notes/documents/${data.view.selectedDocumentId}/attachments/${attachmentId}`,
+        { method: 'DELETE' }
+      );
+      toast('Attachment deleted', {
+        action: {
+          label: 'Undo',
+          onClick: () => toast('Attachment delete cannot be undone after file removal.')
+        }
+      });
+      await invalidateAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete attachment');
     }
   }
 </script>
@@ -120,6 +163,73 @@
         <div class="mb-4 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4 text-sm text-[var(--text-muted)]">
           Notes are for context and writing. Priority, due dates, capacity, carry-forward, and scheduling now live in structured planner data.
         </div>
+
+        <section class="mb-6 rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Attachments</div>
+              <p class="mt-2 text-sm text-[var(--text-muted)]">
+                Keep source files, references, or exports close to the note without turning notes into a planner surface.
+              </p>
+            </div>
+
+            <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
+              <Upload size={14} />
+              {uploading ? 'Uploading...' : 'Attach file'}
+              <input
+                type="file"
+                class="hidden"
+                disabled={uploading}
+                onchange={uploadAttachment}
+              />
+            </label>
+          </div>
+
+          <div class="mt-4 space-y-2">
+            {#if data.view.attachments.length === 0}
+              <div class="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
+                No files attached to this note yet.
+              </div>
+            {:else}
+              {#each data.view.attachments as attachment (attachment.id)}
+                <div class="flex items-center justify-between gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
+                  <div class="min-w-0 flex items-center gap-3">
+                    <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-faint)]">
+                      <Paperclip size={14} />
+                    </span>
+                    <div class="min-w-0">
+                      <div class="truncate text-sm font-medium text-[var(--text-primary)]">{attachment.file_name}</div>
+                      <div class="mt-1 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                        {new Date(attachment.created_at).toLocaleDateString('en-GB')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <a
+                      href={`/uploads/${attachment.file_path}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                    >
+                      <Download size={12} />
+                      Open
+                    </a>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                      onclick={() => deleteAttachment(attachment.id)}
+                    >
+                      <Trash2 size={12} />
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </section>
+
         <BlockEditor
           sourceKey={data.view.selectedDocumentId}
           blocks={data.view.blocks}

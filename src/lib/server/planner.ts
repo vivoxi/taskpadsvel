@@ -20,6 +20,7 @@ import {
   type ScheduleBlock,
   type ScheduleHealth,
   type SearchResults,
+  type TaskAttachment,
   type TaskInstance,
   type TaskPriority,
   type TaskSourceType,
@@ -170,6 +171,18 @@ function normalizeScheduleBlock(row: Partial<ScheduleBlock>): ScheduleBlock {
     title_snapshot: row.title_snapshot ?? 'Planned block',
     created_at: row.created_at ?? new Date().toISOString(),
     updated_at: row.updated_at ?? new Date().toISOString()
+  };
+}
+
+function normalizeAttachment(row: Partial<TaskAttachment>): TaskAttachment {
+  return {
+    id: row.id ?? crypto.randomUUID(),
+    task_instance_id: row.task_instance_id ?? null,
+    note_document_id: row.note_document_id ?? null,
+    file_name: row.file_name ?? 'attachment',
+    file_path: row.file_path ?? '',
+    mime_type: row.mime_type ?? null,
+    created_at: row.created_at ?? new Date().toISOString()
   };
 }
 
@@ -651,10 +664,21 @@ export async function getNotesViewData(selectedDocumentId: string | null | undef
     throw error(500, blockQueryError.message);
   }
 
+  const { data: attachmentRows, error: attachmentError } = await supabaseAdmin
+    .from('task_attachments')
+    .select('*')
+    .eq('note_document_id', selectedId)
+    .order('created_at', { ascending: false });
+
+  if (attachmentError) {
+    throw error(500, attachmentError.message);
+  }
+
   return {
     selectedDocumentId: selectedId,
     documents,
-    blocks: normalizeBlocks(blockRows)
+    blocks: normalizeBlocks(blockRows),
+    attachments: (attachmentRows ?? []).map((row) => normalizeAttachment(row as TaskAttachment))
   };
 }
 
