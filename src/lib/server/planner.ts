@@ -1010,6 +1010,32 @@ export async function generateScheduleForMonth(monthKeyInput: string): Promise<{
   };
 }
 
+export async function resetScheduleForMonth(monthKeyInput: string): Promise<{
+  removedBlocks: number;
+  lockedBlocksKept: number;
+}> {
+  const monthKey = normalizeMonthKey(monthKeyInput);
+
+  const blocks = await listScheduleBlocksForMonth(monthKey);
+  const unlockedBlocks = blocks.filter((block) => !block.locked);
+  const lockedBlocksKept = blocks.filter((block) => block.locked).length;
+
+  if (unlockedBlocks.length > 0) {
+    const { error: deleteError } = await supabaseAdmin
+      .from('schedule_blocks')
+      .delete()
+      .eq('month_key', monthKey)
+      .eq('locked', false);
+
+    if (deleteError) throw error(500, deleteError.message);
+  }
+
+  return {
+    removedBlocks: unlockedBlocks.length,
+    lockedBlocksKept
+  };
+}
+
 export async function saveWeeklyDayBlocks(
   weekKey: string,
   dayName: DayName,

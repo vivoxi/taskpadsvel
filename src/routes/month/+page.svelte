@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
-  import { ChevronDown, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-svelte';
+  import { ChevronDown, ChevronLeft, ChevronRight, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { apiFetch, apiSendJson } from '$lib/client/api';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
@@ -24,6 +24,7 @@
   let monthlyDraft = $state('');
   let busyTemplateId = $state<string | null>(null);
   let isGenerating = $state(false);
+  let isResettingSchedule = $state(false);
   let expandedTemplateId = $state<string | null>(null);
 
   $effect(() => {
@@ -187,6 +188,33 @@
     }
   }
 
+  async function resetSchedule() {
+    if (!confirm('Are you sure you want to clear generated schedule blocks for this month? Locked blocks will stay.')) {
+      return;
+    }
+
+    isResettingSchedule = true;
+
+    try {
+      const response = await apiSendJson<{ removedBlocks: number; lockedBlocksKept: number }>(
+        '/api/schedule/reset',
+        'POST',
+        { monthKey: data.view.monthKey }
+      );
+      toast.success(
+        `Cleared ${response.removedBlocks} generated block${response.removedBlocks === 1 ? '' : 's'}`
+      );
+      if (response.lockedBlocksKept > 0) {
+        toast(`${response.lockedBlocksKept} locked block${response.lockedBlocksKept === 1 ? '' : 's'} kept`);
+      }
+      await invalidateAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to reset schedule');
+    } finally {
+      isResettingSchedule = false;
+    }
+  }
+
   function parseEstimate(value: string): number | null {
     if (!value.trim()) return null;
     const parsed = Number.parseFloat(value);
@@ -225,6 +253,15 @@
           >
             <Sparkles size={15} />
             {isGenerating ? 'Generating' : 'Generate'}
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            onclick={resetSchedule}
+            disabled={isResettingSchedule}
+          >
+            <RotateCcw size={15} />
+            {isResettingSchedule ? 'Resetting' : 'Reset'}
           </button>
           <a
             href={`/month?month=${getPreviousMonthKey(data.view.monthKey)}`}
