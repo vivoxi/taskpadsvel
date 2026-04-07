@@ -4,13 +4,16 @@ import type { TaskInstance } from '../src/lib/planner/types';
 // Copy of the function we are about to extract — test drives the shape.
 function mergeIntoDayBuckets(
   byDay: Partial<Record<string, TaskInstance[]>>,
-  instances: TaskInstance[]
+  instances: TaskInstance[],
+  seenTaskIds = new Set<string>()
 ): void {
   for (const task of instances) {
     if (!task.day_name) continue;
+    if (seenTaskIds.has(task.id)) continue;
     const bucket = byDay[task.day_name] ?? [];
     bucket.push(task);
     byDay[task.day_name] = bucket;
+    seenTaskIds.add(task.id);
   }
 }
 
@@ -55,5 +58,16 @@ describe('mergeIntoDayBuckets', () => {
     const byDay: Partial<Record<string, TaskInstance[]>> = {};
     mergeIntoDayBuckets(byDay, [makeInstance({ day_name: null })]);
     expect(Object.keys(byDay)).toHaveLength(0);
+  });
+
+  it('skips duplicate task ids when monthly tasks are merged twice', () => {
+    const byDay: Partial<Record<string, TaskInstance[]>> = {};
+    const seenTaskIds = new Set<string>();
+    const task = makeInstance({ id: 'same-task', day_name: 'Monday', week_key: '2026-W15' });
+
+    mergeIntoDayBuckets(byDay, [task], seenTaskIds);
+    mergeIntoDayBuckets(byDay, [task], seenTaskIds);
+
+    expect(byDay['Monday']).toEqual([task]);
   });
 });

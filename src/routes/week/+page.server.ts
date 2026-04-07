@@ -25,19 +25,23 @@ export const load: PageServerLoad = async ({ url }) => {
   );
 
   const byDay: TasksByDay = {};
+  const seenTaskIds = new Set<string>();
 
   for (const instance of view.tasks) {
     if (!instance.day_name) continue;
     const bucket = byDay[instance.day_name] ?? [];
     bucket.push(instance);
     byDay[instance.day_name] = bucket;
+    seenTaskIds.add(instance.id);
   }
 
   for (const task of relevantMonthly) {
     if (!task.day_name) continue;
+    if (seenTaskIds.has(task.id)) continue;
     const bucket = byDay[task.day_name] ?? [];
     bucket.push(task);
     byDay[task.day_name] = bucket;
+    seenTaskIds.add(task.id);
   }
 
   return {
