@@ -37,6 +37,19 @@ export function normalizeMonthKey(monthKey: string | null | undefined): string {
   return getMonthKey(parseMonthKey(monthKey));
 }
 
+export function canAutoMaterializeMonthKey(
+  monthKey: string,
+  now: Date = new Date(),
+  pastMonthLimit = 24,
+  futureMonthLimit = 24
+): boolean {
+  const target = startOfMonth(parseMonthKey(monthKey));
+  const earliest = startOfMonth(addMonths(now, -pastMonthLimit));
+  const latest = endOfMonth(addMonths(now, futureMonthLimit));
+
+  return target.getTime() >= earliest.getTime() && target.getTime() <= latest.getTime();
+}
+
 export function getWeekDays(weekKey: string): Date[] {
   const [yearPart, weekPart] = weekKey.split('-W');
   const year = Number.parseInt(yearPart, 10);

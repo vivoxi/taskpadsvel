@@ -12,6 +12,7 @@ import {
   type WeekViewData
 } from '$lib/planner/types';
 import {
+  canAutoMaterializeMonthKey,
   formatDayDate,
   getBoardMonthKeyForWeek,
   getBoardWeeksForMonth,
@@ -102,6 +103,16 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
 }> {
   const monthKey = normalizeMonthKey(inputMonthKey);
   const [templates, existingInstances] = await Promise.all([listTemplates(), listInstances(monthKey)]);
+
+  // Prevent bots or malformed URLs from materializing arbitrary centuries of months through GET requests.
+  if (!canAutoMaterializeMonthKey(monthKey)) {
+    return {
+      monthKey,
+      templates,
+      instances: existingInstances
+    };
+  }
+
   const weeks = getBoardWeeksForMonth(monthKey);
   const missingRows: Omit<TaskInstance, 'created_at' | 'updated_at'>[] = [];
 
