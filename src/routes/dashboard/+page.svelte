@@ -243,20 +243,22 @@
                 !cell.isCurrentMonth ? 'bg-[var(--background)]' : ''
               ].join(' ')}
             >
-              <!-- Day number -->
-              <div class="mb-1.5 flex items-center justify-between">
-                <span
+              <!-- Day number — links to that day on the week page -->
+              <div class="mb-1.5">
+                <a
+                  href={`/week?week=${cell.weekKey}#${cell.dayName.toLowerCase()}`}
                   class={[
-                    'flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium',
+                    'flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium transition-opacity hover:opacity-70',
                     cell.isToday
                       ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
                       : !cell.isCurrentMonth
                         ? 'text-[var(--text-faint)] opacity-40'
                         : 'text-[var(--text-faint)]'
                   ].join(' ')}
+                  title={`Go to ${cell.dayName}, week of ${cell.weekKey}`}
                 >
                   {cell.dateNum}
-                </span>
+                </a>
               </div>
 
               <!-- Task drop zone -->

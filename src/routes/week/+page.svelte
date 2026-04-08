@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
+  import { page } from '$app/stores';
   import { ChevronLeft, ChevronRight, Archive } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
@@ -19,6 +20,14 @@
     weeklyTasks = structuredClone(data.view.tasks);
     dayBuckets = structuredClone(data.byDay);
     softAssignedTaskIds = structuredClone(data.view.softAssignedTaskIds);
+  });
+
+  // Scroll to the day anchor when navigating from the calendar view
+  $effect(() => {
+    const hash = $page.url.hash;
+    if (!hash) return;
+    const el = document.getElementById(hash.slice(1));
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   function taskSort(left: PageData['view']['tasks'][number], right: PageData['view']['tasks'][number]) {
@@ -214,17 +223,19 @@
     <div class="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_22rem]">
       <section class="space-y-4">
         {#each data.view.days as day}
-          <DayNoteEditor
-            weekKey={data.view.weekKey}
-            isoDate={day.isoDate}
-            dayName={day.dayName}
-            dateLabel={day.dateLabel}
-            isToday={data.view.todayDayName === day.dayName}
-            tasks={dayBuckets[day.dayName] ?? []}
-            blocks={day.blocks}
-            onSaveBlocks={saveDayBlocks}
-            onToggleTask={toggleTask}
-          />
+          <div id={day.dayName.toLowerCase()}>
+            <DayNoteEditor
+              weekKey={data.view.weekKey}
+              isoDate={day.isoDate}
+              dayName={day.dayName}
+              dateLabel={day.dateLabel}
+              isToday={data.view.todayDayName === day.dayName}
+              tasks={dayBuckets[day.dayName] ?? []}
+              blocks={day.blocks}
+              onSaveBlocks={saveDayBlocks}
+              onToggleTask={toggleTask}
+            />
+          </div>
         {/each}
       </section>
 
