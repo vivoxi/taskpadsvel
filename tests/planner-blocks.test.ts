@@ -10,16 +10,26 @@ describe('planner blocks', () => {
     expect(block.text).toBe('');
   });
 
+  it('creates divider blocks without checklist state', () => {
+    const block = createBlock('divider');
+
+    expect(block.type).toBe('divider');
+    expect(block.checked).toBeNull();
+    expect(block.level).toBeNull();
+  });
+
   it('normalizes mixed input into valid planner blocks', () => {
     const blocks = normalizeBlocks([
       { id: 'a', type: 'heading', text: 'Title', level: 2 },
       { id: 'b', type: 'paragraph', text: 'Body' },
       { id: 'c', type: 'checklist', text: 'Tick', checked: true },
+      { id: 'd', type: 'divider', text: 'Ignored text' },
       { type: 'unknown', text: 'Ignored' }
     ]);
 
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(4);
     expect(blocks[0]?.type).toBe('heading');
     expect(blocks[2]?.checked).toBe(true);
+    expect(blocks[3]?.type).toBe('divider');
   });
 });

@@ -5,9 +5,12 @@
   import { Toaster } from 'svelte-sonner';
   import { page } from '$app/stores';
   import { env } from '$env/dynamic/public';
+  import CommandPalette from '$lib/components/CommandPalette.svelte';
   import PasswordModal from '$lib/components/PasswordModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
+  import SyncStatusBadge from '$lib/components/SyncStatusBadge.svelte';
   import { initializeTheme } from '$lib/stores/theme';
+  import { commandPaletteOpen } from '$lib/stores';
   import type { Snippet } from 'svelte';
 
   let { children }: { children: Snippet } = $props();
@@ -53,8 +56,26 @@
       >
         Taskpad
       </a>
-      <div class="h-10 w-10"></div>
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]"
+        onclick={() => commandPaletteOpen.set(true)}
+      >
+        Search
+      </button>
     </header>
+
+    <div class="hidden items-center justify-end gap-3 border-b border-[var(--border)] bg-[var(--background)]/92 px-6 py-3 backdrop-blur md:flex">
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+        onclick={() => commandPaletteOpen.set(true)}
+      >
+        Search
+        <span class="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-faint)]">⌘K</span>
+      </button>
+      <SyncStatusBadge />
+    </div>
 
     <main class="min-h-0 flex-1 overflow-auto">
       {@render children()}
@@ -89,6 +110,7 @@
 {/if}
 
 <Toaster theme="light" position="bottom-right" />
+<CommandPalette />
 {#if $page.url.pathname.startsWith('/notes')}
   <div class="pointer-events-none fixed inset-x-0 bottom-0 h-24 bg-linear-to-t from-[var(--background)] to-transparent"></div>
 {/if}

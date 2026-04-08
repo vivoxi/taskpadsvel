@@ -1,6 +1,13 @@
 import { error, json } from '@sveltejs/kit';
+import { rm } from 'fs/promises';
+import path from 'path';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
+import {
+  NORMALIZED_UPLOADS_DIR,
+  UPLOADS_DIR,
+  normalizeRelativeUploadPath
+} from '$lib/server/uploads';
 import type { RequestHandler } from './$types';
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
@@ -34,12 +41,35 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
   const documentId = params.documentId;
   if (!documentId) throw error(400, 'Document id is required');
 
+  const { data: attachments, error: attachmentsError } = await supabaseAdmin
+    .from('task_attachments')
+    .select('id, file_path')
+    .eq('note_document_id', documentId);
+
+  if (attachmentsError) throw error(500, attachmentsError.message);
+
   const { error: blockDeleteError } = await supabaseAdmin
     .from('note_blocks')
     .delete()
     .eq('document_id', documentId);
 
   if (blockDeleteError) throw error(500, blockDeleteError.message);
+
+  if ((attachments ?? []).length > 0) {
+    for (const attachment of attachments) {
+      const absolutePath = path.resolve(UPLOADS_DIR, normalizeRelativeUploadPath(attachment.file_path));
+      if (absolutePath.startsWith(NORMALIZED_UPLOADS_DIR)) {
+        await rm(absolutePath, { force: true }).catch(() => undefined);
+      }
+    }
+
+    const { error: attachmentDeleteError } = await supabaseAdmin
+      .from('task_attachments')
+      .delete()
+      .eq('note_document_id', documentId);
+
+    if (attachmentDeleteError) throw error(500, attachmentDeleteError.message);
+  }
 
   const { error: docDeleteError } = await supabaseAdmin.from('notes_documents').delete().eq('id', documentId);
   if (docDeleteError) throw error(500, docDeleteError.message);

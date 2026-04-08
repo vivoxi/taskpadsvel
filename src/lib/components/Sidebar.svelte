@@ -2,8 +2,9 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { format } from 'date-fns';
-  import { CalendarRange, Moon, NotebookPen, Rows3, Sun } from 'lucide-svelte';
+  import { CalendarDays, CalendarRange, History, ListChecks, Moon, NotebookPen, Rows3, Sun } from 'lucide-svelte';
   import { getMonthKey, getWeekKey, monthLabel, weekLabel } from '$lib/planner/dates';
+  import SyncStatusBadge from '$lib/components/SyncStatusBadge.svelte';
   import { themeMode, toggleTheme } from '$lib/stores/theme';
 
   let {
@@ -24,6 +25,9 @@
   const navItems: NavItem[] = [
     { href: '/week', label: 'Week', eyebrow: weekLabel(getWeekKey()), icon: Rows3 },
     { href: '/month', label: 'Month', eyebrow: monthLabel(getMonthKey()), icon: CalendarRange },
+    { href: '/dashboard', label: 'Calendar', eyebrow: 'Monthly task map', icon: CalendarDays },
+    { href: '/one-time', label: 'One-time', eyebrow: 'Checklist work', icon: ListChecks },
+    { href: '/history', label: 'History', eyebrow: 'Review + archive', icon: History },
     { href: '/notes', label: 'Notes', eyebrow: 'Reference', icon: NotebookPen }
   ];
 </script>
@@ -52,7 +56,7 @@
       </h1>
     </button>
     <p class="mt-2 text-sm leading-6 text-[var(--text-muted)]">
-      Plan the month, execute the week, and keep notes without extra surfaces.
+      Personal operations planner for recurring work, execution, and calm review.
     </p>
   </div>
 
@@ -83,6 +87,8 @@
   {/each}
 
   <div class="mt-auto space-y-3 pt-3">
+    <SyncStatusBadge />
+
     <div class="rounded-[22px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 text-sm text-[var(--text-muted)] shadow-[var(--shadow-card)]">
       <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Current cadence</div>
       <div class="mt-2 font-medium text-[var(--text-primary)]">{format(new Date(), 'EEEE')}</div>

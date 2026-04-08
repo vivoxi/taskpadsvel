@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/public';
+import { browser } from '$app/environment';
 import { get } from 'svelte/store';
-import { authPassword } from '$lib/stores';
+import { authPassword, syncState } from '$lib/stores';
 
 export const clientAuthRequired = env.PUBLIC_AUTH_REQUIRED === 'true';
 
@@ -45,21 +46,46 @@ async function getErrorMessage(response: Response): Promise<string> {
 
 export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const headers = buildHeaders(init.headers);
+  const method = (init.method ?? 'GET').toUpperCase();
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
 
   if (env.PUBLIC_AUTH_REQUIRED === 'true' && !headers.has('Authorization')) {
+    if (browser && isMutation) {
+      syncState.set('conflict');
+    }
     throw new ApiError('Admin password required', 401);
   }
 
-  const response = await fetch(input, {
-    ...init,
-    headers
-  });
+  if (browser && isMutation) {
+    syncState.set('saving');
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(input, {
+      ...init,
+      headers
+    });
+  } catch (fetchError) {
+    if (browser && isMutation) {
+      syncState.set('offline');
+    }
+    throw fetchError;
+  }
 
   if (!response.ok) {
+    if (browser && isMutation) {
+      syncState.set(response.status === 409 ? 'conflict' : navigator.onLine ? 'conflict' : 'offline');
+    }
     throw new ApiError(
       (await getErrorMessage(response)) || `Request failed (${response.status})`,
       response.status
     );
+  }
+
+  if (browser && isMutation) {
+    syncState.set('synced');
   }
 
   return response;

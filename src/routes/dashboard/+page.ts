@@ -1,5 +1,2 @@
-import { redirect } from '@sveltejs/kit';
-
-export function load() {
-  throw redirect(307, '/week');
-}
+// Calendar dashboard — data loaded server-side via +page.server.ts
+export {};
