@@ -7,10 +7,6 @@
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
   import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
   import {
-    DAY_NAMES,
-    type DayName,
-    type SoftAssignment,
-    type TaskInstance,
     type TaskTemplate
   } from '$lib/planner/types';
   import { getNextMonthKey, getPreviousMonthKey } from '$lib/planner/dates';
@@ -19,8 +15,6 @@
 
   let { data }: { data: PageData } = $props();
   let templates = $state<TaskTemplate[]>([]);
-  let instances = $state<TaskInstance[]>([]);
-  let softAssignments = $state<Partial<Record<string, SoftAssignment>>>({});
   let weeklyDraft = $state('');
   let monthlyDraft = $state('');
   let busyTemplateId = $state<string | null>(null);
@@ -30,8 +24,6 @@
 
   $effect(() => {
     templates = structuredClone(data.view.templates);
-    instances = structuredClone(data.view.instances);
-    softAssignments = structuredClone(data.view.softAssignments);
   });
 
   function templateSort(left: TaskTemplate, right: TaskTemplate) {
@@ -50,31 +42,6 @@
   const inactiveTemplates = $derived(
     templates.filter((template) => !template.active).sort(templateSort)
   );
-
-  function getWeeklyInstance(templateId: string, weekKey: string): TaskInstance | undefined {
-    return instances.find(
-      (instance) =>
-        instance.template_id === templateId &&
-        instance.instance_kind === 'weekly' &&
-        instance.week_key === weekKey
-    );
-  }
-
-  function getMonthlyInstance(templateId: string): TaskInstance | undefined {
-    return instances.find(
-      (instance) => instance.template_id === templateId && instance.instance_kind === 'monthly'
-    );
-  }
-
-  function getSoftAssignment(instanceId: string | null | undefined) {
-    if (!instanceId) return null;
-    return softAssignments[instanceId] ?? null;
-  }
-
-  function weekLabelForKey(weekKey: string | null) {
-    if (!weekKey) return 'Unassigned';
-    return data.view.weeks.find((week) => week.weekKey === weekKey)?.shortLabel ?? weekKey;
-  }
 
   function updateTemplateState(templateId: string, updater: (template: TaskTemplate) => TaskTemplate) {
     templates = templates.map((template) => (template.id === templateId ? updater(template) : template));
@@ -95,34 +62,6 @@
     } catch (error) {
       templates = previousTemplates;
       toast.error(error instanceof Error ? error.message : 'Failed to update template');
-    }
-  }
-
-  async function patchInstance(instanceId: string, updates: Record<string, unknown>) {
-    const previousInstances = $state.snapshot(instances);
-    instances = instances.map((instance) =>
-      instance.id === instanceId ? { ...instance, ...updates } : instance
-    );
-
-    const target = previousInstances.find((instance) => instance.id === instanceId);
-
-    try {
-      const response = await apiSendJson<{ success: true; instance: TaskInstance }>(
-        `/api/task-instances/${instanceId}`,
-        'PATCH',
-        {
-          ...updates,
-          existing_month_key: target?.month_key ?? null,
-          existing_week_key: target?.week_key ?? null
-        }
-      );
-      instances = instances.map((instance) =>
-        instance.id === response.instance.id ? response.instance : instance
-      );
-      await invalidateAll();
-    } catch (error) {
-      instances = previousInstances;
-      toast.error(error instanceof Error ? error.message : 'Failed to update placement');
     }
   }
 
@@ -296,8 +235,7 @@
       </div>
     </section>
 
-    <div class="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
-      <aside class="space-y-4">
+    <div class="max-w-2xl space-y-4">
         <section class={`rounded-[28px] border bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)] ${
           $templateMode ? 'border-[var(--border-strong)] ring-1 ring-[var(--border-strong)]' : 'border-[var(--border)]'
         }`}>
@@ -613,197 +551,7 @@
             {/if}
           </div>
         </section>
-      </aside>
-
-      <section class="space-y-4">
-        <article class="overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
-          <div class="border-b border-[var(--border)] px-5 py-5 sm:px-6">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Weekly recurring work</div>
-            <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Place weekly cadence</h2>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="min-w-full border-collapse">
-              <thead>
-                <tr class="border-b border-[var(--border)] bg-[var(--panel-soft)]">
-                  <th class="px-4 py-3 text-left text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Template</th>
-                  {#each data.view.weeks as week}
-                    <th class="min-w-[18rem] px-4 py-3 text-left">
-                      <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">{week.shortLabel}</div>
-                      <div class="mt-1 text-sm font-medium text-[var(--text-primary)]">{week.label}</div>
-                    </th>
-                  {/each}
-                </tr>
-              </thead>
-              <tbody>
-                {#if weeklyTemplates.length === 0}
-                  <tr>
-                    <td colspan={data.view.weeks.length + 1} class="px-4 py-6 text-sm text-[var(--text-muted)]">
-                      Add a weekly recurring template to start planning the month.
-                    </td>
-                  </tr>
-                {:else}
-                  {#each weeklyTemplates as template (template.id)}
-                    <tr class="border-b border-[var(--border)] last:border-none">
-                      <td class="px-4 py-4 align-top">
-                        <div class="font-medium text-[var(--text-primary)]">{template.title}</div>
-                        <TaskMetaChips
-                          compact
-                          hours={template.hours_needed_default ?? template.estimate_hours}
-                          sourceType={template.source_type_default}
-                        />
-                      </td>
-                      {#each data.view.weeks as week}
-                        {@const instance = getWeeklyInstance(template.id, week.weekKey)}
-                        {@const generated = getSoftAssignment(instance?.id)}
-                        <td class="px-4 py-4 align-top">
-                          {#if instance}
-                            <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] p-3">
-                              <select
-                                value={instance.day_name ?? ''}
-                                onchange={(event) =>
-                                  patchInstance(instance.id, {
-                                    day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
-                                  })}
-                                class="w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                              >
-                                <option value="">Unassigned</option>
-                                {#each DAY_NAMES as dayName}
-                                  <option value={dayName}>{dayName}</option>
-                                {/each}
-                              </select>
-
-                              {#if instance.day_name === null && generated?.dayName}
-                                <div class="mt-2 text-[11px] uppercase tracking-[0.16em] text-[var(--text-faint)]">
-                                  Generated to {generated.dayName}
-                                </div>
-                              {/if}
-
-                              <div class="mt-3">
-                                <input
-                                  value={instance.hours_needed ?? ''}
-                                  onblur={(event) =>
-                                    patchInstance(instance.id, {
-                                      hours_needed: parseEstimate((event.currentTarget as HTMLInputElement).value)
-                                    })}
-                                  placeholder="Hours"
-                                  class="w-full rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                                />
-                              </div>
-
-                              <TaskMetaChips
-                                hours={instance.hours_needed}
-                                sourceType={instance.source_type}
-                              />
-                            </div>
-                          {/if}
-                        </td>
-                      {/each}
-                    </tr>
-                  {/each}
-                {/if}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
-          <div class="border-b border-[var(--border)] px-5 py-5 sm:px-6">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Monthly recurring work</div>
-            <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Place monthly work</h2>
-          </div>
-
-          <div class="space-y-3 px-5 py-5 sm:px-6">
-            {#if monthlyTemplates.length === 0}
-              <p class="rounded-[22px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
-                Add a monthly recurring template when you want something to land once in the month.
-              </p>
-            {:else}
-              {#each monthlyTemplates as template (template.id)}
-                {@const instance = getMonthlyInstance(template.id)}
-                {@const generated = getSoftAssignment(instance?.id)}
-                <article class="rounded-[22px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-4">
-                  <div class="flex flex-col gap-4">
-                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div class="min-w-0">
-                        <h3 class="font-medium text-[var(--text-primary)]">{template.title}</h3>
-                        <TaskMetaChips
-                          compact
-                          hours={instance?.hours_needed ?? template.hours_needed_default ?? template.estimate_hours}
-                          sourceType={instance?.source_type ?? template.source_type_default}
-                        />
-                      </div>
-
-                      {#if instance}
-                        <div class="grid gap-2 sm:grid-cols-2">
-                          <label class="text-xs text-[var(--text-muted)]">
-                            Week
-                            <select
-                              value={instance.week_key ?? ''}
-                              onchange={(event) =>
-                                patchInstance(instance.id, {
-                                  week_key: (event.currentTarget as HTMLSelectElement).value || null,
-                                  month_key: data.view.monthKey
-                                })}
-                              class="mt-1 min-w-44 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                            >
-                              <option value="">Unassigned</option>
-                              {#each data.view.weeks as week}
-                                <option value={week.weekKey}>{week.shortLabel} · {week.label}</option>
-                              {/each}
-                            </select>
-                            {#if instance.week_key === null && generated?.weekKey}
-                              <div class="mt-1 text-[11px] uppercase tracking-[0.16em] text-[var(--text-faint)]">
-                                Generated {weekLabelForKey(generated.weekKey)}
-                              </div>
-                            {/if}
-                          </label>
-
-                          <label class="text-xs text-[var(--text-muted)]">
-                            Day
-                            <select
-                              value={instance.day_name ?? ''}
-                              onchange={(event) =>
-                                patchInstance(instance.id, {
-                                  day_name: ((event.currentTarget as HTMLSelectElement).value || null) as DayName | null
-                                })}
-                              class="mt-1 min-w-40 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                            >
-                              <option value="">Unassigned</option>
-                              {#each DAY_NAMES as dayName}
-                                <option value={dayName}>{dayName}</option>
-                              {/each}
-                            </select>
-                            {#if instance.day_name === null && generated?.dayName}
-                              <div class="mt-1 text-[11px] uppercase tracking-[0.16em] text-[var(--text-faint)]">
-                                Generated {generated.dayName}
-                              </div>
-                            {/if}
-                          </label>
-                        </div>
-                      {/if}
-                    </div>
-
-                    {#if instance}
-                      <div class="grid gap-2 sm:grid-cols-1">
-                        <input
-                          value={instance.hours_needed ?? ''}
-                          onblur={(event) =>
-                            patchInstance(instance.id, {
-                              hours_needed: parseEstimate((event.currentTarget as HTMLInputElement).value)
-                            })}
-                          placeholder="Hours"
-                          class="rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                        />
-                      </div>
-                    {/if}
-                  </div>
-                </article>
-              {/each}
-            {/if}
-          </div>
-        </article>
-      </section>
     </div>
   </div>
 </div>
+
