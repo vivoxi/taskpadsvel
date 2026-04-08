@@ -6,9 +6,7 @@
   import { apiFetch, apiSendJson } from '$lib/client/api';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
   import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
-  import {
-    type TaskTemplate
-  } from '$lib/planner/types';
+  import { DAY_NAMES, type TaskTemplate } from '$lib/planner/types';
   import { getNextMonthKey, getPreviousMonthKey } from '$lib/planner/dates';
   import { templateMode } from '$lib/stores';
   import type { PageData } from './$types';

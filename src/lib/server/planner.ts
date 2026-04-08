@@ -1217,6 +1217,18 @@ export function createStarterBlocks(kind: DocumentKind = 'note'): PlannerBlock[]
   return [createBlock(kind === 'one-time' ? 'checklist' : 'paragraph')];
 }
 
+export async function syncTemplateHoursDefault(templateId: string, hoursNeeded: number | null): Promise<void> {
+  const { error: updateError } = await supabaseAdmin
+    .from('task_instances')
+    .update({ hours_needed: hoursNeeded })
+    .eq('template_id', templateId)
+    .is('archived_at', null);
+
+  if (updateError) {
+    throw error(500, updateError.message);
+  }
+}
+
 export async function syncTemplateSnapshot(templateId: string, title: string): Promise<void> {
   const { error: updateError } = await supabaseAdmin
     .from('task_instances')

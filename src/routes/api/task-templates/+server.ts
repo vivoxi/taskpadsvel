@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { DAY_NAMES, type DayName, type TaskPriority, type TaskSourceType } from '$lib/planner/types';
-import { syncTemplatePlanningDefaults, syncTemplateSnapshot } from '$lib/server/planner';
+import { syncTemplateHoursDefault, syncTemplatePlanningDefaults, syncTemplateSnapshot } from '$lib/server/planner';
 import { requireAuth } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
 import type { RequestHandler } from './$types';
@@ -139,6 +139,10 @@ export const PATCH: RequestHandler = async ({ request }) => {
 
   if (typeof updates.title === 'string' && updates.title) {
     await syncTemplateSnapshot(id, updates.title);
+  }
+
+  if ('hours_needed_default' in updates) {
+    await syncTemplateHoursDefault(id, updates.hours_needed_default as number | null);
   }
 
   if ('preferred_day' in updates || 'preferred_week_of_month' in updates) {

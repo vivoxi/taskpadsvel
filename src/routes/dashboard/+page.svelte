@@ -160,7 +160,7 @@
   // ── Inbox task quick-add ─────────────────────────────────────────────────
 
   let newTaskTitle = $state('');
-  let newTaskHours = $state('');
+  let newTaskHours = $state<number | null>(null);
   let addingTask = $state(false);
   let quickAddInput = $state<HTMLInputElement | null>(null);
 
@@ -172,7 +172,7 @@
     const title = newTaskTitle.trim();
     if (!title) return;
 
-    const hoursNeeded = newTaskHours.trim() ? parseFloat(newTaskHours) : null;
+    const hoursNeeded = typeof newTaskHours === 'number' && Number.isFinite(newTaskHours) ? newTaskHours : null;
 
     const optimisticTask: TaskInstance = {
       id: crypto.randomUUID(),
@@ -203,7 +203,7 @@
     };
 
     newTaskTitle = '';
-    newTaskHours = '';
+    newTaskHours = null;
     unassigned = [...unassigned, optimisticTask];
 
     try {
