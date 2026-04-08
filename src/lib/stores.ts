@@ -38,7 +38,7 @@ const AUTH_PASSWORD_STORAGE_KEY = 'taskpad-admin-password';
 
 export const authPassword = persistedStringStore(
   AUTH_PASSWORD_STORAGE_KEY,
-  browser ? sessionStorage : ({} as Storage)
+  browser ? window.localStorage : ({} as Storage)
 );
 
 export const commandPaletteOpen = writable(false);
