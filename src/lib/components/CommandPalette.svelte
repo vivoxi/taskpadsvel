@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/stores';
-  import { CalendarRange, History, ListChecks, Moon, NotebookPen, Rows3, Search, Sparkles } from 'lucide-svelte';
+  import { CalendarRange, History, Moon, NotebookPen, Rows3, Search, Sparkles } from 'lucide-svelte';
   import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { apiJson, apiSendJson } from '$lib/client/api';
@@ -33,11 +33,11 @@
       run: () => goto('/week')
     },
     {
-      id: 'nav-month',
-      label: 'Open month',
-      meta: 'Planning + capacity',
+      id: 'nav-planner',
+      label: 'Open planner',
+      meta: 'Place monthly work',
       icon: CalendarRange,
-      run: () => goto('/month')
+      run: () => goto('/planner')
     },
     {
       id: 'nav-history',
@@ -45,13 +45,6 @@
       meta: 'Review + archive',
       icon: History,
       run: () => goto('/history')
-    },
-    {
-      id: 'nav-one-time',
-      label: 'Open one-time tasks',
-      meta: 'Checklist workspace',
-      icon: ListChecks,
-      run: () => goto('/one-time')
     },
     {
       id: 'nav-notes',
@@ -67,7 +60,7 @@
       icon: Sparkles,
       run: async () => {
         const monthKey =
-          $page.url.pathname === '/month'
+          $page.url.pathname === '/planner'
             ? normalizeMonthKey($page.url.searchParams.get('month'))
             : normalizeMonthKey(null);
         const response = await apiSendJson<{ createdBlocks: number; warnings: string[] }>(
@@ -89,7 +82,7 @@
       icon: CalendarRange,
       run: () => {
         templateMode.update((value) => !value);
-        void goto('/month');
+        void goto('/planner');
       }
     },
     {
@@ -107,13 +100,13 @@
       label: task.title_snapshot,
       meta: task.week_key ? `Week ${task.week_key}` : `Month ${task.month_key ?? ''}`,
       icon: Rows3,
-      run: () => goto(task.week_key ? `/week?week=${task.week_key}` : `/month?month=${task.month_key ?? ''}`)
+      run: () => goto(task.week_key ? `/week?week=${task.week_key}` : `/planner?month=${task.month_key ?? ''}`)
     })),
     ...results.notes.map((note) => ({
       id: `note-${note.id}`,
       label: note.title,
       meta: note.snippet,
-      icon: note.kind === 'one-time' ? ListChecks : NotebookPen,
+      icon: NotebookPen,
       run: () => goto(note.kind === 'one-time' ? `/one-time?doc=${note.id}` : `/notes?doc=${note.id}`)
     })),
     ...results.attachments.map((attachment) => ({

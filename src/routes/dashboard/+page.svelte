@@ -160,6 +160,7 @@
   // ── Inbox task quick-add ─────────────────────────────────────────────────
 
   let newTaskTitle = $state('');
+  let newTaskHours = $state('');
   let addingTask = $state(false);
   let quickAddInput = $state<HTMLInputElement | null>(null);
 
@@ -170,6 +171,8 @@
   async function addInboxTask() {
     const title = newTaskTitle.trim();
     if (!title) return;
+
+    const hoursNeeded = newTaskHours.trim() ? parseFloat(newTaskHours) : null;
 
     const optimisticTask: TaskInstance = {
       id: crypto.randomUUID(),
@@ -184,7 +187,7 @@
       completed_at: null,
       priority: 'medium',
       due_date: null,
-      hours_needed: null,
+      hours_needed: hoursNeeded,
       category: null,
       source_type: 'inbox',
       preferred_day: null,
@@ -200,12 +203,14 @@
     };
 
     newTaskTitle = '';
+    newTaskHours = '';
     unassigned = [...unassigned, optimisticTask];
 
     try {
       const result = await apiSendJson('/api/task-instances', 'POST', {
         title: optimisticTask.title_snapshot,
-        monthKey: data.view.monthKey
+        monthKey: data.view.monthKey,
+        hoursNeeded
       });
       // Replace optimistic entry with real one from server
       unassigned = unassigned.map((t) =>
@@ -376,7 +381,7 @@
                       {/if}
                     </button>
 
-                    <!-- Title -->
+                    <!-- Title + hours -->
                     <span
                       class={[
                         'min-w-0 flex-1 break-words',
@@ -385,6 +390,9 @@
                     >
                       {task.title_snapshot}
                     </span>
+                    {#if task.hours_needed}
+                      <span class="shrink-0 text-[9px] font-medium text-[var(--text-faint)]">{task.hours_needed}h</span>
+                    {/if}
                   </div>
                 {/each}
               </div>
@@ -425,6 +433,14 @@
             bind:this={quickAddInput}
             placeholder="Task title…"
             class="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+          />
+          <input
+            type="number"
+            bind:value={newTaskHours}
+            placeholder="h"
+            min="0.25"
+            step="0.25"
+            class="w-14 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
           />
           <button
             type="submit"
@@ -492,6 +508,9 @@
             >
               {task.title_snapshot}
             </span>
+            {#if task.hours_needed}
+              <span class="shrink-0 text-[9px] font-medium text-[var(--text-faint)]">{task.hours_needed}h</span>
+            {/if}
           </div>
         {/each}
       </div>

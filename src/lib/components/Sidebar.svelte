@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { format } from 'date-fns';
-  import { CalendarDays, CalendarRange, History, ListChecks, Moon, NotebookPen, Rows3, Sun } from 'lucide-svelte';
+  import { CalendarDays, CalendarRange, History, Moon, NotebookPen, Rows3, Sun } from 'lucide-svelte';
   import { getMonthKey, getWeekKey, monthLabel, weekLabel } from '$lib/planner/dates';
   import SyncStatusBadge from '$lib/components/SyncStatusBadge.svelte';
   import { themeMode, toggleTheme } from '$lib/stores/theme';
@@ -23,12 +23,11 @@
   };
 
   const navItems: NavItem[] = [
-    { href: '/week', label: 'Week', eyebrow: weekLabel(getWeekKey()), icon: Rows3 },
-    { href: '/month', label: 'Month', eyebrow: monthLabel(getMonthKey()), icon: CalendarRange },
-    { href: '/dashboard', label: 'Calendar', eyebrow: 'Monthly task map', icon: CalendarDays },
-    { href: '/one-time', label: 'One-time', eyebrow: 'Checklist work', icon: ListChecks },
-    { href: '/history', label: 'History', eyebrow: 'Review + archive', icon: History },
-    { href: '/notes', label: 'Notes', eyebrow: 'Reference', icon: NotebookPen }
+    { href: '/dashboard', label: 'Calendar', eyebrow: 'One-time + recurring tasks', icon: CalendarDays },
+    { href: '/week', label: 'Week', eyebrow: 'Place weekly cadence', icon: Rows3 },
+    { href: '/notes', label: 'Notes', eyebrow: 'Reference', icon: NotebookPen },
+    { href: '/planner', label: 'Planner', eyebrow: 'Place monthly work', icon: CalendarRange },
+    { href: '/history', label: 'History', eyebrow: 'Review + archive', icon: History }
   ];
 </script>
 
@@ -44,7 +43,7 @@
       type="button"
       onclick={() => {
         onNavigate();
-        void goto('/week');
+        void goto('/dashboard');
       }}
       class="text-left transition-colors duration-150 hover:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:outline-zinc-400"
     >

@@ -51,7 +51,7 @@
         <Menu size={18} />
       </button>
       <a
-        href="/week"
+        href="/dashboard"
         class="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)] transition-colors duration-150 hover:text-[var(--text-secondary)]"
       >
         Taskpad
