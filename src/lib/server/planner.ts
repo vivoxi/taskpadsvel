@@ -402,10 +402,14 @@ async function syncExistingInstancesToTemplateDefaults(
   instances: TaskInstance[]
 ): Promise<TaskInstance[]> {
   const templateById = new Map(templates.map((template) => [template.id, template]));
-  const nextInstances = [...instances];
+  const updatedAt = new Date().toISOString();
 
-  for (let index = 0; index < nextInstances.length; index += 1) {
-    const instance = nextInstances[index];
+  // Collect all instances that need syncing
+  type PendingSync = { index: number; instance: TaskInstance; updates: Partial<TaskInstance> };
+  const pending: PendingSync[] = [];
+
+  for (let index = 0; index < instances.length; index++) {
+    const instance = instances[index];
     if (!instance.template_id || instance.archived_at !== null) continue;
 
     const template = templateById.get(instance.template_id);
@@ -414,24 +418,28 @@ async function syncExistingInstancesToTemplateDefaults(
     const updates = getTemplateDefaultSyncUpdates(instance, template);
     if (Object.keys(updates).length === 0) continue;
 
-    const updatedAt = new Date().toISOString();
-    const { error: updateError } = await supabaseAdmin
-      .from('task_instances')
-      .update({
-        ...updates,
-        updated_at: updatedAt
-      })
-      .eq('id', instance.id);
+    pending.push({ index, instance, updates });
+  }
 
-    if (updateError) {
-      throw error(500, updateError.message);
-    }
+  if (pending.length === 0) return instances;
 
-    nextInstances[index] = normalizeTask({
-      ...instance,
-      ...updates,
-      updated_at: updatedAt
-    });
+  // Run all updates in parallel instead of sequentially
+  const results = await Promise.all(
+    pending.map(({ instance, updates }) =>
+      supabaseAdmin
+        .from('task_instances')
+        .update({ ...updates, updated_at: updatedAt })
+        .eq('id', instance.id)
+    )
+  );
+
+  for (const { error: updateError } of results) {
+    if (updateError) throw error(500, updateError.message);
+  }
+
+  const nextInstances = [...instances];
+  for (const { index, instance, updates } of pending) {
+    nextInstances[index] = normalizeTask({ ...instance, ...updates, updated_at: updatedAt });
   }
 
   return nextInstances;
@@ -682,6 +690,21 @@ export async function getMonthViewData(inputMonthKey: string): Promise<MonthView
     settings,
     capacity,
     schedule: buildScheduleHealth(activeInstances, blocks, capacity)
+  };
+}
+
+/** Lighter load for the calendar dashboard — skips schedule blocks, soft assignments,
+ *  and capacity/health calculations which are not shown on that view. */
+export async function getCalendarViewData(inputMonthKey: string): Promise<Pick<MonthViewData, 'monthKey' | 'label' | 'weeks' | 'instances'>> {
+  const normalizedMonthKey = normalizeMonthKey(inputMonthKey);
+  const { monthKey, instances } = await ensureMonthPlanInstances(normalizedMonthKey);
+  const activeInstances = instances.filter((task) => task.archived_at === null);
+
+  return {
+    monthKey,
+    label: monthLabel(monthKey),
+    weeks: getBoardWeeksForMonth(monthKey),
+    instances: activeInstances
   };
 }
 
