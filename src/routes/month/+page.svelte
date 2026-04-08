@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
+  import MonthStrip from '$lib/components/MonthStrip.svelte';
   import { ChevronDown, ChevronLeft, ChevronRight, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { apiFetch, apiSendJson } from '$lib/client/api';
@@ -229,6 +230,10 @@
 <svelte:head>
   <title>Month · Taskpad</title>
 </svelte:head>
+
+<div class="sticky top-0 z-20">
+  <MonthStrip monthKey={data.view.monthKey} basePath="/month" />
+</div>
 
 <div class="px-4 py-4 sm:px-6 sm:py-6">
   <div class="mx-auto flex max-w-[1440px] flex-col gap-6">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
   import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import MonthStrip from '$lib/components/MonthStrip.svelte';
   import { toast } from 'svelte-sonner';
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { isSameDay } from 'date-fns';
@@ -171,9 +172,9 @@
 </script>
 
 <div class="flex h-full flex-col">
-  <!-- ── Header ── -->
+  <!-- ── Header row 1: title + sequential nav ── -->
   <div
-    class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--background)]/90 px-6 py-4 backdrop-blur"
+    class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--background)]/90 px-6 py-3 backdrop-blur"
   >
     <div class="flex items-baseline gap-3">
       <h1 class="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
@@ -207,6 +208,9 @@
       </button>
     </div>
   </div>
+
+  <!-- ── Header row 2: year/month strip ── -->
+  <MonthStrip monthKey={data.view.monthKey} basePath="/dashboard" />
 
   <!-- ── Calendar ── -->
   <div class="flex-1 overflow-auto p-4 md:p-6">
