@@ -85,7 +85,7 @@ function normalizeTemplate(row: Partial<TaskTemplate>): TaskTemplate {
   };
 }
 
-function normalizeTask(row: Partial<TaskInstance>): TaskInstance {
+export function normalizeTask(row: Partial<TaskInstance>): TaskInstance {
   return {
     id: row.id ?? crypto.randomUUID(),
     template_id: row.template_id ?? null,
@@ -830,6 +830,24 @@ export async function getOneTimeViewData(
     documents: view.documents,
     blocks: view.blocks
   };
+}
+
+export async function listOpenOneTimeBlocks(): Promise<
+  Array<{ id: string; text: string; documentId: string }>
+> {
+  const { data, error: queryError } = await supabaseAdmin
+    .from('note_blocks')
+    .select('id, text, document_id, notes_documents!inner(kind)')
+    .eq('type', 'checklist')
+    .eq('checked', false)
+    .eq('notes_documents.kind', 'one-time')
+    .order('sort_order', { ascending: true });
+  if (queryError) throw error(500, queryError.message);
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    text: row.text as string,
+    documentId: row.document_id as string
+  }));
 }
 
 export async function getHistoryViewData(): Promise<HistoryViewData> {

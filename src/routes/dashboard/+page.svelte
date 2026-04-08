@@ -33,8 +33,43 @@
   const DND_TYPE = 'calendar-task';
   const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
+  // Convert a one-time block to a TaskInstance-shaped placeholder
+  function blockToPlaceholder(b: { id: string; text: string; documentId: string }): TaskInstance {
+    return {
+      id: `block:${b.id}`,
+      template_id: null,
+      title_snapshot: b.text,
+      instance_kind: 'weekly',
+      week_key: null,
+      day_name: null,
+      week_of_month: null,
+      status: 'open',
+      completed_at: null,
+      priority: 'medium',
+      due_date: null,
+      hours_needed: null,
+      category: null,
+      source_type: 'inbox',
+      preferred_day: null,
+      preferred_week: null,
+      carried_from_instance_id: null,
+      archived_at: null,
+      archive_reason: null,
+      linked_schedule_block_id: null,
+      sort_order: null,
+      source_context: { blockId: b.id, documentId: b.documentId },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      month_key: data.view.monthKey
+    } as unknown as TaskInstance;
+  }
+
+  function isBlock(t: TaskInstance): boolean {
+    return t.id.startsWith('block:');
+  }
+
   let cells = $state<CalendarCell[]>([]);
-  let unassigned = $state<TaskInstance[]>([]);
+  let backlog = $state<TaskInstance[]>([]);
 
   $effect(() => {
     const { instances, weeks, monthKey } = data.view;
@@ -61,7 +96,9 @@
     }
 
     cells = built;
-    unassigned = instances.filter((t) => !t.week_key || !t.day_name);
+    const unassignedInstances = instances.filter((t) => !t.week_key || !t.day_name);
+    const blockPlaceholders = (data.oneTimeBlocks ?? []).map(blockToPlaceholder);
+    backlog = [...unassignedInstances, ...blockPlaceholders];
   });
 
   // ── DnD handlers ─────────────────────────────────────────────────────────
@@ -79,42 +116,67 @@
     const newTasks = e.detail.items;
     cells[idx] = { ...cells[idx], tasks: newTasks };
 
-    // Tasks whose stored assignment differs from this cell → they moved here
     const moved = newTasks.filter(
       (t) => t.week_key !== cell.weekKey || t.day_name !== cell.dayName
     );
 
     for (const task of moved) {
-      try {
-        await apiSendJson(`/api/task-instances/${task.id}`, 'PATCH', {
-          week_key: cell.weekKey,
-          day_name: cell.dayName,
-          existing_month_key: data.view.monthKey,
-          existing_week_key: task.week_key
-        });
-        // Stamp new position so future consider/finalize events detect correctly
-        cells[idx] = {
-          ...cells[idx],
-          tasks: cells[idx].tasks.map((t) =>
-            t.id === task.id ? { ...t, week_key: cell.weekKey, day_name: cell.dayName } : t
-          )
-        };
-      } catch {
-        toast.error('Failed to move task');
-        await invalidateAll();
+      if (isBlock(task)) {
+        // Convert block placeholder to a real task instance
+        const ctx = task.source_context as { blockId: string; documentId: string } | null;
+        if (!ctx) continue;
+        try {
+          const result = await apiSendJson<{ instance: TaskInstance }>('/api/task-instances', 'POST', {
+            title: task.title_snapshot,
+            month_key: data.view.monthKey,
+            week_key: cell.weekKey,
+            day_name: cell.dayName,
+            source_context: ctx
+          });
+          // Replace placeholder with real instance
+          cells[idx] = {
+            ...cells[idx],
+            tasks: cells[idx].tasks.map((t) =>
+              t.id === task.id ? result.instance : t
+            )
+          };
+          // Remove from backlog
+          backlog = backlog.filter((t) => t.id !== task.id);
+        } catch {
+          toast.error('Failed to schedule task');
+          await invalidateAll();
+        }
+      } else {
+        try {
+          await apiSendJson(`/api/task-instances/${task.id}`, 'PATCH', {
+            week_key: cell.weekKey,
+            day_name: cell.dayName,
+            existing_month_key: data.view.monthKey,
+            existing_week_key: task.week_key
+          });
+          cells[idx] = {
+            ...cells[idx],
+            tasks: cells[idx].tasks.map((t) =>
+              t.id === task.id ? { ...t, week_key: cell.weekKey, day_name: cell.dayName } : t
+            )
+          };
+        } catch {
+          toast.error('Failed to move task');
+          await invalidateAll();
+        }
       }
     }
   }
 
-  function handleUnassignedConsider(e: CustomEvent<DndEvent<TaskInstance>>) {
-    unassigned = e.detail.items;
+  function handleBacklogConsider(e: CustomEvent<DndEvent<TaskInstance>>) {
+    backlog = e.detail.items;
   }
 
-  async function handleUnassignedFinalize(e: CustomEvent<DndEvent<TaskInstance>>) {
+  async function handleBacklogFinalize(e: CustomEvent<DndEvent<TaskInstance>>) {
     const newItems = e.detail.items;
-    // Items that had an assignment and were dragged back to unassigned
-    const cleared = newItems.filter((t) => t.week_key || t.day_name);
-    unassigned = newItems;
+    // Only real instances (not blocks) that had an assignment and were dragged back
+    const cleared = newItems.filter((t) => !isBlock(t) && (t.week_key || t.day_name));
+    backlog = newItems;
 
     for (const task of cleared) {
       try {
@@ -124,7 +186,7 @@
           existing_month_key: data.view.monthKey,
           existing_week_key: task.week_key
         });
-        unassigned = unassigned.map((t) =>
+        backlog = backlog.map((t) =>
           t.id === task.id ? { ...t, week_key: null, day_name: null } : t
         );
       } catch {
@@ -137,6 +199,8 @@
   // ── Task completion toggle ────────────────────────────────────────────────
 
   async function toggleTask(task: TaskInstance) {
+    if (isBlock(task)) return; // blocks can't be toggled here
+
     const next: 'open' | 'done' = task.status === 'done' ? 'open' : 'done';
 
     const stamp = (t: TaskInstance): TaskInstance =>
@@ -147,7 +211,7 @@
     for (let i = 0; i < cells.length; i++) {
       cells[i] = { ...cells[i], tasks: cells[i].tasks.map(stamp) };
     }
-    unassigned = unassigned.map(stamp);
+    backlog = backlog.map(stamp);
 
     try {
       await apiSendJson(`/api/task-instances/${task.id}`, 'PATCH', { status: next });
@@ -164,10 +228,10 @@
     void goto(`/dashboard?month=${fn(data.view.monthKey)}`);
   }
 
-  const totalTasks = $derived(cells.reduce((n, c) => n + c.tasks.length, 0) + unassigned.length);
+  const totalTasks = $derived(cells.reduce((n, c) => n + c.tasks.length, 0) + backlog.filter((t) => !isBlock(t)).length);
   const doneTasks = $derived(
     cells.reduce((n, c) => n + c.tasks.filter((t) => t.status === 'done').length, 0) +
-      unassigned.filter((t) => t.status === 'done').length
+      backlog.filter((t) => !isBlock(t) && t.status === 'done').length
   );
 </script>
 
@@ -334,69 +398,94 @@
       {/each}
     </div>
 
-    <!-- ── Unassigned tasks panel ── -->
-    {#if unassigned.length > 0}
+    <!-- ── Backlog panel ── -->
+    {#if backlog.length > 0}
+      {@const instanceCount = backlog.filter((t) => !isBlock(t)).length}
+      {@const blockCount = backlog.filter((t) => isBlock(t)).length}
       <div class="mt-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4 shadow-[var(--shadow-card)]">
-        <div class="mb-3 text-[10px] font-medium uppercase tracking-widest text-[var(--text-faint)]">
-          Unassigned · {unassigned.length}
+        <div class="mb-3 flex items-center gap-2">
+          <span class="text-[10px] font-medium uppercase tracking-widest text-[var(--text-faint)]">
+            Backlog
+          </span>
+          {#if instanceCount > 0}
+            <span class="rounded bg-[var(--panel-strong)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+              {instanceCount} unassigned
+            </span>
+          {/if}
+          {#if blockCount > 0}
+            <span class="rounded bg-[var(--panel-strong)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+              {blockCount} one-time
+            </span>
+          {/if}
         </div>
         <div
           use:dndzone={{
-            items: unassigned,
+            items: backlog,
             type: DND_TYPE,
             flipDurationMs: FLIP_MS
           }}
           onconsider={(e) =>
-            handleUnassignedConsider(e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
+            handleBacklogConsider(e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
           onfinalize={(e) =>
-            handleUnassignedFinalize(e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
+            handleBacklogFinalize(e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
           class="flex min-h-8 flex-wrap gap-1.5"
         >
-          {#each unassigned as task (task.id)}
-            <div
-              class={[
-                'flex cursor-grab items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] px-2 py-1.5 text-xs active:cursor-grabbing select-none',
-                task.status === 'done' ? 'opacity-40' : ''
-              ].join(' ')}
-            >
-              <button
+          {#each backlog as task (task.id)}
+            {#if isBlock(task)}
+              <!-- One-time block placeholder — dashed border, dot indicator -->
+              <div
+                class="flex cursor-grab items-center gap-1.5 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--panel-strong)] px-2 py-1.5 text-xs active:cursor-grabbing select-none"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-[var(--accent)] opacity-70 shrink-0"></span>
+                <span class="text-[var(--text-secondary)]">{task.title_snapshot}</span>
+              </div>
+            {:else}
+              <!-- Regular unassigned instance — solid border + checkbox -->
+              <div
                 class={[
-                  'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
-                  task.status === 'done'
-                    ? 'border-[var(--text-muted)] bg-[var(--text-muted)]'
-                    : 'border-[var(--border-strong)] hover:border-[var(--text-muted)]'
+                  'flex cursor-grab items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] px-2 py-1.5 text-xs active:cursor-grabbing select-none',
+                  task.status === 'done' ? 'opacity-40' : ''
                 ].join(' ')}
-                onclick={(e) => {
-                  e.stopPropagation();
-                  void toggleTask(task);
-                }}
               >
-                {#if task.status === 'done'}
-                  <svg
-                    width="7"
-                    height="7"
-                    viewBox="0 0 7 7"
-                    fill="none"
-                    class="text-[var(--accent-contrast)]"
-                  >
-                    <path
-                      d="M1 3.5L2.8 5.25L6 1.75"
-                      stroke="currentColor"
-                      stroke-width="1.3"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                {/if}
-              </button>
-              <span
-                class={task.status === 'done'
-                  ? 'line-through text-[var(--text-muted)]'
-                  : 'text-[var(--text-secondary)]'}
-              >
-                {task.title_snapshot}
-              </span>
-            </div>
+                <button
+                  class={[
+                    'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                    task.status === 'done'
+                      ? 'border-[var(--text-muted)] bg-[var(--text-muted)]'
+                      : 'border-[var(--border-strong)] hover:border-[var(--text-muted)]'
+                  ].join(' ')}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    void toggleTask(task);
+                  }}
+                >
+                  {#if task.status === 'done'}
+                    <svg
+                      width="7"
+                      height="7"
+                      viewBox="0 0 7 7"
+                      fill="none"
+                      class="text-[var(--accent-contrast)]"
+                    >
+                      <path
+                        d="M1 3.5L2.8 5.25L6 1.75"
+                        stroke="currentColor"
+                        stroke-width="1.3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  {/if}
+                </button>
+                <span
+                  class={task.status === 'done'
+                    ? 'line-through text-[var(--text-muted)]'
+                    : 'text-[var(--text-secondary)]'}
+                >
+                  {task.title_snapshot}
+                </span>
+              </div>
+            {/if}
           {/each}
         </div>
       </div>
