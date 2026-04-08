@@ -50,6 +50,10 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   const body = parseBody(await request.json().catch(() => null));
   const updates: Record<string, unknown> = {};
 
+  if (typeof body.title_snapshot === 'string' && body.title_snapshot.trim()) {
+    updates.title_snapshot = body.title_snapshot.trim();
+  }
+
   if ('status' in body) {
     const status = parseStatus(body.status);
     if (!status) throw error(400, 'Invalid status');

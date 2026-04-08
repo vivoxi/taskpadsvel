@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
-  import { ChevronLeft, ChevronRight, Plus } from 'lucide-svelte';
+  import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-svelte';
   import MonthStrip from '$lib/components/MonthStrip.svelte';
   import { toast } from 'svelte-sonner';
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
@@ -219,6 +219,59 @@
     } catch {
       toast.error('Failed to add task');
       unassigned = unassigned.filter((t) => t.id !== optimisticTask.id);
+    }
+  }
+
+  // ── Inline edit ──────────────────────────────────────────────────────────
+
+  let editingTaskId = $state<string | null>(null);
+  let editTitle = $state('');
+  let editHours = $state<number | null>(null);
+
+  function startEdit(task: TaskInstance) {
+    editingTaskId = task.id;
+    editTitle = task.title_snapshot;
+    editHours = task.hours_needed;
+  }
+
+  function cancelEdit() {
+    editingTaskId = null;
+  }
+
+  async function saveEdit(taskId: string) {
+    const title = editTitle.trim();
+    if (!title) return;
+
+    const hoursNeeded = typeof editHours === 'number' && Number.isFinite(editHours) ? editHours : null;
+
+    unassigned = unassigned.map((t) =>
+      t.id === taskId ? { ...t, title_snapshot: title, hours_needed: hoursNeeded } : t
+    );
+    editingTaskId = null;
+
+    try {
+      await apiSendJson(`/api/task-instances/${taskId}`, 'PATCH', {
+        title_snapshot: title,
+        hours_needed: hoursNeeded
+      });
+    } catch {
+      toast.error('Failed to save');
+      await invalidateAll();
+    }
+  }
+
+  async function deleteUnassignedTask(taskId: string) {
+    unassigned = unassigned.filter((t) => t.id !== taskId);
+    editingTaskId = null;
+
+    try {
+      await apiSendJson(`/api/task-instances/${taskId}`, 'PATCH', {
+        archived_at: new Date().toISOString(),
+        archive_reason: 'deleted'
+      });
+    } catch {
+      toast.error('Failed to delete');
+      await invalidateAll();
     }
   }
 
@@ -462,56 +515,102 @@
           handleUnassignedConsider(e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
         onfinalize={(e) =>
           handleUnassignedFinalize(e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
-        class="flex min-h-8 flex-wrap gap-1.5"
+        class="min-h-8 space-y-1"
       >
         {#each unassigned as task (task.id)}
-          <div
-            class={[
-              'flex cursor-grab items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] px-2 py-1.5 text-xs active:cursor-grabbing select-none',
-              task.status === 'done' ? 'opacity-40' : ''
-            ].join(' ')}
-          >
-            <button
-              class={[
-                'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
-                task.status === 'done'
-                  ? 'border-[var(--text-muted)] bg-[var(--text-muted)]'
-                  : 'border-[var(--border-strong)] hover:border-[var(--text-muted)]'
-              ].join(' ')}
-              onclick={(e) => {
-                e.stopPropagation();
-                void toggleTask(task);
-              }}
-            >
-              {#if task.status === 'done'}
-                <svg
-                  width="7"
-                  height="7"
-                  viewBox="0 0 7 7"
-                  fill="none"
-                  class="text-[var(--accent-contrast)]"
+          {#if editingTaskId === task.id}
+            <!-- Inline edit row — not draggable while editing -->
+            <div class="rounded-lg border border-[var(--accent)]/40 bg-[var(--panel-soft)] px-2 py-2 select-none">
+              <div class="flex gap-1.5">
+                <input
+                  type="text"
+                  bind:value={editTitle}
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); void saveEdit(task.id); }
+                    if (e.key === 'Escape') cancelEdit();
+                  }}
+                  class="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                />
+                <input
+                  type="number"
+                  bind:value={editHours}
+                  placeholder="h"
+                  min="0.25"
+                  step="0.25"
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); void saveEdit(task.id); }
+                    if (e.key === 'Escape') cancelEdit();
+                  }}
+                  class="w-14 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                />
+              </div>
+              <div class="mt-1.5 flex items-center justify-between">
+                <button
+                  onclick={() => void deleteUnassignedTask(task.id)}
+                  class="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-[var(--text-faint)] transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
                 >
-                  <path
-                    d="M1 3.5L2.8 5.25L6 1.75"
-                    stroke="currentColor"
-                    stroke-width="1.3"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              {/if}
-            </button>
-            <span
-              class={task.status === 'done'
-                ? 'line-through text-[var(--text-muted)]'
-                : 'text-[var(--text-secondary)]'}
+                  <Trash2 size={10} />
+                  Delete
+                </button>
+                <div class="flex gap-1">
+                  <button
+                    onclick={cancelEdit}
+                    class="rounded-md border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]"
+                  >
+                    <X size={10} />
+                  </button>
+                  <button
+                    onclick={() => void saveEdit(task.id)}
+                    disabled={!editTitle.trim()}
+                    class="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent-contrast)] disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          {:else}
+            <div
+              class={[
+                'group flex cursor-grab items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] px-2 py-1.5 text-xs active:cursor-grabbing select-none',
+                task.status === 'done' ? 'opacity-40' : ''
+              ].join(' ')}
             >
-              {task.title_snapshot}
-            </span>
-            {#if task.hours_needed}
-              <span class="shrink-0 text-[9px] font-medium text-[var(--text-faint)]">{task.hours_needed}h</span>
-            {/if}
-          </div>
+              <button
+                class={[
+                  'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                  task.status === 'done'
+                    ? 'border-[var(--text-muted)] bg-[var(--text-muted)]'
+                    : 'border-[var(--border-strong)] hover:border-[var(--text-muted)]'
+                ].join(' ')}
+                onclick={(e) => { e.stopPropagation(); void toggleTask(task); }}
+              >
+                {#if task.status === 'done'}
+                  <svg width="7" height="7" viewBox="0 0 7 7" fill="none" class="text-[var(--accent-contrast)]">
+                    <path d="M1 3.5L2.8 5.25L6 1.75" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                {/if}
+              </button>
+              <span
+                class={[
+                  'min-w-0 flex-1 truncate',
+                  task.status === 'done' ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'
+                ].join(' ')}
+              >
+                {task.title_snapshot}
+              </span>
+              {#if task.hours_needed}
+                <span class="shrink-0 text-[9px] font-medium text-[var(--text-faint)]">{task.hours_needed}h</span>
+              {/if}
+              <button
+                onclick={(e) => { e.stopPropagation(); startEdit(task); }}
+                class="ml-0.5 shrink-0 rounded p-0.5 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--text-primary)]"
+                title="Edit"
+              >
+                <Pencil size={10} />
+              </button>
+            </div>
+          {/if}
         {/each}
       </div>
 
