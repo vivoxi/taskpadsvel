@@ -2,15 +2,20 @@
   import { flip } from 'svelte/animate';
   import { tick } from 'svelte';
   import {
+    Bold,
     ChevronDown,
     ChevronUp,
+    Code,
     Copy,
     GripVertical,
     Heading1,
+    Italic,
+    Link2,
     ListChecks,
     Minus,
     Pilcrow,
     Plus,
+    Strikethrough,
     Trash2
   } from 'lucide-svelte';
   import {
@@ -43,6 +48,8 @@
   let isSaving = $state(false);
   let editorElement = $state<HTMLDivElement | null>(null);
   let activeBlockId = $state<string | null>(null);
+  let editingBlockId = $state<string | null>(null);
+  let focusedEl = $state<HTMLInputElement | HTMLTextAreaElement | null>(null);
   let insertMenuIndex = $state<number | null>(null);
   let slashMenu = $state<{
     blockId: string;
@@ -62,9 +69,42 @@
     sourceKey;
     localBlocks = cloneBlocks(blocks);
     activeBlockId = null;
+    editingBlockId = null;
+    focusedEl = null;
     insertMenuIndex = null;
     slashMenu = null;
   });
+
+  // ── Markdown rendering ────────────────────────────────────────────────────
+
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderInline(text: string): string {
+    if (!text.trim()) return '';
+    let html = escapeHtml(text);
+    // Bold: **text**
+    html = html.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+    // Italic: *text* or _text_
+    html = html.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+    html = html.replace(/_([^_\n]+?)_/g, '<em>$1</em>');
+    // Strikethrough: ~~text~~
+    html = html.replace(/~~(.+?)~~/gs, '<s>$1</s>');
+    // Inline code: `code`
+    html = html.replace(/`([^`\n]+?)`/g, '<code class="rounded bg-[var(--panel-soft)] px-1 font-mono text-[0.85em] text-[var(--text-primary)]">$1</code>');
+    // Links: [text](https://...)  — only allow http/https for safety
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline underline-offset-2 hover:opacity-80">$1</a>');
+    // Newlines
+    html = html.replace(/\n/g, '<br>');
+    return html;
+  }
+
+  // ── Block operations ──────────────────────────────────────────────────────
 
   function updateBlock(nextBlocks: PlannerBlock[]) {
     localBlocks = nextBlocks;
@@ -114,6 +154,7 @@
   }
 
   async function focusBlock(blockId: string, position: 'start' | 'end' = 'end') {
+    editingBlockId = blockId;
     await tick();
     const input = editorElement?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
       `[data-block-input="${blockId}"]`
@@ -290,11 +331,90 @@
     insertBlockAt(index, getFollowupType(block.type));
   }
 
+  // ── Rich text formatting ──────────────────────────────────────────────────
+
+  function wrapSelection(index: number, prefix: string, suffix = prefix) {
+    const el = focusedEl;
+    if (!el) return;
+
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const text = el.value;
+    const selected = text.slice(start, end);
+    const newText = text.slice(0, start) + prefix + selected + suffix + text.slice(end);
+
+    setText(index, newText);
+    void tick().then(() => {
+      el.focus();
+      el.setSelectionRange(start + prefix.length, end + prefix.length);
+    });
+  }
+
+  function insertLinkAtSelection(index: number) {
+    const el = focusedEl;
+    if (!el) return;
+
+    // Save selection before prompt (prompt may cause blur)
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const selected = el.value.slice(start, end);
+    const savedValue = el.value;
+
+    const url = window.prompt('Enter URL:', 'https://');
+    if (!url) {
+      void tick().then(() => el.focus());
+      return;
+    }
+
+    const linkText = selected || 'Link';
+    const markdown = `[${linkText}](${url})`;
+    const newText = savedValue.slice(0, start) + markdown + savedValue.slice(end);
+    setText(index, newText);
+    void tick().then(() => el.focus());
+  }
+
+  function handlePaste(
+    index: number,
+    event: ClipboardEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement }
+  ) {
+    const pasted = event.clipboardData?.getData('text/plain') ?? '';
+    const el = event.currentTarget;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+
+    // Smart link paste: if text is selected and a URL is pasted, wrap as [text](url)
+    if (start !== end && /^https?:\/\/\S+$/.test(pasted.trim())) {
+      event.preventDefault();
+      const selectedText = el.value.slice(start, end);
+      const markdown = `[${selectedText}](${pasted.trim()})`;
+      const newText = el.value.slice(0, start) + markdown + el.value.slice(end);
+      setText(index, newText);
+      void tick().then(() => {
+        el.setSelectionRange(start + markdown.length, start + markdown.length);
+      });
+    }
+  }
+
   function handleKeydown(
     index: number,
     block: PlannerBlock,
     event: KeyboardEvent & { currentTarget: EventTarget & (HTMLInputElement | HTMLTextAreaElement) }
   ) {
+    // ── Formatting shortcuts ─────────────────────────────────────────────────
+    const mod = event.metaKey || event.ctrlKey;
+    if (mod) {
+      if (!event.shiftKey && !event.altKey) {
+        if (event.key === 'b') { event.preventDefault(); wrapSelection(index, '**'); return; }
+        if (event.key === 'i') { event.preventDefault(); wrapSelection(index, '_'); return; }
+        if (event.key === 'e') { event.preventDefault(); wrapSelection(index, '`'); return; }
+        if (event.key === 'k') { event.preventDefault(); insertLinkAtSelection(index); return; }
+      }
+      if (event.shiftKey && !event.altKey && event.key === 's') {
+        event.preventDefault(); wrapSelection(index, '~~'); return;
+      }
+    }
+
+    // ── Slash menu navigation ────────────────────────────────────────────────
     const slashItems =
       slashMenu?.blockId === block.id ? getSlashItems(slashMenu.query) : [];
 
@@ -402,25 +522,46 @@
               value={block.text}
               oninput={(event) => setBlockText(index, (event.currentTarget as HTMLInputElement).value)}
               onkeydown={(event) => handleKeydown(index, block, event)}
-              onfocus={() => (activeBlockId = block.id)}
-              onblur={handleBlur}
+              onpaste={(event) => handlePaste(index, event as ClipboardEvent & { currentTarget: HTMLInputElement })}
+              onfocus={(event) => { activeBlockId = block.id; editingBlockId = block.id; focusedEl = event.currentTarget; }}
+              onblur={() => { editingBlockId = null; focusedEl = null; handleBlur(); }}
               placeholder="Heading"
               class={`w-full border-none bg-transparent p-0 tracking-[-0.03em] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${
                 compact ? 'text-base font-semibold' : 'text-xl font-semibold'
               }`}
             />
           {:else if block.type === 'paragraph'}
-            <textarea
-              data-block-input={block.id}
-              value={block.text}
-              rows={compact ? 2 : 2}
-              oninput={(event) => setBlockText(index, (event.currentTarget as HTMLTextAreaElement).value)}
-              onkeydown={(event) => handleKeydown(index, block, event)}
-              onfocus={() => (activeBlockId = block.id)}
-              onblur={handleBlur}
-              placeholder="Write a note"
-              class="min-h-[2.5rem] w-full resize-none border-none bg-transparent p-0 text-sm leading-6 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-faint)]"
-            ></textarea>
+            {#if editingBlockId === block.id}
+              <textarea
+                data-block-input={block.id}
+                value={block.text}
+                rows={compact ? 2 : 2}
+                oninput={(event) => setBlockText(index, (event.currentTarget as HTMLTextAreaElement).value)}
+                onkeydown={(event) => handleKeydown(index, block, event)}
+                onpaste={(event) => handlePaste(index, event as ClipboardEvent & { currentTarget: HTMLTextAreaElement })}
+                onfocus={(event) => { activeBlockId = block.id; editingBlockId = block.id; focusedEl = event.currentTarget; }}
+                onblur={() => { editingBlockId = null; focusedEl = null; handleBlur(); }}
+                placeholder="Write a note"
+                class="min-h-[2.5rem] w-full resize-none border-none bg-transparent p-0 text-sm leading-6 text-[var(--text-secondary)] outline-none placeholder:text-[var(--text-faint)]"
+              ></textarea>
+            {:else}
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <div
+                role="textbox"
+                aria-label="Edit paragraph"
+                tabindex="0"
+                class="min-h-[2.5rem] w-full cursor-text whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-secondary)] outline-none"
+                onclick={() => { activeBlockId = block.id; void focusBlock(block.id); }}
+                onfocus={() => { activeBlockId = block.id; void focusBlock(block.id); }}
+              >
+                {#if block.text.trim()}
+                  {@html renderInline(block.text)}
+                {:else}
+                  <span class="text-[var(--text-faint)]">Write a note</span>
+                {/if}
+              </div>
+            {/if}
           {:else if block.type === 'checklist'}
             <label class="flex items-start gap-3">
               <input
@@ -434,8 +575,9 @@
                 value={block.text}
                 oninput={(event) => setBlockText(index, (event.currentTarget as HTMLInputElement).value)}
                 onkeydown={(event) => handleKeydown(index, block, event)}
-                onfocus={() => (activeBlockId = block.id)}
-                onblur={handleBlur}
+                onpaste={(event) => handlePaste(index, event as ClipboardEvent & { currentTarget: HTMLInputElement })}
+                onfocus={(event) => { activeBlockId = block.id; editingBlockId = block.id; focusedEl = event.currentTarget; }}
+                onblur={() => { editingBlockId = null; focusedEl = null; handleBlur(); }}
                 placeholder="Checklist item"
                 class={`w-full border-none bg-transparent p-0 text-sm outline-none placeholder:text-[var(--text-faint)] ${
                   block.checked
@@ -462,6 +604,61 @@
               <span class="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Divider</span>
               <span class="h-px flex-1 bg-[var(--border)]"></span>
             </button>
+          {/if}
+
+          <!-- Format toolbar — shown when a text block is focused -->
+          {#if editingBlockId === block.id && block.type !== 'divider'}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_interactive_supports_focus -->
+            <div
+              role="toolbar"
+              aria-label="Text formatting"
+              class="mt-1 flex items-center gap-0.5"
+              onmousedown={(e) => e.preventDefault()}
+            >
+              <button
+                type="button"
+                title="Bold (⌘B)"
+                onclick={() => wrapSelection(index, '**')}
+                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+              >
+                <Bold size={11} />
+              </button>
+              <button
+                type="button"
+                title="Italic (⌘I)"
+                onclick={() => wrapSelection(index, '_')}
+                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+              >
+                <Italic size={11} />
+              </button>
+              <button
+                type="button"
+                title="Inline code (⌘E)"
+                onclick={() => wrapSelection(index, '`')}
+                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+              >
+                <Code size={11} />
+              </button>
+              <button
+                type="button"
+                title="Link (⌘K)"
+                onclick={() => insertLinkAtSelection(index)}
+                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+              >
+                <Link2 size={11} />
+              </button>
+              <button
+                type="button"
+                title="Strikethrough (⌘⇧S)"
+                onclick={() => wrapSelection(index, '~~')}
+                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+              >
+                <Strikethrough size={11} />
+              </button>
+              <span class="mx-1 h-3 w-px bg-[var(--border)]"></span>
+              <span class="text-[9px] text-[var(--text-faint)]">Paste URL over selection to link</span>
+            </div>
           {/if}
 
           {#if slashMenu?.blockId === block.id}

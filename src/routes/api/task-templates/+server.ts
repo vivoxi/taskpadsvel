@@ -143,6 +143,13 @@ export const PATCH: RequestHandler = async ({ request }) => {
 
   if ('hours_needed_default' in updates) {
     await syncTemplateHoursDefault(id, updates.hours_needed_default as number | null);
+  } else if ('estimate_hours' in updates) {
+    // When only estimate_hours changes and no explicit hours_needed_default is set,
+    // propagate the estimate to existing instances so they show hours on the week/calendar views
+    const currentHoursDefault = (currentTemplate as Record<string, unknown>).hours_needed_default;
+    if (currentHoursDefault === null || currentHoursDefault === undefined) {
+      await syncTemplateHoursDefault(id, updates.estimate_hours as number | null);
+    }
   }
 
   if ('preferred_day' in updates || 'preferred_week_of_month' in updates) {
