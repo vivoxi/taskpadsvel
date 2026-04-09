@@ -143,6 +143,16 @@ export const PATCH: RequestHandler = async ({ request }) => {
 
   if ('hours_needed_default' in updates) {
     await syncTemplateHoursDefault(id, updates.hours_needed_default as number | null);
+  } else if ('estimate_hours' in updates) {
+    // estimate_hours is the effective hours default when hours_needed_default is null.
+    // Sync instances so they reflect the new estimate when no explicit override exists.
+    const currentHoursDefault =
+      typeof currentTemplate.hours_needed_default === 'number'
+        ? currentTemplate.hours_needed_default
+        : null;
+    if (currentHoursDefault === null) {
+      await syncTemplateHoursDefault(id, updates.estimate_hours as number | null);
+    }
   }
 
   if ('preferred_day' in updates || 'preferred_week_of_month' in updates) {
