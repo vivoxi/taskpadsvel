@@ -311,7 +311,7 @@
                         <div class="mt-1.5">
                           <TaskMetaChips
                             compact
-                            hours={template.hours_needed_default ?? template.estimate_hours}
+                            hours={template.hours_needed_default}
                             sourceType={template.source_type_default}
                           />
                         </div>
@@ -343,19 +343,7 @@
                     {#if expandedTemplateId === template.id}
                       <div class="mt-3 grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-2">
                         <label class="text-xs text-[var(--text-muted)]">
-                          Estimate
-                          <input
-                            value={template.estimate_hours ?? ''}
-                            onblur={(event) =>
-                              patchTemplate(template.id, {
-                                estimate_hours: parseEstimate((event.currentTarget as HTMLInputElement).value)
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          />
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Hours default
+                          Hours needed
                           <input
                             value={template.hours_needed_default ?? ''}
                             onblur={(event) =>
@@ -431,7 +419,7 @@
                         <div class="mt-1.5">
                           <TaskMetaChips
                             compact
-                            hours={template.hours_needed_default ?? template.estimate_hours}
+                            hours={template.hours_needed_default}
                             sourceType={template.source_type_default}
                           />
                         </div>
@@ -463,19 +451,7 @@
                     {#if expandedTemplateId === template.id}
                       <div class="mt-3 grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-2">
                         <label class="text-xs text-[var(--text-muted)]">
-                          Estimate
-                          <input
-                            value={template.estimate_hours ?? ''}
-                            onblur={(event) =>
-                              patchTemplate(template.id, {
-                                estimate_hours: parseEstimate((event.currentTarget as HTMLInputElement).value)
-                              })}
-                            class="mt-1 w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-                          />
-                        </label>
-
-                        <label class="text-xs text-[var(--text-muted)]">
-                          Hours default
+                          Hours needed
                           <input
                             value={template.hours_needed_default ?? ''}
                             onblur={(event) =>
