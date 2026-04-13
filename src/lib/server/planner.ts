@@ -574,30 +574,23 @@ export async function ensureMonthPlanInstances(inputMonthKey: string): Promise<{
 export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewData> {
   const weekKey = normalizeWeekKey(inputWeekKey);
   const monthKey = getBoardMonthKeyForWeek(weekKey);
-  const [settings, monthPlan] = await Promise.all([
+
+  // Run all independent fetches in a single parallel batch to avoid waterfall round-trips.
+  // weekly_notes and schedule_blocks don't depend on monthPlan so they start immediately.
+  const [settings, monthPlan, { data: noteRows, error: notesError }, blocks] = await Promise.all([
     ensurePlannerSettings(),
-    ensureMonthPlanInstances(monthKey)
+    ensureMonthPlanInstances(monthKey),
+    supabaseAdmin.from('weekly_notes').select('*').eq('week_key', weekKey),
+    listScheduleBlocksForMonth(monthKey)
   ]);
 
-  const [{ data: taskRows, error: taskError }, { data: noteRows, error: notesError }, blocks] =
-    await Promise.all([
-      supabaseAdmin
-        .from('task_instances')
-        .select('*')
-        .eq('week_key', weekKey)
-        .is('archived_at', null)
-        .order('status', { ascending: true })
-        .order('sort_order', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: true }),
-      supabaseAdmin.from('weekly_notes').select('*').eq('week_key', weekKey),
-      listScheduleBlocksForMonth(monthKey)
-    ]);
-
-  if (taskError) throw error(500, taskError.message);
   if (notesError) throw error(500, notesError.message);
 
   const weekIndex = getWeekIndexForMonth(weekKey, monthKey);
-  const weekTasks = sortInstances((taskRows ?? []).map((row) => normalizeTask(row as TaskInstance)));
+  // Derive weekTasks from the already-loaded monthPlan instead of a separate DB query.
+  const weekTasks = sortInstances(
+    monthPlan.instances.filter((i) => i.week_key === weekKey && i.archived_at === null)
+  );
   const monthTasksById = new Map(monthPlan.instances.map((task) => [task.id, task]));
   const weekBlocks = blocks.filter((block) => block.week_key === weekKey);
   const softAssignments = buildSoftAssignments(monthPlan.instances, weekBlocks);

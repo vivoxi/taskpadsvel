@@ -3,8 +3,6 @@
   import { tick } from 'svelte';
   import {
     Bold,
-    ChevronDown,
-    ChevronUp,
     Code,
     Copy,
     GripVertical,
@@ -50,7 +48,7 @@
   let activeBlockId = $state<string | null>(null);
   let editingBlockId = $state<string | null>(null);
   let focusedEl = $state<HTMLInputElement | HTMLTextAreaElement | null>(null);
-  let insertMenuIndex = $state<number | null>(null);
+  let blockMenuId = $state<string | null>(null);
   let slashMenu = $state<{
     blockId: string;
     index: number;
@@ -71,7 +69,7 @@
     activeBlockId = null;
     editingBlockId = null;
     focusedEl = null;
-    insertMenuIndex = null;
+    blockMenuId = null;
     slashMenu = null;
   });
 
@@ -179,7 +177,6 @@
     const nextBlocks = cloneBlocks(localBlocks);
     nextBlocks.splice(index + 1, 0, block);
     updateBlock(nextBlocks);
-    insertMenuIndex = null;
     void commit(nextBlocks);
     if (type !== 'divider') {
       void focusBlock(block.id, 'start');
@@ -461,12 +458,18 @@
     return 'Divider';
   }
 
-  function toggleInsertMenu(index: number) {
-    insertMenuIndex = insertMenuIndex === index ? null : index;
+  function toggleBlockMenu(blockId: string) {
+    blockMenuId = blockMenuId === blockId ? null : blockId;
   }
 </script>
 
 <div bind:this={editorElement} class={`space-y-2 ${compact ? '' : 'space-y-3'}`}>
+  {#if blockMenuId !== null}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="fixed inset-0 z-10" onclick={() => (blockMenuId = null)}></div>
+  {/if}
+
   {#if localBlocks.length === 0}
     <button
       type="button"
@@ -498,18 +501,19 @@
             class={`rounded p-1 transition hover:bg-[var(--panel)] hover:text-[var(--text-primary)] ${
               activeBlockId === block.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
             }`}
-            aria-label="Insert block"
-            onclick={() => toggleInsertMenu(index)}
+            aria-label="Add block below"
+            onclick={() => insertBlockAt(index, 'paragraph')}
           >
             <Plus size={14} />
           </button>
           <button
             type="button"
             use:dragHandle
-            class={`cursor-grab rounded p-1 transition hover:bg-[var(--panel)] active:cursor-grabbing ${
+            onclick={() => toggleBlockMenu(block.id)}
+            class={`cursor-grab rounded p-1 transition hover:bg-[var(--panel)] hover:text-[var(--text-primary)] active:cursor-grabbing ${
               activeBlockId === block.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
             }`}
-            aria-label="Drag block"
+            aria-label="Block options"
           >
             <GripVertical size={14} />
           </button>
@@ -656,8 +660,6 @@
               >
                 <Strikethrough size={11} />
               </button>
-              <span class="mx-1 h-3 w-px bg-[var(--border)]"></span>
-              <span class="text-[9px] text-[var(--text-faint)]">Paste URL over selection to link</span>
             </div>
           {/if}
 
@@ -698,56 +700,20 @@
           {/if}
         </div>
 
-        <div class={`flex items-center gap-0.5 transition ${
-          activeBlockId === block.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
-        }`}>
-          <button
-            type="button"
-            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
-            onclick={() => moveBlock(index, -1)}
-            aria-label="Move block up"
-          >
-            <ChevronUp size={14} />
-          </button>
-          <button
-            type="button"
-            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
-            onclick={() => moveBlock(index, 1)}
-            aria-label="Move block down"
-          >
-            <ChevronDown size={14} />
-          </button>
-          <button
-            type="button"
-            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
-            onclick={() => duplicateBlock(index)}
-            aria-label="Duplicate block"
-          >
-            <Copy size={14} />
-          </button>
-          <button
-            type="button"
-            class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
-            onclick={() => removeBlock(index)}
-            aria-label="Delete block"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-
-        {#if insertMenuIndex === index}
-          <div class="absolute left-2 top-full z-10 mt-2 min-w-40 overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
+        {#if blockMenuId === block.id}
+          <div class="absolute left-8 top-0 z-20 min-w-[176px] overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
             <div class="border-b border-[var(--border)] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-              Insert after
+              Turn into
             </div>
-            <div class="p-2">
+            <div class="p-1.5">
               {#each availableTypes as type (type)}
                 <button
                   type="button"
-                  class="flex w-full items-center gap-2 rounded-[14px] px-3 py-2 text-left text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
+                  class="flex w-full items-center gap-2 rounded-[12px] px-3 py-1.5 text-left text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
                   onmousedown={(event) => {
                     event.preventDefault();
-                    insertBlockAt(index, type);
+                    replaceBlockType(index, type);
+                    blockMenuId = null;
                   }}
                 >
                   {#if type === 'heading'}
@@ -763,34 +729,39 @@
                 </button>
               {/each}
             </div>
+            <div class="border-t border-[var(--border)] p-1.5">
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 rounded-[12px] px-3 py-1.5 text-left text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
+                onmousedown={(event) => {
+                  event.preventDefault();
+                  duplicateBlock(index);
+                  blockMenuId = null;
+                }}
+              >
+                <Copy size={13} />
+                Duplicate
+              </button>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 rounded-[12px] px-3 py-1.5 text-left text-sm text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30"
+                onmousedown={(event) => {
+                  event.preventDefault();
+                  blockMenuId = null;
+                  removeBlock(index);
+                }}
+              >
+                <Trash2 size={13} />
+                Delete
+              </button>
+            </div>
           </div>
         {/if}
       </div>
     {/each}
   </div>
 
-  <div class="flex flex-wrap items-center gap-2 pt-2">
-    <span class="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-      {isSaving ? 'Saving' : localBlocks.length > 1 ? 'Drag or add block' : `Add ${labelFor(emptyBlockType).toLowerCase()}`}
-    </span>
-    {#each insertOrder as type (type)}
-      <button
-        type="button"
-        class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-        onclick={() => addBlock(type)}
-      >
-        {#if type === 'heading'}
-          <Heading1 size={12} />
-        {:else if type === 'paragraph'}
-          <Pilcrow size={12} />
-        {:else if type === 'divider'}
-          <Minus size={12} />
-        {:else}
-          <ListChecks size={12} />
-        {/if}
-        {labelFor(type)}
-      </button>
-    {/each}
-    <Plus size={12} class="text-[var(--text-faint)]" />
-  </div>
+  {#if isSaving}
+    <p class="px-1.5 pt-1 text-[10px] text-[var(--text-faint)]">Saving…</p>
+  {/if}
 </div>
