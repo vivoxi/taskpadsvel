@@ -1,27 +1,45 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
-  import { Download, Paperclip, Plus, Trash2, Upload } from 'lucide-svelte';
+  import { FileText, Image, Paperclip, Plus, Trash2, Upload } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import { apiFetch, apiSendJson } from '$lib/client/api';
-  import type { PlannerBlock } from '$lib/planner/types';
+  import type { PlannerBlock, TaskAttachment } from '$lib/planner/types';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
   let uploading = $state(false);
 
+  // ── Sidebar pagination ────────────────────────────────────────────────────
+  const PAGE_SIZE = 15;
+  let sidebarPage = $state(0);
+  const totalPages = $derived(Math.ceil(data.view.documents.length / PAGE_SIZE));
+  const pagedDocs = $derived(
+    data.view.documents.slice(sidebarPage * PAGE_SIZE, (sidebarPage + 1) * PAGE_SIZE)
+  );
+
+  // Reset page when doc list changes (e.g. after create)
+  $effect(() => {
+    data.view.documents;
+    sidebarPage = 0;
+  });
+
+  // ── Attachment helpers ────────────────────────────────────────────────────
   function attachmentHref(filePath: string) {
     return `/uploads/${filePath.replace(/^\/+/, '').replace(/\\/g, '/')}`;
   }
 
+  function isImage(attachment: TaskAttachment) {
+    return attachment.mime_type?.startsWith('image/') ?? false;
+  }
+
+  // ── Document actions ──────────────────────────────────────────────────────
   async function createDocument() {
     try {
-      const document = await apiSendJson<{ id: string }>('/api/notes/documents', 'POST', {
-        title: 'Untitled'
-      });
-      await goto(`/notes?doc=${document.id}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create note');
+      const doc = await apiSendJson<{ id: string }>('/api/notes/documents', 'POST', { title: 'Untitled' });
+      await goto(`/notes?doc=${doc.id}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create note');
     }
   }
 
@@ -30,43 +48,35 @@
       await apiSendJson(`/api/notes/documents/${data.view.selectedDocumentId}`, 'PATCH', {
         title: title.trim() || 'Untitled'
       });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to rename note');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to rename note');
     }
   }
 
   async function deleteDocument() {
-    if (!confirm('Are you sure you want to delete this note? This will also remove its attachments.')) {
-      return;
-    }
-
+    if (!confirm('Delete this note and all its attachments?')) return;
     try {
-      await apiFetch(`/api/notes/documents/${data.view.selectedDocumentId}`, {
-        method: 'DELETE'
-      });
+      await apiFetch(`/api/notes/documents/${data.view.selectedDocumentId}`, { method: 'DELETE' });
       await goto('/notes');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete note');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete note');
     }
   }
 
   async function saveBlocks(blocks: PlannerBlock[]) {
     try {
-      await apiSendJson(`/api/notes/documents/${data.view.selectedDocumentId}/blocks`, 'POST', {
-        blocks
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save note');
+      await apiSendJson(`/api/notes/documents/${data.view.selectedDocumentId}/blocks`, 'POST', { blocks });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save note');
     }
   }
 
+  // ── Attachment actions ────────────────────────────────────────────────────
   async function uploadAttachment(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-
     uploading = true;
-
     try {
       const form = new FormData();
       form.set('file', file);
@@ -74,10 +84,10 @@
         method: 'POST',
         body: form
       });
-      toast.success('Attachment uploaded');
+      toast.success('File attached');
       await invalidateAll();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to upload attachment');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       input.value = '';
       uploading = false;
@@ -85,24 +95,16 @@
   }
 
   async function deleteAttachment(attachmentId: string) {
-    if (!confirm('Are you sure you want to remove this attachment?')) {
-      return;
-    }
-
+    if (!confirm('Remove this attachment?')) return;
     try {
       await apiFetch(
         `/api/notes/documents/${data.view.selectedDocumentId}/attachments/${attachmentId}`,
         { method: 'DELETE' }
       );
-      toast('Attachment deleted', {
-        action: {
-          label: 'Undo',
-          onClick: () => toast('Attachment delete cannot be undone after file removal.')
-        }
-      });
+      toast('Attachment removed');
       await invalidateAll();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete attachment');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to remove attachment');
     }
   }
 </script>
@@ -112,136 +114,174 @@
 </svelte:head>
 
 <div class="px-4 py-4 sm:px-5 sm:py-5">
-  <div class="mx-auto grid max-w-[1440px] gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-    <aside class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)]">
-      <div class="border-b border-[var(--border)] pb-4">
-        <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Notes space</div>
-        <h1 class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">Documents</h1>
-        <p class="mt-1.5 text-sm leading-5 text-[var(--text-muted)]">
-          Long-form notes, reference material, and thinking that should stay separate from structured planning metadata.
-        </p>
-      </div>
+  <div class="mx-auto grid max-w-[1440px] gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
 
-      <button
-        type="button"
-        class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-2.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-        onclick={createDocument}
-      >
-        <Plus size={14} />
-        New note
-      </button>
-
-      <div class="mt-3 space-y-1.5">
-        {#each data.view.documents as document (document.id)}
-          <a
-            href={`/notes?doc=${document.id}`}
-            class={`block rounded-[16px] border px-3.5 py-2.5 transition-colors ${
-              document.id === data.view.selectedDocumentId
-                ? 'border-[var(--border-strong)] bg-[var(--panel-soft)]'
-                : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--panel-soft)]/70'
-            }`}
-          >
-            <div class="font-medium text-[var(--text-primary)]">{document.title}</div>
-            <div class="mt-1 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-              Updated {new Date(document.updated_at).toLocaleDateString('en-GB')}
-            </div>
-          </a>
-        {/each}
-      </div>
-    </aside>
-
-    <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-6 sm:py-5">
-      <div class="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
-        <div class="min-w-0 flex-1">
-        <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Current note</div>
-        <input
-            value={data.view.documents.find((document) => document.id === data.view.selectedDocumentId)?.title ?? 'Untitled'}
-            onblur={(event) => renameDocument((event.currentTarget as HTMLInputElement).value)}
-            class="mt-2.5 w-full border-none bg-transparent p-0 text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)] outline-none"
-          />
-        </div>
-
+    <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
+    <aside class="flex flex-col gap-3 rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)]">
+      <div class="flex items-center justify-between gap-2">
+        <h1 class="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)]">Notes</h1>
         <button
           type="button"
-          class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-          onclick={deleteDocument}
+          onclick={createDocument}
+          class="rounded-full p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
+          aria-label="New note"
         >
-          <Trash2 size={14} />
-          Delete
+          <Plus size={14} />
         </button>
       </div>
 
-      <div class="pt-5">
-        <div class="mb-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
-          Notes are for context and writing. Planning and scheduling decisions stay in the week and month surfaces instead of hiding inside documents.
-        </div>
+      <div class="flex-1 space-y-1">
+        {#each pagedDocs as document (document.id)}
+          <a
+            href={`/notes?doc=${document.id}`}
+            class={`block rounded-[14px] border px-3 py-2 text-sm transition-colors ${
+              document.id === data.view.selectedDocumentId
+                ? 'border-[var(--border-strong)] bg-[var(--panel-soft)] text-[var(--text-primary)]'
+                : 'border-transparent text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--panel-soft)]/70'
+            }`}
+          >
+            <div class="truncate font-medium">{document.title}</div>
+            <div class="mt-0.5 text-[10px] text-[var(--text-faint)]">
+              {new Date(document.updated_at).toLocaleDateString('tr-TR')}
+            </div>
+          </a>
+        {/each}
 
-        <section class="mb-5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3.5">
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Attachments</div>
-              <p class="mt-1.5 text-sm text-[var(--text-muted)]">
-                Keep source files, references, or exports close to the note without turning notes into a planner surface.
-              </p>
+        {#if data.view.documents.length === 0}
+          <p class="px-1 text-sm text-[var(--text-muted)]">No notes yet.</p>
+        {/if}
+      </div>
+
+      <!-- Pagination -->
+      {#if totalPages > 1}
+        <div class="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+          <button
+            type="button"
+            disabled={sidebarPage === 0}
+            onclick={() => (sidebarPage -= 1)}
+            class="rounded-full px-2.5 py-1 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel-soft)] disabled:opacity-30"
+          >← Prev</button>
+          <span class="text-[10px] text-[var(--text-faint)]">{sidebarPage + 1} / {totalPages}</span>
+          <button
+            type="button"
+            disabled={sidebarPage >= totalPages - 1}
+            onclick={() => (sidebarPage += 1)}
+            class="rounded-full px-2.5 py-1 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel-soft)] disabled:opacity-30"
+          >Next →</button>
+        </div>
+      {/if}
+    </aside>
+
+    <!-- ── Main content ──────────────────────────────────────────────────── -->
+    <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-6 sm:py-5">
+
+      <!-- Header -->
+      <div class="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Current note</div>
+          <input
+            value={data.view.documents.find((d) => d.id === data.view.selectedDocumentId)?.title ?? 'Untitled'}
+            onblur={(e) => renameDocument((e.currentTarget as HTMLInputElement).value)}
+            class="mt-2 w-full border-none bg-transparent p-0 text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)] outline-none"
+          />
+        </div>
+        <button
+          type="button"
+          onclick={deleteDocument}
+          class="mt-1 rounded-full p-2 text-[var(--text-faint)] transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
+          aria-label="Delete note"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+
+      <div class="pt-5 space-y-5">
+
+        <!-- ── Attachments ──────────────────────────────────────────────── -->
+        {#if data.view.attachments.length > 0 || true}
+          <div>
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <span class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+                Attachments{data.view.attachments.length > 0 ? ` · ${data.view.attachments.length}` : ''}
+              </span>
+              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
+                <Upload size={11} />
+                {uploading ? 'Uploading…' : 'Attach'}
+                <input type="file" class="hidden" disabled={uploading} onchange={uploadAttachment} />
+              </label>
             </div>
 
-            <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
-              <Upload size={14} />
-              {uploading ? 'Uploading...' : 'Attach file'}
-              <input
-                type="file"
-                class="hidden"
-                disabled={uploading}
-                onchange={uploadAttachment}
-              />
-            </label>
-          </div>
-
-          <div class="mt-3 space-y-2">
             {#if data.view.attachments.length === 0}
-              <div class="rounded-[16px] border border-dashed border-[var(--border)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
-                No files attached to this note yet.
-              </div>
+              <p class="text-sm text-[var(--text-faint)]">No attachments yet.</p>
             {:else}
-              {#each data.view.attachments as attachment (attachment.id)}
-                <div class="flex items-center justify-between gap-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-3.5 py-2.5">
-                  <div class="min-w-0 flex items-center gap-3">
-                    <span class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-faint)]">
-                      <Paperclip size={14} />
-                    </span>
-                    <div class="min-w-0">
-                      <div class="truncate text-sm font-medium text-[var(--text-primary)]">{attachment.file_name}</div>
-                      <div class="mt-1 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                        {new Date(attachment.created_at).toLocaleDateString('en-GB')}
-                      </div>
-                    </div>
-                  </div>
+              <!-- Image previews -->
+              {@const images = data.view.attachments.filter(isImage)}
+              {@const files  = data.view.attachments.filter((a) => !isImage(a))}
 
-                  <div class="flex items-center gap-2">
-                    <a
-                      href={attachmentHref(attachment.file_path)}
-                      target="_blank"
-                      rel="noreferrer"
-                      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-                    >
-                      <Download size={12} />
-                      Open
-                    </a>
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-                      onclick={() => deleteAttachment(attachment.id)}
-                    >
-                      <Trash2 size={12} />
-                      Remove
-                    </button>
-                  </div>
+              {#if images.length > 0}
+                <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                  {#each images as att (att.id)}
+                    <div class="group relative overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--panel-soft)]">
+                      <a href={attachmentHref(att.file_path)} target="_blank" rel="noreferrer">
+                        <img
+                          src={attachmentHref(att.file_path)}
+                          alt={att.file_name}
+                          class="aspect-square w-full object-cover transition-opacity group-hover:opacity-90"
+                          loading="lazy"
+                        />
+                      </a>
+                      <button
+                        type="button"
+                        onclick={() => deleteAttachment(att.id)}
+                        class="absolute right-1.5 top-1.5 hidden rounded-full bg-[var(--panel)]/80 p-1 text-[var(--text-faint)] backdrop-blur-sm transition-colors hover:text-red-500 group-hover:flex"
+                        aria-label="Remove"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                      <div class="truncate px-2 pb-1.5 pt-1 text-[10px] text-[var(--text-faint)]">{att.file_name}</div>
+                    </div>
+                  {/each}
                 </div>
-              {/each}
+              {/if}
+
+              <!-- Non-image files -->
+              {#if files.length > 0}
+                <div class="space-y-1.5">
+                  {#each files as att (att.id)}
+                    <div class="flex items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2">
+                      <span class="shrink-0 text-[var(--text-faint)]">
+                        {#if att.mime_type === 'application/pdf'}
+                          <FileText size={14} />
+                        {:else}
+                          <Paperclip size={14} />
+                        {/if}
+                      </span>
+                      <a
+                        href={attachmentHref(att.file_path)}
+                        target="_blank"
+                        rel="noreferrer"
+                        class="min-w-0 flex-1 truncate text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >{att.file_name}</a>
+                      <span class="shrink-0 text-[10px] text-[var(--text-faint)]">
+                        {new Date(att.created_at).toLocaleDateString('tr-TR')}
+                      </span>
+                      <button
+                        type="button"
+                        onclick={() => deleteAttachment(att.id)}
+                        class="shrink-0 rounded p-1 text-[var(--text-faint)] transition-colors hover:text-red-500"
+                        aria-label="Remove"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             {/if}
           </div>
-        </section>
+        {/if}
 
+        <!-- ── Editor ───────────────────────────────────────────────────── -->
         <BlockEditor
           sourceKey={data.view.selectedDocumentId}
           blocks={data.view.blocks}
