@@ -4,6 +4,7 @@
   import { toast } from 'svelte-sonner';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import { apiFetch, apiSendJson } from '$lib/client/api';
+  import { showConfirm } from '$lib/stores/confirm';
   import type { PlannerBlock } from '$lib/planner/types';
   import type { PageData } from './$types';
 
@@ -36,7 +37,7 @@
   }
 
   async function deleteDocument() {
-    if (!confirm('Are you sure you want to delete this one-time task list?')) {
+    if (!await showConfirm('This one-time task list will be permanently deleted.', 'Delete list?')) {
       return;
     }
 

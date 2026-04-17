@@ -332,7 +332,55 @@
 
   <!-- ── Calendar ── -->
   <div class="flex-1 overflow-auto p-4 md:p-6">
-    <div class="rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)] overflow-hidden">
+
+    <!-- Mobile list view (< sm) -->
+    <div class="sm:hidden mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)] divide-y divide-[var(--border)]">
+      {#each data.view.weeks as week, wi (week.weekKey)}
+        {@const weekCells = cells.slice(wi * 7, wi * 7 + 7).filter(c => c.isCurrentMonth || c.tasks.length > 0)}
+        {#each weekCells as cell (cell.id)}
+          <a
+            href={`/week?week=${cell.weekKey}#${cell.dayName.toLowerCase()}`}
+            class={[
+              'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--panel-soft)]',
+              !cell.isCurrentMonth ? 'opacity-40' : ''
+            ].join(' ')}
+          >
+            <div class={[
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
+              cell.isToday ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'text-[var(--text-faint)]'
+            ].join(' ')}>
+              {cell.dateNum}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-[var(--text-secondary)]">{cell.dayName}</div>
+              {#if cell.tasks.length > 0}
+                <div class="text-[11px] text-[var(--text-faint)]">
+                  {cell.tasks.filter(t => t.status === 'done').length}/{cell.tasks.length} tasks
+                </div>
+              {:else}
+                <div class="text-[11px] text-[var(--text-faint)]">No tasks</div>
+              {/if}
+            </div>
+            {#if cell.tasks.length > 0}
+              <div class="flex shrink-0 flex-wrap justify-end gap-1">
+                {#each cell.tasks.slice(0, 3) as task (task.id)}
+                  <span class={[
+                    'max-w-[7rem] truncate rounded-md px-1.5 py-0.5 text-[10px]',
+                    task.status === 'done' ? 'bg-transparent text-[var(--text-faint)] line-through' : 'bg-[var(--panel-strong)] text-[var(--text-secondary)]'
+                  ].join(' ')}>{task.title_snapshot}</span>
+                {/each}
+                {#if cell.tasks.length > 3}
+                  <span class="text-[10px] text-[var(--text-faint)]">+{cell.tasks.length - 3}</span>
+                {/if}
+              </div>
+            {/if}
+          </a>
+        {/each}
+      {/each}
+    </div>
+
+    <!-- Desktop grid view (>= sm) -->
+    <div class="hidden sm:block rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)] overflow-hidden">
 
       <!-- Day-of-week header -->
       <div class="grid grid-cols-7 border-b border-[var(--border)]">
