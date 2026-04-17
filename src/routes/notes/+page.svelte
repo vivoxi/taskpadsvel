@@ -4,6 +4,7 @@
   import { toast } from 'svelte-sonner';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import { apiFetch, apiSendJson } from '$lib/client/api';
+  import { showConfirm } from '$lib/stores/confirm';
   import type { PlannerBlock, TaskAttachment } from '$lib/planner/types';
   import type { PageData } from './$types';
 
@@ -54,7 +55,7 @@
   }
 
   async function deleteDocument() {
-    if (!confirm('Delete this note and all its attachments?')) return;
+    if (!await showConfirm('This note and all its attachments will be permanently deleted.', 'Delete note?')) return;
     try {
       await apiFetch(`/api/notes/documents/${data.view.selectedDocumentId}`, { method: 'DELETE' });
       await goto('/notes');
@@ -95,7 +96,7 @@
   }
 
   async function deleteAttachment(attachmentId: string) {
-    if (!confirm('Remove this attachment?')) return;
+    if (!await showConfirm('This attachment will be permanently removed.', 'Remove attachment?')) return;
     try {
       await apiFetch(
         `/api/notes/documents/${data.view.selectedDocumentId}/attachments/${attachmentId}`,

@@ -15,6 +15,7 @@
   } from '$lib/planner/types';
   import { getNextMonthKey, getPreviousMonthKey } from '$lib/planner/dates';
   import { templateMode } from '$lib/stores';
+  import { showConfirm } from '$lib/stores/confirm';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -144,7 +145,7 @@
   }
 
   async function deleteTemplate(templateId: string) {
-    if (!confirm('Are you sure you want to delete this recurring template?')) {
+    if (!await showConfirm('This recurring template will be permanently removed.', 'Delete template?')) {
       return;
     }
 
@@ -190,7 +191,7 @@
   }
 
   async function resetSchedule() {
-    if (!confirm('Are you sure you want to clear generated schedule blocks for this month? Locked blocks will stay.')) {
+    if (!await showConfirm('Generated schedule blocks for this month will be removed. Locked blocks will stay.', 'Clear schedule?')) {
       return;
     }
 

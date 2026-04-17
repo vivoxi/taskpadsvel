@@ -6,10 +6,11 @@
   import { page } from '$app/stores';
   import { env } from '$env/dynamic/public';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
+  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import PasswordModal from '$lib/components/PasswordModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import SyncStatusBadge from '$lib/components/SyncStatusBadge.svelte';
-  import { initializeTheme } from '$lib/stores/theme';
+  import { initializeTheme, themeMode } from '$lib/stores/theme';
   import { commandPaletteOpen } from '$lib/stores';
   import type { Snippet } from 'svelte';
 
@@ -96,7 +97,7 @@
       </div>
       <button
         onclick={() => (mobileNavOpen = false)}
-        class="absolute right-4 top-4 inline-flex items-center justify-center rounded-full border border-white/10 bg-zinc-950/80 p-2 text-white shadow-lg"
+        class="absolute right-4 top-4 inline-flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] p-2 text-[var(--text-secondary)] shadow-[var(--shadow-card)]"
         aria-label="Close navigation"
       >
         <X size={18} />
@@ -109,7 +110,8 @@
   <PasswordModal />
 {/if}
 
-<Toaster theme="light" position="bottom-right" />
+<Toaster theme={$themeMode} position="bottom-right" />
+<ConfirmModal />
 <CommandPalette />
 {#if $page.url.pathname.startsWith('/notes')}
   <div class="pointer-events-none fixed inset-x-0 bottom-0 h-24 bg-linear-to-t from-[var(--background)] to-transparent"></div>

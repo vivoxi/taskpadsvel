@@ -22,6 +22,7 @@
     type DndEvent
   } from 'svelte-dnd-action';
   import { cloneBlocks, createBlock } from '$lib/planner/blocks';
+  import { showConfirm } from '$lib/stores/confirm';
   import type { PlannerBlock } from '$lib/planner/types';
 
   let {
@@ -210,10 +211,10 @@
     else activeBlockId = target.id;
   }
 
-  function removeBlock(index: number, requireConfirmation = true) {
+  async function removeBlock(index: number, requireConfirmation = true) {
     const target = localBlocks[index];
     if (!target) return;
-    if (requireConfirmation && !confirm('Delete this block?')) return;
+    if (requireConfirmation && !await showConfirm('This block will be permanently deleted.', 'Delete block?')) return;
     const prev = localBlocks[index - 1] ?? null;
     const next = cloneBlocks(localBlocks);
     next.splice(index, 1);

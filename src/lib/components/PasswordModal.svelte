@@ -16,14 +16,14 @@
 
 {#if !$authPassword}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]"
     role="dialog"
     aria-modal="true"
-    aria-label="Password required"
+    aria-labelledby="password-modal-title"
   >
-    <div class="bg-white dark:bg-zinc-900 rounded-lg shadow-xl p-6 w-80 flex flex-col gap-4">
-      <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100">Password Required</h2>
-      <p class="text-sm text-zinc-500 dark:text-zinc-400">
+    <div class="flex w-80 flex-col gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-6 shadow-[var(--shadow-soft)]">
+      <h2 id="password-modal-title" class="text-sm font-semibold text-[var(--text-primary)]">Password Required</h2>
+      <p class="text-sm text-[var(--text-muted)]">
         Enter the admin password to view and make changes.
       </p>
       <input
@@ -31,11 +31,11 @@
         bind:value={input}
         onkeydown={onKeydown}
         placeholder="Password"
-        class="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400"
+        class="w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)] focus:ring-0"
       />
       <button
         onclick={submit}
-        class="w-full rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 py-2 text-sm font-medium hover:bg-zinc-700 dark:hover:bg-zinc-300 transition-colors"
+        class="w-full rounded-xl bg-[var(--accent)] py-2 text-sm font-medium text-[var(--accent-contrast)] transition-opacity hover:opacity-80"
       >
         Unlock
       </button>
