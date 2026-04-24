@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flip } from 'svelte/animate';
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     Bold,
     Code,
@@ -14,7 +14,8 @@
     Pilcrow,
     Plus,
     Strikethrough,
-    Trash2
+    Trash2,
+    Underline
   } from 'lucide-svelte';
   import {
     dragHandle,
@@ -49,6 +50,7 @@
   let activeBlockId = $state<string | null>(null);
   let editingBlockId = $state<string | null>(null);
   let blockMenuId = $state<string | null>(null);
+  let floatingToolbar = $state<{ x: number; y: number } | null>(null);
   let slashMenu = $state<{
     blockId: string;
     index: number;
@@ -407,6 +409,21 @@
   function toggleBlockMenu(blockId: string) {
     blockMenuId = blockMenuId === blockId ? null : blockId;
   }
+
+  function handleSelectionChange() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) { floatingToolbar = null; return; }
+    const range = sel.getRangeAt(0);
+    if (!editorElement?.contains(range.commonAncestorContainer)) { floatingToolbar = null; return; }
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0) { floatingToolbar = null; return; }
+    floatingToolbar = { x: rect.left + rect.width / 2, y: rect.top };
+  }
+
+  onMount(() => {
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  });
 </script>
 
 <div bind:this={editorElement} class={`space-y-2 ${compact ? '' : 'space-y-3'}`}>
@@ -541,39 +558,6 @@
             </button>
           {/if}
 
-          <!-- Format toolbar — paragraph only, hidden by default, shown on hover -->
-          {#if editingBlockId === block.id && block.type === 'paragraph'}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <!-- svelte-ignore a11y_interactive_supports_focus -->
-            <div
-              role="toolbar"
-              aria-label="Text formatting"
-              class="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
-              onmousedown={(e) => e.preventDefault()}
-            >
-              <button type="button" title="Bold (⌘B)" onclick={() => applyFmt('bold')}
-                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
-                <Bold size={11} />
-              </button>
-              <button type="button" title="Italic (⌘I)" onclick={() => applyFmt('italic')}
-                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
-                <Italic size={11} />
-              </button>
-              <button type="button" title="Code (⌘E)" onclick={applyCode}
-                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
-                <Code size={11} />
-              </button>
-              <button type="button" title="Link (⌘K)" onclick={applyLink}
-                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
-                <Link2 size={11} />
-              </button>
-              <button type="button" title="Strikethrough (⌘⇧S)" onclick={() => applyFmt('strikeThrough')}
-                class="rounded px-1.5 py-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
-                <Strikethrough size={11} />
-              </button>
-            </div>
-          {/if}
-
           <!-- Slash menu -->
           {#if slashMenu?.blockId === block.id}
             {@const slashItems = getSlashItems(slashMenu.query)}
@@ -643,5 +627,47 @@
 
   {#if isSaving}
     <p class="px-1.5 pt-1 text-[10px] text-[var(--text-faint)]">Saving…</p>
+  {/if}
+
+  {#if floatingToolbar}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_interactive_supports_focus -->
+    <div
+      role="toolbar"
+      aria-label="Text formatting"
+      style="
+        position:fixed;
+        left:{floatingToolbar.x}px;
+        top:{floatingToolbar.y}px;
+        transform:translate(-50%,calc(-100% - 8px));
+        z-index:100;
+        display:flex;
+        align-items:center;
+        gap:1px;
+        padding:3px;
+        background:var(--panel-strong);
+        border:1px solid var(--border-strong);
+        border-radius:8px;
+        box-shadow:0 4px 16px rgba(0,0,0,0.5);
+      "
+      onmousedown={(e) => e.preventDefault()}
+    >
+      <button type="button" title="Bold (⌘B)" onclick={() => applyFmt('bold')}
+        class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
+        <Bold size={12} />
+      </button>
+      <button type="button" title="Italic (⌘I)" onclick={() => applyFmt('italic')}
+        class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
+        <Italic size={12} />
+      </button>
+      <button type="button" title="Underline (⌘U)" onclick={() => applyFmt('underline')}
+        class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
+        <Underline size={12} />
+      </button>
+      <button type="button" title="Link (⌘K)" onclick={applyLink}
+        class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
+        <Link2 size={12} />
+      </button>
+    </div>
   {/if}
 </div>

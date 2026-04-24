@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
-  import { FileText, Paperclip, Plus, Search, Trash2, Upload } from 'lucide-svelte';
+  import { FileText, Paperclip, Trash2, Upload } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import { apiFetch, apiSendJson } from '$lib/client/api';
@@ -11,6 +11,14 @@
   let { data }: { data: PageData } = $props();
   let uploading = $state(false);
   let searchQuery = $state('');
+  let debouncedQuery = $state('');
+
+  // ── Debounced search ──────────────────────────────────────────────────────
+  $effect(() => {
+    const q = searchQuery;
+    const t = setTimeout(() => { debouncedQuery = q; }, 150);
+    return () => clearTimeout(t);
+  });
 
   // ── Sidebar pagination ────────────────────────────────────────────────────
   const PAGE_SIZE = 15;
@@ -20,9 +28,9 @@
     data.view.documents.slice(sidebarPage * PAGE_SIZE, (sidebarPage + 1) * PAGE_SIZE)
   );
   const displayedDocs = $derived(
-    searchQuery.trim()
+    debouncedQuery.trim()
       ? data.view.documents.filter((d) =>
-          d.title.toLowerCase().includes(searchQuery.toLowerCase())
+          d.title.toLowerCase().includes(debouncedQuery.toLowerCase())
         )
       : pagedDocs
   );
@@ -32,15 +40,46 @@
     sidebarPage = 0;
   });
 
-  // ── Status bar ────────────────────────────────────────────────────────────
+  // ── Status bar & preview ──────────────────────────────────────────────────
   const selectedDoc = $derived(
     data.view.documents.find((d) => d.id === data.view.selectedDocumentId)
   );
   const checklistBlocks = $derived(data.view.blocks.filter((b) => b.type === 'checklist'));
   const doneCount = $derived(checklistBlocks.filter((b) => b.checked === true).length);
+  const wordCount = $derived(
+    data.view.blocks
+      .filter((b) => b.text)
+      .map((b) => b.text!.replace(/<[^>]+>/g, '').trim())
+      .join(' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .length
+  );
+  const selectedDocPreview = $derived(
+    (() => {
+      const first = data.view.blocks.find(
+        (b) => b.type !== 'divider' && b.text?.trim()
+      );
+      if (!first?.text) return '';
+      return first.text.replace(/<[^>]+>/g, '').trim().slice(0, 60);
+    })()
+  );
   const attachmentImages = $derived(data.view.attachments.filter(isImage));
   const attachmentFiles = $derived(data.view.attachments.filter((a) => !isImage(a)));
 
+  // ── Title contenteditable action ──────────────────────────────────────────
+  function titleSync(el: HTMLElement, title: string) {
+    el.textContent = title;
+    return {
+      update(next: string) {
+        if (document.activeElement !== el) el.textContent = next;
+      }
+    };
+  }
+
+  const currentTitle = $derived(selectedDoc?.title ?? 'Untitled');
+
+  // ── Date helpers ──────────────────────────────────────────────────────────
   function relDate(iso: string): string {
     const d = new Date(iso);
     const now = new Date();
@@ -149,8 +188,8 @@
   <div class="mx-auto grid max-w-[1440px] gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
 
     <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
-    <aside class="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
-      <div class="flex items-center justify-between gap-2">
+    <aside class="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-3">
+      <div class="flex items-center justify-between gap-2 px-1">
         <h1 class="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)]">Notes</h1>
         <button
           type="button"
@@ -158,13 +197,13 @@
           class="rounded-full p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
           aria-label="New note"
         >
-          <Plus size={14} />
+          <span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;font-size:16px;line-height:1">+</span>
         </button>
       </div>
 
       <!-- Search -->
       <div class="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--panel-soft)] px-2.5 py-1.5">
-        <Search size={12} class="shrink-0 text-[var(--text-faint)]" />
+        <span style="font-size:11px;color:var(--text-faint)">⌕</span>
         <input
           bind:value={searchQuery}
           placeholder="Ara…"
@@ -172,32 +211,40 @@
         />
       </div>
 
-      <div class="flex-1 space-y-1">
+      <!-- Note list -->
+      <div class="flex-1 space-y-0.5">
         {#each displayedDocs as document (document.id)}
+          {@const isSelected = document.id === data.view.selectedDocumentId}
           <a
             href={`/notes?doc=${document.id}`}
-            class={`block rounded-[14px] border px-3 py-2 text-sm transition-colors ${
-              document.id === data.view.selectedDocumentId
-                ? 'border-[var(--border-strong)] bg-[var(--panel-soft)] text-[var(--text-primary)]'
-                : 'border-transparent text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--panel-soft)]/70'
+            class={`block rounded-[12px] border px-3 py-2.5 transition-colors ${
+              isSelected
+                ? 'border-[var(--border-strong)] bg-[var(--panel-soft)]'
+                : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--panel-soft)]/70'
             }`}
+            style={isSelected ? 'box-shadow: inset 2px 0 0 var(--accent);' : ''}
           >
-            <div class="truncate font-medium">{document.title}</div>
-            <div class="mt-0.5 text-[10px] text-[var(--text-faint)]">
-              {relDate(document.updated_at)}
+            <div class="truncate text-[13px] font-medium leading-snug" style="color:{isSelected ? 'var(--text-primary)' : 'var(--text-secondary)'}">
+              {document.title}
+            </div>
+            <div class="mt-1 flex items-end justify-between gap-2">
+              <div class="min-w-0 flex-1 truncate text-[11px] leading-none text-[var(--text-muted)]">
+                {isSelected ? selectedDocPreview : ''}
+              </div>
+              <div class="shrink-0 text-[10px] text-[var(--text-faint)]">{relDate(document.updated_at)}</div>
             </div>
           </a>
         {/each}
 
         {#if displayedDocs.length === 0}
-          <p class="px-1 text-sm text-[var(--text-muted)]">
-            {searchQuery.trim() ? 'Eşleşen not yok.' : 'No notes yet.'}
+          <p class="px-2 py-1 text-sm text-[var(--text-muted)]">
+            {debouncedQuery.trim() ? 'Eşleşen not yok.' : 'No notes yet.'}
           </p>
         {/if}
       </div>
 
       <!-- Pagination (hidden while searching) -->
-      {#if totalPages > 1 && !searchQuery.trim()}
+      {#if totalPages > 1 && !debouncedQuery.trim()}
         <div class="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
           <button
             type="button"
@@ -222,12 +269,21 @@
       <!-- Header -->
       <div class="flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4">
         <div class="min-w-0 flex-1">
-          <input
-            value={data.view.documents.find((d) => d.id === data.view.selectedDocumentId)?.title ?? 'Untitled'}
-            onblur={(e) => renameDocument((e.currentTarget as HTMLInputElement).value)}
-            style="font-size:26px;font-weight:600;letter-spacing:-0.03em;line-height:1.2"
-            class="w-full border-none bg-transparent p-0 text-[var(--text-primary)] outline-none"
-          />
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            contenteditable="true"
+            role="textbox"
+            tabindex="0"
+            aria-label="Note title"
+            use:titleSync={currentTitle}
+            onblur={(e) => renameDocument((e.currentTarget as HTMLElement).textContent?.trim() ?? '')}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLElement).blur(); }
+              if (e.key === 'Escape') { (e.currentTarget as HTMLElement).blur(); }
+            }}
+            style="font-size:26px;font-weight:600;letter-spacing:-0.03em;line-height:1.2;min-height:1.25em;white-space:nowrap;overflow:hidden"
+            class="w-full bg-transparent text-[var(--text-primary)] outline-none"
+          ></div>
         </div>
         <div class="mt-1 flex shrink-0 items-center gap-1.5">
           <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
@@ -300,9 +356,7 @@
                       rel="noreferrer"
                       class="min-w-0 flex-1 truncate text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                     >{att.file_name}</a>
-                    <span class="shrink-0 text-[10px] text-[var(--text-faint)]">
-                      {relDate(att.created_at)}
-                    </span>
+                    <span class="shrink-0 text-[10px] text-[var(--text-faint)]">{relDate(att.created_at)}</span>
                     <button
                       type="button"
                       onclick={() => deleteAttachment(att.id)}
@@ -329,11 +383,15 @@
 
       <!-- ── Status bar ──────────────────────────────────────────────────── -->
       {#if selectedDoc}
-        <div class="flex items-center gap-3 border-t border-[var(--border)] px-5 py-2.5 text-[11px] text-[var(--text-faint)]">
+        <div class="flex items-center gap-2.5 border-t border-[var(--border)] px-5 py-2 text-[11px] text-[var(--text-faint)]">
           <span>Son düzenleme: {relDate(selectedDoc.updated_at)}</span>
+          {#if wordCount > 0}
+            <span style="color:var(--border-strong)">·</span>
+            <span>{wordCount} kelime</span>
+          {/if}
           {#if checklistBlocks.length > 0}
             <span style="color:var(--border-strong)">·</span>
-            <span>{checklistBlocks.length} görev{checklistBlocks.length !== 1 ? '' : ''}, {doneCount} tamamlandı</span>
+            <span>{checklistBlocks.length} görev, {doneCount} tamamlandı</span>
           {/if}
         </div>
       {/if}
