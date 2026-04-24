@@ -10,6 +10,18 @@
 
   let { data }: { data: PageData } = $props();
 
+  function relDate(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+    if (diffDays === 0) return 'bugün';
+    if (diffDays === 1) return 'dün';
+    if (diffDays < 7) return `${diffDays} gün önce`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} hafta önce`;
+    const months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+    return `${d.getDate()} ${months[d.getMonth()]}`;
+  }
+
   const checklistBlocks = $derived(data.view.blocks.filter((block) => block.type === 'checklist'));
   const completedCount = $derived(checklistBlocks.filter((block) => block.checked === true).length);
   const openCount = $derived(checklistBlocks.length - completedCount);
@@ -94,7 +106,7 @@
           >
             <div class="font-medium text-[var(--text-primary)]">{document.title}</div>
             <div class="mt-1 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-              Updated {new Date(document.updated_at).toLocaleDateString('en-GB')}
+              {relDate(document.updated_at)}
             </div>
           </a>
         {/each}

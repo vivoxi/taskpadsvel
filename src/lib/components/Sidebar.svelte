@@ -47,6 +47,7 @@
         font-weight:{active ? '500' : '400'};
         color:{active ? 'var(--text-primary)' : 'var(--text-muted)'};
         background:{active ? 'var(--panel)' : 'transparent'};
+        box-shadow:{active ? 'inset 2px 0 0 var(--accent)' : 'none'};
         text-decoration:none;
       "
     >
