@@ -175,77 +175,65 @@
 
 <div class="px-4 py-4 sm:px-6 sm:py-6">
   <div class="mx-auto flex max-w-[1440px] flex-col gap-6">
-    <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-soft)] sm:px-7 sm:py-6">
-      <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div class="space-y-2">
-          <p class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Planning studio</p>
-          <h1 class="text-3xl font-semibold tracking-[-0.05em] text-[var(--text-primary)]">
-            {data.view.label}
-          </h1>
-          <p class="max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-            Place recurring work, compare it against real capacity, and generate a schedule without leaving the month surface.
-          </p>
-        </div>
+    <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4 sm:px-5">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 class="text-base font-medium tracking-[-0.02em] text-[var(--text-primary)]">
+          {data.view.label}
+        </h1>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
             onclick={generateSchedule}
             disabled={isGenerating}
           >
-            <Sparkles size={15} />
-            {isGenerating ? 'Generating' : 'Generate'}
+            <Sparkles size={13} />
+            {isGenerating ? 'Generating…' : 'Generate'}
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
             onclick={resetSchedule}
             disabled={isResettingSchedule}
           >
-            <RotateCcw size={15} />
-            {isResettingSchedule ? 'Resetting' : 'Reset'}
+            <RotateCcw size={13} />
+            {isResettingSchedule ? 'Resetting…' : 'Reset'}
           </button>
           <a
             href={`/planner?month=${getPreviousMonthKey(data.view.monthKey)}`}
-            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
-            <ChevronLeft size={16} />
-            Previous
+            <ChevronLeft size={13} />
+            Prev
           </a>
           <a
             href="/planner"
-            class="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
-            Current month
+            Today
           </a>
           <a
             href={`/planner?month=${getNextMonthKey(data.view.monthKey)}`}
-            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
             Next
-            <ChevronRight size={16} />
+            <ChevronRight size={13} />
           </a>
         </div>
       </div>
 
-      <div class="mt-6">
+      <div class="mt-4">
         <CapacitySummary capacity={data.view.capacity} schedule={data.view.schedule} />
       </div>
     </section>
 
     <div class="max-w-2xl space-y-4">
-        <section class={`rounded-[28px] border bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)] ${
-          $templateMode ? 'border-[var(--border-strong)] ring-1 ring-[var(--border-strong)]' : 'border-[var(--border)]'
+        <section class={`rounded-lg border bg-[var(--panel)] px-4 py-4 ${
+          $templateMode ? 'border-[var(--border-strong)]' : 'border-[var(--border)]'
         }`}>
-          <div class="border-b border-[var(--border)] pb-4">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Recurring work</div>
-            <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Template list</h2>
-            <p class="mt-2 text-sm text-[var(--text-muted)]">
-              {$templateMode
-                ? 'Template mode is on. Defaults here directly shape new monthly materialization.'
-                : 'Compact recurring defaults that stay editable without taking over the planning screen.'}
-            </p>
+          <div class="border-b border-[var(--border)] pb-3">
+            <h2 class="text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Templates</h2>
           </div>
 
           <div class="space-y-4 pt-4">

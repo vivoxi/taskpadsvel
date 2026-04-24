@@ -292,7 +292,7 @@
 <div class="flex h-full flex-col">
   <!-- ── Header row 1: title + sequential nav ── -->
   <div
-    class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--background)]/90 px-6 py-3 backdrop-blur"
+    class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--panel-soft)] px-6 py-3"
   >
     <div class="flex items-baseline gap-3">
       <h1 class="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
@@ -306,20 +306,20 @@
     <div class="flex items-center gap-1">
       <button
         onclick={() => navMonth(-1)}
-        class="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[var(--text-secondary)] shadow-[var(--shadow-card)] transition-colors hover:text-[var(--text-primary)]"
+        class="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         aria-label="Previous month"
       >
-        <ChevronLeft size={15} />
+        <ChevronLeft size={14} />
       </button>
       <button
         onclick={() => void goto('/dashboard')}
-        class="h-8 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-[var(--shadow-card)] transition-colors hover:text-[var(--text-primary)]"
+        class="h-7 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
       >
         Today
       </button>
       <button
         onclick={() => navMonth(1)}
-        class="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--panel)] text-[var(--text-secondary)] shadow-[var(--shadow-card)] transition-colors hover:text-[var(--text-primary)]"
+        class="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         aria-label="Next month"
       >
         <ChevronRight size={15} />
@@ -334,7 +334,7 @@
   <div class="flex-1 overflow-auto p-4 md:p-6">
 
     <!-- Mobile list view (< sm) -->
-    <div class="sm:hidden mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)] divide-y divide-[var(--border)]">
+    <div class="sm:hidden mb-4 rounded-lg border border-[var(--border)] bg-[var(--panel)] divide-y divide-[var(--border)]">
       {#each data.view.weeks as week, wi (week.weekKey)}
         {@const weekCells = cells.slice(wi * 7, wi * 7 + 7).filter(c => c.isCurrentMonth || c.tasks.length > 0)}
         {#each weekCells as cell (cell.id)}
@@ -380,7 +380,7 @@
     </div>
 
     <!-- Desktop grid view (>= sm) -->
-    <div class="hidden sm:block rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)] overflow-hidden">
+    <div class="hidden sm:block rounded-lg border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
 
       <!-- Day-of-week header -->
       <div class="grid grid-cols-7 border-b border-[var(--border)]">
@@ -406,7 +406,7 @@
               class={[
                 'relative min-h-[7.5rem] border-r border-[var(--border)] p-1.5 last:border-r-0',
                 cell.isToday ? 'bg-[var(--panel-strong)]' : '',
-                !cell.isCurrentMonth ? 'bg-[var(--background)]' : ''
+                !cell.isCurrentMonth ? 'bg-[var(--bg)]' : ''
               ].join(' ')}
             >
               <!-- Day number — links to that day on the week page -->
@@ -442,57 +442,40 @@
               >
                 {#each cell.tasks as task (task.id)}
                   <div
-                    class={[
-                      'group flex cursor-grab items-start gap-1 rounded-md px-1.5 py-1 text-[11px] leading-tight active:cursor-grabbing select-none',
-                      task.status === 'done'
-                        ? 'bg-transparent opacity-40'
-                        : 'bg-[var(--panel-strong)]'
-                    ].join(' ')}
+                    style="
+                      display:flex; align-items:center; gap:5px;
+                      padding:3px 6px; border-radius:4px;
+                      background:var(--panel-strong);
+                      border-left:2px solid {task.status === 'done' ? 'var(--success)' : 'var(--accent)'};
+                      font-size:11px; color:var(--text-secondary);
+                      cursor:grab; user-select:none;
+                      opacity:{task.status === 'done' ? '0.5' : '1'};
+                    "
+                    class="group active:cursor-grabbing select-none leading-tight"
                   >
                     <!-- Completion toggle -->
                     <button
-                      class={[
-                        'mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
-                        task.status === 'done'
-                          ? 'border-[var(--text-muted)] bg-[var(--text-muted)]'
-                          : 'border-[var(--border-strong)] hover:border-[var(--text-muted)]'
-                      ].join(' ')}
+                      style="
+                        flex-shrink:0; width:8px; height:8px; border-radius:50%;
+                        border:1px solid {task.status === 'done' ? 'var(--success)' : 'var(--border-strong)'};
+                        background:{task.status === 'done' ? 'var(--success)' : 'transparent'};
+                        cursor:pointer; padding:0;
+                      "
                       onclick={(e) => {
                         e.stopPropagation();
                         void toggleTask(task);
                       }}
                       title={task.status === 'done' ? 'Mark open' : 'Mark done'}
-                    >
-                      {#if task.status === 'done'}
-                        <svg
-                          width="7"
-                          height="7"
-                          viewBox="0 0 7 7"
-                          fill="none"
-                          class="text-[var(--accent-contrast)]"
-                        >
-                          <path
-                            d="M1 3.5L2.8 5.25L6 1.75"
-                            stroke="currentColor"
-                            stroke-width="1.3"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          />
-                        </svg>
-                      {/if}
-                    </button>
+                    ></button>
 
-                    <!-- Title + hours -->
+                    <!-- Title -->
                     <span
-                      class={[
-                        'min-w-0 flex-1 break-words',
-                        task.status === 'done' ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'
-                      ].join(' ')}
+                      style="min-width:0;flex:1;word-break:break-words;{task.status === 'done' ? 'text-decoration:line-through;color:var(--text-faint)' : ''}"
                     >
                       {task.title_snapshot}
                     </span>
                     {#if task.hours_needed}
-                      <span class="shrink-0 text-[9px] font-medium text-[var(--text-faint)]">{task.hours_needed}h</span>
+                      <span style="flex-shrink:0;font-size:9px;color:var(--text-faint)">{task.hours_needed}h</span>
                     {/if}
                   </div>
                 {/each}
@@ -504,7 +487,7 @@
     </div>
 
     <!-- ── Unassigned tasks panel ── -->
-    <div class="mt-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4 shadow-[var(--shadow-card)]">
+    <div class="mt-4 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4">
       <div class="mb-3 flex items-center justify-between">
         <div class="text-[10px] font-medium uppercase tracking-widest text-[var(--text-faint)]">
           Unassigned{unassigned.length > 0 ? ` · ${unassigned.length}` : ''}

@@ -118,7 +118,7 @@
   <div class="mx-auto grid max-w-[1440px] gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
 
     <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
-    <aside class="flex flex-col gap-3 rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)]">
+    <aside class="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
       <div class="flex items-center justify-between gap-2">
         <h1 class="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)]">Notes</h1>
         <button
@@ -174,16 +174,15 @@
     </aside>
 
     <!-- ── Main content ──────────────────────────────────────────────────── -->
-    <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-6 sm:py-5">
+    <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4 sm:px-5">
 
       <!-- Header -->
-      <div class="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
+      <div class="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
         <div class="min-w-0 flex-1">
-          <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Current note</div>
           <input
             value={data.view.documents.find((d) => d.id === data.view.selectedDocumentId)?.title ?? 'Untitled'}
             onblur={(e) => renameDocument((e.currentTarget as HTMLInputElement).value)}
-            class="mt-2 w-full border-none bg-transparent p-0 text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)] outline-none"
+            class="w-full border-none bg-transparent p-0 text-lg font-medium tracking-[-0.02em] text-[var(--text-primary)] outline-none"
           />
         </div>
         <button

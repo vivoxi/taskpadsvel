@@ -16,14 +16,32 @@
 
 {#if !$authPassword}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]"
+    style="
+      position:fixed; inset:0; z-index:50;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,0.65); backdrop-filter:blur(2px);
+    "
     role="dialog"
     aria-modal="true"
     aria-labelledby="password-modal-title"
   >
-    <div class="flex w-80 flex-col gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-6 shadow-[var(--shadow-soft)]">
-      <h2 id="password-modal-title" class="text-sm font-semibold text-[var(--text-primary)]">Password Required</h2>
-      <p class="text-sm text-[var(--text-muted)]">
+    <div
+      style="
+        width:min(90vw, 340px);
+        background:var(--panel);
+        border:1px solid var(--border-strong);
+        border-radius:12px;
+        padding:24px;
+        display:flex; flex-direction:column; gap:16px;
+      "
+    >
+      <h2
+        id="password-modal-title"
+        style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0"
+      >
+        Password Required
+      </h2>
+      <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.5">
         Enter the admin password to view and make changes.
       </p>
       <input
@@ -31,11 +49,21 @@
         bind:value={input}
         onkeydown={onKeydown}
         placeholder="Password"
-        class="w-full rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)] focus:ring-0"
+        style="
+          width:100%; background:var(--panel-soft); color:var(--text-primary);
+          border:1px solid var(--border); border-radius:6px;
+          padding:7px 10px; font-size:13px; outline:none;
+          transition:border-color 150ms ease; box-sizing:border-box;
+        "
       />
       <button
         onclick={submit}
-        class="w-full rounded-xl bg-[var(--accent)] py-2 text-sm font-medium text-[var(--accent-contrast)] transition-opacity hover:opacity-80"
+        style="
+          width:100%; background:var(--accent); color:#fff;
+          border:none; padding:8px 14px;
+          border-radius:6px; font-size:13px; font-weight:500;
+          cursor:pointer; transition:background 150ms ease;
+        "
       >
         Unlock
       </button>

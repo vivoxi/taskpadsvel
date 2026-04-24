@@ -18,7 +18,11 @@
 
 {#if $confirmState.open}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px]"
+    style="
+      position:fixed; inset:0; z-index:50;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,0.65); backdrop-filter:blur(2px);
+    "
     role="presentation"
     onkeydown={onBackdropKeydown}
   >
@@ -27,24 +31,46 @@
       aria-modal="true"
       aria-labelledby="confirm-modal-title"
       aria-describedby="confirm-modal-desc"
-      class="flex w-[min(90vw,24rem)] flex-col gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-6 shadow-[var(--shadow-soft)]"
+      style="
+        width:min(90vw, 360px);
+        background:var(--panel);
+        border:1px solid var(--border-strong);
+        border-radius:12px;
+        padding:24px;
+      "
     >
-      <h2 id="confirm-modal-title" class="text-sm font-semibold text-[var(--text-primary)]">
+      <h2
+        id="confirm-modal-title"
+        style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 8px"
+      >
         {$confirmState.title}
       </h2>
-      <p id="confirm-modal-desc" class="text-sm text-[var(--text-muted)]">
+      <p
+        id="confirm-modal-desc"
+        style="font-size:13px;color:var(--text-muted);margin:0 0 20px;line-height:1.5"
+      >
         {$confirmState.message}
       </p>
-      <div class="flex justify-end gap-2">
+      <div style="display:flex;justify-content:flex-end;gap:8px">
         <button
           onclick={handleCancel}
-          class="rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          style="
+            background:transparent; color:var(--text-secondary);
+            border:1px solid var(--border); padding:5px 12px;
+            border-radius:6px; font-size:12px; cursor:pointer;
+            transition:all 150ms ease;
+          "
         >
           Cancel
         </button>
         <button
           onclick={handleConfirm}
-          class="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] transition-opacity hover:opacity-80"
+          style="
+            background:var(--danger); color:#fff;
+            border:none; padding:6px 14px;
+            border-radius:6px; font-size:13px; font-weight:500;
+            cursor:pointer; transition:opacity 150ms ease;
+          "
         >
           Confirm
         </button>

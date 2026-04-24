@@ -30,22 +30,14 @@
   const hasBlocks = $derived(blocks.length > 0);
 </script>
 
-<article class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-5 py-5 shadow-[var(--shadow-card)] sm:px-6">
-  <div class="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
-    <div>
-      <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
-        {isoDate}
-      </div>
-      <h2 class="mt-2 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-        {dayName}
-      </h2>
-      <p class="mt-1 text-sm text-[var(--text-muted)]">{dateLabel}</p>
+<article style="border-radius:8px;border:1px solid var(--border);background:var(--panel);padding:16px 20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <h2 style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0">{dayName}</h2>
+      <span style="font-size:12px;color:var(--text-faint)">{dateLabel}</span>
     </div>
-
     {#if isToday}
-      <div class="rounded-full border border-[var(--border-strong)] bg-[var(--panel-soft)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-        Today
-      </div>
+      <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--accent);background:var(--accent-subtle);padding:2px 8px;border-radius:4px">Today</span>
     {/if}
   </div>
 
@@ -60,7 +52,7 @@
           >
             <span class={`mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border ${
               task.status === 'done'
-                ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
+                ? 'border-[var(--success)] bg-[var(--success)]'
                 : 'border-[var(--border-strong)] text-transparent'
             }`}>
               {#if task.status === 'done'}

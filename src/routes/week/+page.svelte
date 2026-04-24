@@ -157,65 +157,48 @@
 
 <div class="px-4 py-4 sm:px-5 sm:py-5">
   <div class="mx-auto flex max-w-[1400px] flex-col gap-5">
-    <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-6 sm:py-5">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div class="space-y-2">
-          <p class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Weekly workspace</p>
-          <h1 class="text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)]">
-            {data.view.label}
-          </h1>
-          <p class="max-w-2xl text-sm leading-5 text-[var(--text-muted)]">
-            Daily notes live beside the work itself, and past weeks stay editable like any other working record.
-          </p>
-        </div>
+    <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4 sm:px-5">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 class="text-base font-medium tracking-[-0.02em] text-[var(--text-primary)]">
+          {data.view.label}
+        </h1>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-1.5">
           <a
             href={`/week?week=${getPreviousWeekKey(data.view.weekKey)}`}
-            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
-            <ChevronLeft size={16} />
-            Previous
+            <ChevronLeft size={13} />
+            Prev
           </a>
           <a
             href="/week"
-            class="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
-            Current week
+            Today
           </a>
           <a
             href={`/week?week=${getNextWeekKey(data.view.weekKey)}`}
-            class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
           >
             Next
-            <ChevronRight size={16} />
+            <ChevronRight size={13} />
           </a>
         </div>
       </div>
 
-      <div class="mt-5 grid gap-2.5 sm:grid-cols-3">
-        <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Open work</div>
-          <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
-            {openTasks.length}
-          </div>
-          <div class="mt-1 text-[13px] text-[var(--text-muted)]">Still in motion this week</div>
+      <div class="mt-4" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-radius:6px;overflow:hidden">
+        <div style="background:var(--panel-soft);padding:10px 12px">
+          <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Open</div>
+          <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{openTasks.length}</div>
         </div>
-        <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Assigned days</div>
-          <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
-            {DAY_NAMES.filter((dayName) => (dayBuckets[dayName] ?? []).length > 0).length}
-          </div>
-          <div class="mt-1 text-[13px] text-[var(--text-muted)]">Days carrying planned work this week</div>
+        <div style="background:var(--panel-soft);padding:10px 12px">
+          <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Days</div>
+          <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{DAY_NAMES.filter((dayName) => (dayBuckets[dayName] ?? []).length > 0).length}</div>
         </div>
-        <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-          <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Remaining room</div>
-          <div class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-            {data.view.capacity.remaining_hours}h
-          </div>
-          <div class="mt-1 text-[13px] text-[var(--text-muted)]">
-            {data.view.schedule.overflow_warning ?? `Month context ${data.view.monthKey}`}
-          </div>
+        <div style="background:var(--panel-soft);padding:10px 12px">
+          <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Remaining</div>
+          <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{data.view.capacity.remaining_hours}h</div>
         </div>
       </div>
     </section>
@@ -240,10 +223,10 @@
       </section>
 
       <aside class="space-y-3.5 xl:sticky xl:top-6 xl:self-start">
-        <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-card)]">
-          <div class="border-b border-[var(--border)] pb-4">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Capacity pulse</div>
-            <h2 class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Weekly pressure</h2>
+        <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
+          <div class="border-b border-[var(--border)] pb-3">
+            <div class="text-[10px] uppercase tracking-[0.05em] text-[var(--text-faint)]">Capacity</div>
+            <h2 class="mt-1 text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Weekly pressure</h2>
           </div>
 
           <div class="pt-3">
@@ -251,12 +234,10 @@
           </div>
         </section>
 
-        <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-card)]">
-          <div class="border-b border-[var(--border)] pb-4">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">This week</div>
-            <h2 class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              Unassigned this week
-            </h2>
+        <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
+          <div class="border-b border-[var(--border)] pb-3">
+            <div class="text-[10px] uppercase tracking-[0.05em] text-[var(--text-faint)]">This week</div>
+            <h2 class="mt-1 text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Unassigned</h2>
           </div>
 
           <div class="space-y-2 pt-3">
@@ -297,10 +278,10 @@
           </div>
         </section>
 
-        <section class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-card)]">
-          <div class="border-b border-[var(--border)] pb-4">
-            <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Completed</div>
-            <h2 class="mt-1.5 text-base font-semibold tracking-[-0.03em] text-[var(--text-primary)]">Done and revisitable</h2>
+        <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
+          <div class="border-b border-[var(--border)] pb-3">
+            <div class="text-[10px] uppercase tracking-[0.05em] text-[var(--text-faint)]">Completed</div>
+            <h2 class="mt-1 text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Done</h2>
           </div>
 
           <div class="space-y-2 pt-3">

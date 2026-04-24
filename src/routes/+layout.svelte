@@ -9,7 +9,6 @@
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import PasswordModal from '$lib/components/PasswordModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
-  import SyncStatusBadge from '$lib/components/SyncStatusBadge.svelte';
   import { initializeTheme, themeMode } from '$lib/stores/theme';
   import { commandPaletteOpen } from '$lib/stores';
   import type { Snippet } from 'svelte';
@@ -27,55 +26,59 @@
 <svelte:head>
   <script>
     (() => {
-      const stored = localStorage.getItem('taskpad-theme');
-      const mode =
-        stored === 'light' || stored === 'dark'
-          ? stored
-          : window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light';
-      document.documentElement.classList.toggle('dark', mode === 'dark');
-      document.documentElement.style.colorScheme = mode;
+      document.documentElement.style.colorScheme = 'dark';
     })();
   </script>
 </svelte:head>
 
-<div class="flex h-dvh overflow-hidden bg-[var(--background)]">
+<div class="flex h-dvh overflow-hidden bg-[var(--bg)]">
   <Sidebar />
   <div class="flex min-w-0 flex-1 flex-col">
-    <header class="sticky top-0 z-30 flex items-center justify-between border-b border-[var(--border)] bg-[var(--background)]/94 px-4 py-3 backdrop-blur md:hidden">
+    <header class="sticky top-0 z-30 flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3 md:hidden">
       <button
         onclick={() => (mobileNavOpen = true)}
-        class="inline-flex items-center justify-center rounded-[14px] border border-[var(--border)] bg-[var(--panel)] p-2 text-[var(--text-secondary)] shadow-[var(--shadow-card)] transition-colors hover:text-[var(--text-primary)]"
+        class="inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         aria-label="Open navigation"
       >
-        <Menu size={18} />
+        <Menu size={16} />
       </button>
       <a
         href="/dashboard"
-        class="text-sm font-semibold tracking-[-0.02em] text-[var(--text-primary)] transition-colors duration-150 hover:text-[var(--text-secondary)]"
+        style="font-size:13px;font-weight:600;letter-spacing:-0.02em;color:var(--text-primary);text-decoration:none"
       >
         Taskpad
       </a>
       <button
         type="button"
-        class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)]"
+        style="
+          display:inline-flex; align-items:center; gap:6px;
+          padding:4px 10px; border-radius:6px;
+          border:1px solid var(--border);
+          font-size:11px; color:var(--text-muted);
+          background:transparent; cursor:pointer;
+        "
         onclick={() => commandPaletteOpen.set(true)}
       >
         Search
       </button>
     </header>
 
-    <div class="hidden items-center justify-end gap-3 border-b border-[var(--border)] bg-[var(--background)]/92 px-6 py-3 backdrop-blur md:flex">
+    <div class="hidden items-center justify-end px-5 py-2.5 border-b border-[var(--border)] bg-[var(--panel-soft)] md:flex">
       <button
         type="button"
-        class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         onclick={() => commandPaletteOpen.set(true)}
+        style="
+          display:flex; align-items:center; gap:8px;
+          padding:5px 12px; border-radius:6px;
+          border:1px solid var(--border);
+          font-size:12px; color:var(--text-muted);
+          background:transparent; cursor:pointer;
+          transition:border-color 150ms ease;
+        "
       >
         Search
-        <span class="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-faint)]">⌘K</span>
+        <span style="font-size:10px;color:var(--text-faint)">⌘K</span>
       </button>
-      <SyncStatusBadge />
     </div>
 
     <main class="min-h-0 flex-1 overflow-auto">
@@ -87,7 +90,7 @@
 {#if mobileNavOpen}
   <div class="fixed inset-0 z-40 md:hidden">
     <button
-      class="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
+      class="absolute inset-0 bg-black/50"
       aria-label="Close navigation"
       onclick={() => (mobileNavOpen = false)}
     ></button>
@@ -97,10 +100,10 @@
       </div>
       <button
         onclick={() => (mobileNavOpen = false)}
-        class="absolute right-4 top-4 inline-flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] p-2 text-[var(--text-secondary)] shadow-[var(--shadow-card)]"
+        class="absolute right-4 top-4 inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 text-[var(--text-secondary)]"
         aria-label="Close navigation"
       >
-        <X size={18} />
+        <X size={16} />
       </button>
     </div>
   </div>
@@ -110,9 +113,9 @@
   <PasswordModal />
 {/if}
 
-<Toaster theme={$themeMode} position="bottom-right" />
+<Toaster theme="dark" position="bottom-right" />
 <ConfirmModal />
 <CommandPalette />
 {#if $page.url.pathname.startsWith('/notes')}
-  <div class="pointer-events-none fixed inset-x-0 bottom-0 h-24 bg-linear-to-t from-[var(--background)] to-transparent"></div>
+  <div class="pointer-events-none fixed inset-x-0 bottom-0 h-24 bg-linear-to-t from-[var(--bg)] to-transparent"></div>
 {/if}

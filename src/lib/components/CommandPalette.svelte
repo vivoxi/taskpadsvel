@@ -205,7 +205,15 @@
 </script>
 
 {#if $commandPaletteOpen}
-  <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/45 px-4 py-[12vh] backdrop-blur-[4px]">
+  <div
+    style="
+      position:fixed; inset:0; z-index:50;
+      display:flex; align-items:flex-start; justify-content:center;
+      background:rgba(0,0,0,0.7);
+      padding:12vh 16px 0;
+      backdrop-filter:blur(4px);
+    "
+  >
     <button
       type="button"
       class="absolute inset-0"
@@ -213,39 +221,46 @@
       onclick={closePalette}
     ></button>
 
-    <div class="relative z-10 w-full max-w-2xl rounded-[28px] border border-[var(--border)] bg-[var(--panel)] p-4 shadow-[0_32px_90px_-38px_rgba(0,0,0,0.45)]">
-      <div class="flex items-center gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3">
-        <Search size={16} class="text-[var(--text-faint)]" />
+    <div
+      style="
+        position:relative; z-index:10;
+        width:100%; max-width:560px;
+        background:var(--panel);
+        border:1px solid var(--border-strong);
+        border-radius:12px;
+        overflow:hidden;
+      "
+    >
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <Search size={14} color="var(--text-faint)" />
         <input
           bind:this={inputEl}
           bind:value={query}
-          placeholder="Jump anywhere, search tasks, or capture something quickly"
-          class="w-full border-none bg-transparent p-0 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+          placeholder="Jump anywhere or search tasks…"
+          style="flex:1;background:transparent;border:none;outline:none;font-size:14px;color:var(--text-primary)"
         />
-        <div class="text-[11px] uppercase tracking-[0.16em] text-[var(--text-faint)]">Esc</div>
+        <span style="font-size:10px;color:var(--text-faint);border:1px solid var(--border);padding:1px 6px;border-radius:4px">Esc</span>
       </div>
 
-      <div class="mt-4 space-y-1">
+      <div style="padding:6px;max-height:360px;overflow-y:auto">
         {#if visibleItems.length === 0}
-          <div class="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-4 text-sm text-[var(--text-muted)]">
-            No commands match yet.
-          </div>
+          <div style="padding:12px 10px;font-size:13px;color:var(--text-muted)">No commands match yet.</div>
         {:else}
           {#each visibleItems as item, index (item.id)}
             <button
               type="button"
-              class={`flex w-full items-start gap-3 rounded-[18px] border px-4 py-3 text-left transition-colors ${
-                index === selectionIndex
-                  ? 'border-[var(--border-strong)] bg-[var(--panel-soft)]'
-                  : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--panel-soft)]/70'
-              }`}
+              style="
+                display:flex; align-items:center; gap:10px;
+                width:100%; padding:8px 10px; border-radius:6px; border:none;
+                background:{index === selectionIndex ? 'var(--panel-strong)' : 'transparent'};
+                color:var(--text-secondary); font-size:13px; text-align:left; cursor:pointer;
+                transition:background 100ms;
+              "
               onclick={() => activate(item)}
             >
-              <item.icon size={16} class="mt-0.5 text-[var(--text-faint)]" />
-              <div class="min-w-0">
-                <div class="text-sm font-medium text-[var(--text-primary)]">{item.label}</div>
-                <div class="mt-1 text-xs text-[var(--text-muted)]">{item.meta}</div>
-              </div>
+              <item.icon size={13} />
+              <span style="color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{item.label}</span>
+              <span style="font-size:11px;color:var(--text-faint);flex-shrink:0">{item.meta}</span>
             </button>
           {/each}
         {/if}

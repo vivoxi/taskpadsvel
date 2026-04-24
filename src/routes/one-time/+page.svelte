@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { CheckCheck, ListChecks, Plus, Trash2 } from 'lucide-svelte';
+  import { CheckCheck, Plus, Trash2 } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import { apiFetch, apiSendJson } from '$lib/client/api';
@@ -68,13 +68,9 @@
 
 <div class="px-4 py-4 sm:px-5 sm:py-5">
   <div class="mx-auto grid max-w-[1440px] gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-    <aside class="rounded-[24px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)]">
-      <div class="border-b border-[var(--border)] pb-4">
-        <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">One-time work</div>
-        <h1 class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">Lists</h1>
-        <p class="mt-1.5 text-sm leading-5 text-[var(--text-muted)]">
-          A dedicated place for one-time work that should stay outside recurring planning and feel as direct as a Notion checklist.
-        </p>
+    <aside class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
+      <div class="border-b border-[var(--border)] pb-3">
+        <h1 class="text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Lists</h1>
       </div>
 
       <button
@@ -105,14 +101,13 @@
       </div>
     </aside>
 
-    <section class="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] px-4 py-4 shadow-[var(--shadow-soft)] sm:px-6 sm:py-5">
+    <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4 sm:px-5">
       <div class="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0 flex-1">
-          <div class="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Current list</div>
           <input
             value={data.view.documents.find((document) => document.id === data.view.selectedDocumentId)?.title ?? 'Untitled list'}
             onblur={(event) => renameDocument((event.currentTarget as HTMLInputElement).value)}
-            class="mt-2.5 w-full border-none bg-transparent p-0 text-[2rem] font-semibold tracking-[-0.05em] text-[var(--text-primary)] outline-none"
+            class="w-full border-none bg-transparent p-0 text-lg font-medium tracking-[-0.02em] text-[var(--text-primary)] outline-none"
           />
         </div>
 
@@ -127,24 +122,14 @@
       </div>
 
       <div class="pt-5">
-        <div class="grid gap-2.5 sm:grid-cols-3">
-          <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-            <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Open items</div>
-            <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{openCount}</div>
-            <div class="mt-1 text-[13px] text-[var(--text-muted)]">Still waiting to be wrapped up</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border-radius:6px;overflow:hidden">
+          <div style="background:var(--panel-soft);padding:10px 12px">
+            <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Open</div>
+            <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{openCount}</div>
           </div>
-          <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-            <div class="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Completed</div>
-            <div class="mt-1.5 text-xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{completedCount}</div>
-            <div class="mt-1 text-[13px] text-[var(--text-muted)]">Checked off and kept in view</div>
-          </div>
-          <div class="rounded-[18px] border border-[var(--border)] bg-[var(--panel-soft)] px-3.5 py-3">
-            <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-              <ListChecks size={13} />
-              Checklist mode
-            </div>
-            <div class="mt-1.5 text-sm font-medium text-[var(--text-primary)]">Checklist-first editing</div>
-            <div class="mt-1 text-[13px] text-[var(--text-muted)]">Add tasks fast, then use headings or text only when the list needs structure.</div>
+          <div style="background:var(--panel-soft);padding:10px 12px">
+            <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Done</div>
+            <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{completedCount}</div>
           </div>
         </div>
 

@@ -541,14 +541,14 @@
             </button>
           {/if}
 
-          <!-- Format toolbar — paragraph only, shown while focused -->
+          <!-- Format toolbar — paragraph only, hidden by default, shown on hover -->
           {#if editingBlockId === block.id && block.type === 'paragraph'}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <!-- svelte-ignore a11y_interactive_supports_focus -->
             <div
               role="toolbar"
               aria-label="Text formatting"
-              class="mt-1 flex items-center gap-0.5"
+              class="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
               onmousedown={(e) => e.preventDefault()}
             >
               <button type="button" title="Bold (⌘B)" onclick={() => applyFmt('bold')}
