@@ -2,7 +2,7 @@
   import { page } from '$app/stores';
   import {
     CalendarDays, Rows3, NotebookPen,
-    CalendarRange, History
+    CalendarRange
   } from 'lucide-svelte';
 
   let {
@@ -15,7 +15,6 @@
     { href: '/week',      label: 'Week',     icon: Rows3        },
     { href: '/notes',     label: 'Notes',    icon: NotebookPen  },
     { href: '/planner',   label: 'Planner',  icon: CalendarRange},
-    { href: '/history',   label: 'History',  icon: History      },
   ];
 </script>
 
