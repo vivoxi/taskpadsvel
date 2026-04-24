@@ -3,7 +3,6 @@
   import { onMount } from 'svelte';
   import { Menu, X } from 'lucide-svelte';
   import { Toaster } from 'svelte-sonner';
-  import { page } from '$app/stores';
   import { env } from '$env/dynamic/public';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
@@ -116,6 +115,3 @@
 <Toaster theme="dark" position="bottom-right" />
 <ConfirmModal />
 <CommandPalette />
-{#if $page.url.pathname.startsWith('/notes')}
-  <div class="pointer-events-none fixed inset-x-0 bottom-0 h-24 bg-linear-to-t from-[var(--bg)] to-transparent"></div>
-{/if}
