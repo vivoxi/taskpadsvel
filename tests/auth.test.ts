@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { _requireAuth } from '../src/lib/server/auth';
+import { _requireAuth, isAdminAuthRequired } from '../src/lib/server/auth';
 
 describe('requireAuth', () => {
   it('allows mutations when no admin password is configured', () => {
@@ -23,5 +23,13 @@ describe('requireAuth', () => {
     });
 
     expect(_requireAuth(request, 'secret')).toBeNull();
+  });
+
+  it('reports auth as required when ADMIN_PASSWORD is set even if PUBLIC_AUTH_REQUIRED is false', () => {
+    expect(isAdminAuthRequired({ adminPassword: 'secret', publicAuthRequired: 'false' })).toBe(true);
+  });
+
+  it('reports auth as required when PUBLIC_AUTH_REQUIRED is true', () => {
+    expect(isAdminAuthRequired({ adminPassword: '', publicAuthRequired: 'true' })).toBe(true);
   });
 });

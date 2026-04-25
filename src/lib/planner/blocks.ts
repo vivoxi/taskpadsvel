@@ -57,11 +57,7 @@ export function normalizeBlocks(value: unknown): PlannerBlock[] {
         text: typeof block.text === 'string' ? block.text : '',
         checked: normalizedType === 'checklist' || normalizedType === 'todo' ? block.checked === true : null,
         level:
-          (normalizedType === 'heading' ||
-            normalizedType === 'heading1' ||
-            normalizedType === 'heading2' ||
-            normalizedType === 'heading3') &&
-          typeof block.level === 'number'
+          normalizedType === 'heading' && typeof block.level === 'number'
             ? Math.max(1, Math.min(3, Math.round(block.level)))
             : headingLevel(normalizedType)
       }

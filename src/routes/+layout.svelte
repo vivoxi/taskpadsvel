@@ -3,23 +3,23 @@
   import { onMount } from 'svelte';
   import { Menu, X } from 'lucide-svelte';
   import { Toaster } from 'svelte-sonner';
-  import { env } from '$env/dynamic/public';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import PasswordModal from '$lib/components/PasswordModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import { initializeTheme, themeMode } from '$lib/stores/theme';
   import { commandPaletteOpen } from '$lib/stores';
+  import type { LayoutData } from './$types';
   import type { Snippet } from 'svelte';
 
-  let { children }: { children: Snippet } = $props();
+  let { children, data }: { children: Snippet; data: LayoutData } = $props();
   let mobileNavOpen = $state(false);
 
   onMount(() => {
     initializeTheme();
   });
 
-  const authRequired = $derived(env.PUBLIC_AUTH_REQUIRED === 'true');
+  const authRequired = $derived(data.authRequired);
 </script>
 
 <svelte:head>

@@ -6,6 +6,13 @@ export function requireAuth(request: Request): Response | null {
   return _requireAuth(request, process.env.ADMIN_PASSWORD);
 }
 
+export function isAdminAuthRequired(input: {
+  adminPassword: string | undefined;
+  publicAuthRequired: string | undefined;
+}): boolean {
+  return Boolean(input.adminPassword?.trim()) || input.publicAuthRequired === 'true';
+}
+
 /**
  * Pure function for testing — accepts password directly.
  */
