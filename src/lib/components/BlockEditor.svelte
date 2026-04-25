@@ -74,6 +74,7 @@
   let commitTimer: ReturnType<typeof setTimeout> | null = null;
   let saveInFlight = false;
   let pendingCommit: PlannerBlock[] | null = null;
+  let hydratedSourceKey = '';
 
   const flipDurationMs = $derived(compact ? 120 : 160);
   const availableTypes = $derived(
@@ -97,7 +98,8 @@
   );
 
   $effect(() => {
-    sourceKey;
+    if (sourceKey === hydratedSourceKey) return;
+    hydratedSourceKey = sourceKey;
     localBlocks = cloneBlocks(blocks);
     activeBlockId = null;
     editingBlockId = null;
@@ -114,7 +116,13 @@
    *  If it already contains HTML tags it is returned as-is;
    *  otherwise it is treated as legacy markdown and converted. */
   function toHtml(text: string): string {
-    return toRichTextHtml(text);
+    return highlightHashtags(toRichTextHtml(text));
+  }
+
+  function highlightHashtags(html: string): string {
+    return html
+      .replace(/<span class="note-hashtag">(#.*?)<\/span>/g, '$1')
+      .replace(/(^|[\s>])#([\p{L}\p{N}_-]{2,40})/gu, '$1<span class="note-hashtag">#$2</span>');
   }
 
   // ── Svelte action: keep innerHTML in sync without resetting the cursor ────
@@ -951,3 +959,13 @@
     </div>
   {/if}
 </div>
+
+<style>
+  :global(.note-hashtag) {
+    border-radius: 0.3rem;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    font-weight: 600;
+    padding: 0 0.12rem;
+  }
+</style>

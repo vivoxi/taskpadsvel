@@ -28,11 +28,20 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   if ('category_id' in (body ?? {})) {
     updates.category_id = typeof body?.category_id === 'string' ? body.category_id : null;
   }
+  if ('folder_id' in (body ?? {})) {
+    updates.category_id = typeof body?.folder_id === 'string' ? body.folder_id : null;
+  }
   if ('starred' in (body ?? {})) {
     updates.starred = body?.starred === true;
   }
+  if ('is_starred' in (body ?? {})) {
+    updates.starred = body?.is_starred === true;
+  }
   if ('deleted_at' in (body ?? {})) {
     updates.deleted_at = typeof body?.deleted_at === 'string' ? body.deleted_at : null;
+  }
+  if ('color' in (body ?? {})) {
+    updates.color = typeof body?.color === 'string' ? body.color : null;
   }
   if (typeof body?.sort_order === 'number') {
     updates.sort_order = body.sort_order;

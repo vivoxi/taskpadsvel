@@ -12,6 +12,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (!documentId) throw error(400, 'Document id is required');
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  await saveNoteBlocks(documentId, normalizeBlocks(body?.blocks));
-  return json({ success: true });
+  const tagData = await saveNoteBlocks(documentId, normalizeBlocks(body?.blocks));
+  return json({ success: true, ...(tagData ?? {}) });
 };

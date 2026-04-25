@@ -168,14 +168,19 @@ function normalizeAttachment(row: Partial<TaskAttachment>): TaskAttachment {
 }
 
 function normalizeDocument(row: Partial<NotesDocument & { category_id?: string | null }>): NotesDocument {
+  const categoryId = row.category_id ?? row.folder_id ?? null;
+  const starred = row.starred === true || row.is_starred === true;
   return {
     id: row.id ?? crypto.randomUUID(),
     title: row.title ?? 'Untitled',
     slug: row.slug ?? null,
     kind: row.kind === 'one-time' ? 'one-time' : 'note',
-    category_id: row.category_id ?? null,
-    starred: row.starred === true,
+    category_id: categoryId,
+    folder_id: categoryId,
+    starred,
+    is_starred: starred,
     deleted_at: row.deleted_at ?? null,
+    color: row.color ?? null,
     sort_order: typeof row.sort_order === 'number' ? row.sort_order : 0,
     cover_image_url: row.cover_image_url ?? null,
     word_count: typeof row.word_count === 'number' ? row.word_count : 0,
@@ -198,6 +203,22 @@ function plainText(value: string): string {
     .trim();
 }
 
+function isMissingRelationError(message: string | undefined): boolean {
+  const lower = message?.toLowerCase() ?? '';
+  return lower.includes('does not exist') || lower.includes('schema cache') || lower.includes('could not find');
+}
+
+function extractHashTagsFromBlocks(blocks: PlannerBlock[]): string[] {
+  const tags = new Set<string>();
+  for (const block of blocks) {
+    const text = plainText(block.text ?? '');
+    for (const match of text.matchAll(/(^|\s)#([\p{L}\p{N}_-]{2,40})/gu)) {
+      tags.add(match[2].toLocaleLowerCase('tr-TR'));
+    }
+  }
+  return [...tags].sort((left, right) => left.localeCompare(right, 'tr'));
+}
+
 async function getNoteCategories(): Promise<NoteCategory[]> {
   const { data, error: queryError } = await supabaseAdmin
     .from('note_categories')
@@ -215,6 +236,167 @@ async function getNoteCategories(): Promise<NoteCategory[]> {
     icon: null,
     sort_order: Number(row.sort_order ?? 0)
   }));
+}
+
+async function getNoteTagData(): Promise<Pick<NotesViewData, 'tags' | 'noteTags'>> {
+  const [{ data: tags, error: tagsError }, { data: noteTags, error: noteTagsError }] = await Promise.all([
+    supabaseAdmin
+      .from('tags')
+      .select('id, name, user_id')
+      .order('name', { ascending: true }),
+    supabaseAdmin
+      .from('note_tags')
+      .select('note_id, tag_id')
+  ]);
+
+  const missingTagsTable =
+    isMissingRelationError(tagsError?.message) ||
+    isMissingRelationError(noteTagsError?.message);
+
+  if (missingTagsTable) {
+    return { tags: [], noteTags: [] };
+  }
+
+  if (tagsError) throw error(500, tagsError.message);
+  if (noteTagsError) throw error(500, noteTagsError.message);
+
+  return {
+    tags: (tags ?? []).map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      user_id: row.user_id ? String(row.user_id) : null
+    })),
+    noteTags: (noteTags ?? []).map((row) => ({
+      note_id: String(row.note_id),
+      tag_id: String(row.tag_id)
+    }))
+  };
+}
+
+async function syncNoteTags(documentId: string, blocks: PlannerBlock[]) {
+  const tagNames = extractHashTagsFromBlocks(blocks);
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('note_tags')
+    .delete()
+    .eq('note_id', documentId);
+
+  if (deleteError) {
+    if (isMissingRelationError(deleteError.message)) return null;
+    throw error(500, deleteError.message);
+  }
+
+  if (tagNames.length === 0) {
+    const { data: tags, error: tagsError } = await supabaseAdmin
+      .from('tags')
+      .select('id, name, user_id')
+      .order('name', { ascending: true });
+    if (tagsError) {
+      if (isMissingRelationError(tagsError.message)) return null;
+      throw error(500, tagsError.message);
+    }
+    return {
+      tags: (tags ?? []).map((row) => ({
+        id: String(row.id),
+        name: String(row.name),
+        user_id: row.user_id ? String(row.user_id) : null
+      })),
+      noteTags: []
+    };
+  }
+
+  const { data: existingTags, error: existingTagsError } = await supabaseAdmin
+    .from('tags')
+    .select('id, name, user_id')
+    .in('name', tagNames);
+
+  if (existingTagsError) {
+    if (isMissingRelationError(existingTagsError.message)) return null;
+    throw error(500, existingTagsError.message);
+  }
+
+  const existingNames = new Set((existingTags ?? []).map((tag) => String(tag.name)));
+  const missingNames = tagNames.filter((name) => !existingNames.has(name));
+
+  let insertedTags: Array<{ id: string; name: string; user_id: string | null }> = [];
+  if (missingNames.length > 0) {
+    const { data: inserted, error: insertTagsError } = await supabaseAdmin
+      .from('tags')
+      .insert(missingNames.map((name) => ({ name, user_id: null })))
+      .select('id, name, user_id');
+
+    if (insertTagsError) {
+      if (isMissingRelationError(insertTagsError.message)) return null;
+      throw error(500, insertTagsError.message);
+    }
+    insertedTags = (inserted ?? []) as Array<{ id: string; name: string; user_id: string | null }>;
+  }
+
+  const tagRows = [...(existingTags ?? []), ...insertedTags];
+
+  const { data: normalizedTagRows, error: reloadTagsError } = await supabaseAdmin
+    .from('tags')
+    .select('id, name, user_id');
+
+  if (reloadTagsError) {
+    if (isMissingRelationError(reloadTagsError.message)) return null;
+    throw error(500, reloadTagsError.message);
+  }
+
+  const currentTagRows = tagRows.filter((tag) => tagNames.includes(String(tag.name)));
+  const links = currentTagRows.map((tag) => ({
+    note_id: documentId,
+    tag_id: String(tag.id)
+  }));
+
+  if (links.length > 0) {
+    const { error: linkError } = await supabaseAdmin
+      .from('note_tags')
+      .upsert(links, { onConflict: 'note_id,tag_id' });
+
+    if (linkError) {
+      if (isMissingRelationError(linkError.message)) return null;
+      throw error(500, linkError.message);
+    }
+  }
+
+  return {
+    tags: (normalizedTagRows ?? []).map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      user_id: row.user_id ? String(row.user_id) : null
+    })),
+    noteTags: links
+  };
+}
+
+async function createNoteVersionSnapshot(documentId: string, blocks: PlannerBlock[]) {
+  const { data: latestVersion, error: latestVersionError } = await supabaseAdmin
+    .from('note_versions')
+    .select('created_at')
+    .eq('note_id', documentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestVersionError) {
+    if (isMissingRelationError(latestVersionError.message)) return;
+    throw error(500, latestVersionError.message);
+  }
+
+  const latestTime = latestVersion?.created_at ? new Date(latestVersion.created_at).getTime() : 0;
+  if (latestTime && Date.now() - latestTime < 2 * 60 * 1000) return;
+
+  const { error: versionError } = await supabaseAdmin
+    .from('note_versions')
+    .insert({
+      note_id: documentId,
+      content: blocks
+    });
+
+  if (versionError && !isMissingRelationError(versionError.message)) {
+    throw error(500, versionError.message);
+  }
 }
 
 function sortTemplates(templates: TaskTemplate[]): TaskTemplate[] {
@@ -739,7 +921,7 @@ export async function getCalendarViewData(inputMonthKey: string): Promise<Pick<M
 async function getDocumentWorkspaceData(
   kind: DocumentKind,
   selectedDocumentId: string | null | undefined
-): Promise<Omit<NotesViewData, 'categories'>> {
+): Promise<Omit<NotesViewData, 'categories' | 'tags' | 'noteTags'>> {
   const { data: initialDocuments, error: docsError } = await supabaseAdmin
     .from('notes_documents')
     .select('*')
@@ -907,11 +1089,12 @@ async function getDocumentWorkspaceData(
 }
 
 export async function getNotesViewData(selectedDocumentId: string | null | undefined): Promise<NotesViewData> {
-  const [workspace, categories] = await Promise.all([
+  const [workspace, categories, tagData] = await Promise.all([
     getDocumentWorkspaceData('note', selectedDocumentId),
-    getNoteCategories()
+    getNoteCategories(),
+    getNoteTagData()
   ]);
-  return { ...workspace, categories };
+  return { ...workspace, categories, ...tagData };
 }
 
 export async function getOneTimeViewData(
@@ -1252,8 +1435,12 @@ export async function saveWeeklyDayBlocks(
   }
 }
 
-export async function saveNoteBlocks(documentId: string, blocks: PlannerBlock[]): Promise<void> {
+export async function saveNoteBlocks(
+  documentId: string,
+  blocks: PlannerBlock[]
+): Promise<Pick<NotesViewData, 'tags' | 'noteTags'> | null> {
   const normalizedBlocks = toNoteBlockPayload(normalizeBlocks(blocks));
+  const normalizedPlannerBlocks = normalizeBlocks(blocks);
 
   const { data: existingRows, error: existingError } = await supabaseAdmin
     .from('note_blocks')
@@ -1296,14 +1483,27 @@ export async function saveNoteBlocks(documentId: string, blocks: PlannerBlock[])
     }
   }
 
+  const wordCount = normalizedPlannerBlocks
+    .map((block) => plainText(block.text ?? ''))
+    .join(' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .length;
+
+  const tagData = await syncNoteTags(documentId, normalizedPlannerBlocks);
+
+  await createNoteVersionSnapshot(documentId, normalizedPlannerBlocks);
+
   const { error: docUpdateError } = await supabaseAdmin
     .from('notes_documents')
-    .update({ updated_at: new Date().toISOString() })
+    .update({ updated_at: new Date().toISOString(), word_count: wordCount })
     .eq('id', documentId);
 
   if (docUpdateError) {
     throw error(500, docUpdateError.message);
   }
+
+  return tagData;
 }
 
 export function createStarterBlocks(kind: DocumentKind = 'note'): PlannerBlock[] {

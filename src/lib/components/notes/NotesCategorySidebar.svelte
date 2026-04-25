@@ -5,6 +5,7 @@
     FileText,
     Folder,
     FolderPlus,
+    Hash,
     MoreHorizontal,
     Palette,
     Pencil,
@@ -13,7 +14,7 @@
     Trash2
   } from 'lucide-svelte';
   import type { CategoryNode, SmartFolderId } from '$lib/notes/types';
-  import type { NoteCategory } from '$lib/planner/types';
+  import type { NoteCategory, NoteTag } from '$lib/planner/types';
 
   const COLOR_PRESETS = [
     '#ef4444',
@@ -32,6 +33,8 @@
     selectedCategoryId,
     activeSmartFolder,
     smartFolders,
+    tags = [],
+    activeTagId = null,
     sidebarWidth,
     expandedCategories,
     renamingCategoryId,
@@ -39,8 +42,11 @@
     canCreateSubcategory,
     categoryCount,
     categoryPath,
+    tagCount,
     onSelectSmartFolder,
     onSelectCategory,
+    onSelectTag,
+    onMoveDocumentToCategory,
     onToggleCategory,
     onCreateCategory,
     onStartRename,
@@ -58,6 +64,8 @@
     selectedCategoryId: string | null;
     activeSmartFolder: SmartFolderId;
     smartFolders: Array<{ id: SmartFolderId; label: string; count: number }>;
+    tags?: NoteTag[];
+    activeTagId?: string | null;
     sidebarWidth: number;
     expandedCategories: Set<string>;
     renamingCategoryId: string | null;
@@ -65,8 +73,11 @@
     canCreateSubcategory: boolean;
     categoryCount: (categoryId: string) => number;
     categoryPath: (categoryId: string | null) => string;
+    tagCount?: (tagId: string) => number;
     onSelectSmartFolder: (folderId: SmartFolderId) => void;
     onSelectCategory: (categoryId: string | null) => void;
+    onSelectTag?: (tagId: string) => void;
+    onMoveDocumentToCategory?: (documentId: string, categoryId: string | null) => void | Promise<void>;
     onToggleCategory: (categoryId: string) => void;
     onCreateCategory: (parentId: string | null) => void | Promise<void>;
     onStartRename: (category: NoteCategory) => void;
@@ -89,6 +100,15 @@
 
   function smartFolderIcon(folderId: SmartFolderId) {
     return folderId;
+  }
+
+  function dropNote(event: DragEvent, categoryId: string | null) {
+    const noteId =
+      event.dataTransfer?.getData('application/x-taskpad-note-id') ||
+      event.dataTransfer?.getData('text/plain');
+    if (!noteId) return;
+    event.preventDefault();
+    void onMoveDocumentToCategory?.(noteId, categoryId);
   }
 </script>
 
@@ -132,6 +152,10 @@
       <button
         type="button"
         onclick={() => onSelectSmartFolder(folder.id)}
+        ondragover={(event) => {
+          if (folder.id === 'all') event.preventDefault();
+        }}
+        ondrop={(event) => folder.id === 'all' && dropNote(event, null)}
         class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors {activeSmartFolder === folder.id && selectedCategoryId === null ? 'bg-[var(--panel)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}"
       >
         {#if smartFolderIcon(folder.id) === 'all'}<FileText size={15} />
@@ -181,6 +205,8 @@
             <button
               type="button"
               onclick={() => onSelectCategory(category.id)}
+              ondragover={(event) => event.preventDefault()}
+              ondrop={(event) => dropNote(event, category.id)}
               title={categoryPath(category.id)}
               class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm transition-colors {selectedCategoryId === category.id ? 'bg-[var(--accent-subtle)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}"
             >
@@ -240,6 +266,8 @@
                   <button
                     type="button"
                     onclick={() => onSelectCategory(child.id)}
+                    ondragover={(event) => event.preventDefault()}
+                    ondrop={(event) => dropNote(event, child.id)}
                     title={categoryPath(child.id)}
                     class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm transition-colors {selectedCategoryId === child.id ? 'bg-[var(--accent-subtle)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}"
                   >
@@ -283,6 +311,23 @@
         </div>
       </div>
     {/each}
+
+    {#if tags.length > 0}
+      <div class="mt-5 border-t border-[var(--border)] pt-3">
+        <div class="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)]">Tags</div>
+        {#each tags as tag (tag.id)}
+          <button
+            type="button"
+            onclick={() => onSelectTag?.(tag.id)}
+            class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors {activeTagId === tag.id ? 'bg-[var(--accent-subtle)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}"
+          >
+            <Hash size={13} class="text-[var(--accent)]" />
+            <span class="min-w-0 flex-1 truncate">{tag.name}</span>
+            <span class="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">{tagCount?.(tag.id) ?? 0}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   {#if !mobile}

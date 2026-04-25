@@ -14,7 +14,10 @@
     uploadProgress,
     categoryPickerOpen,
     saveState,
+    saveStatusVisible,
+    editorSourceKey,
     wordCount,
+    charCount,
     readTime,
     doneCount,
     checklistCount,
@@ -45,7 +48,10 @@
     uploadProgress: number;
     categoryPickerOpen: boolean;
     saveState: 'saved' | 'saving' | 'error';
+    saveStatusVisible?: boolean;
+    editorSourceKey: string;
     wordCount: number;
+    charCount: number;
     readTime: number;
     doneCount: number;
     checklistCount: number;
@@ -127,8 +133,22 @@
     </div>
   </div>
 
-  <div class="absolute right-4 top-4 z-20 hidden items-center gap-1 opacity-0 transition-opacity md:flex md:group-hover/editor:opacity-100">
-    <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]">
+  <div class="absolute right-4 top-4 z-20 hidden items-center gap-1 md:flex">
+    {#if saveStatusVisible}
+      <div class="mr-1 inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 text-xs shadow-sm">
+        {#if saveState === 'saving'}
+          <Loader2 size={12} class="text-[var(--accent)]" />
+          <span class="text-[var(--accent)]">Kaydediliyor...</span>
+        {:else if saveState === 'error'}
+          <AlertCircle size={12} class="text-[var(--danger)]" />
+          <span class="text-[var(--danger)]">Kayit bekliyor</span>
+        {:else}
+          <Check size={12} class="text-[var(--accent)]" />
+          <span class="text-[var(--text-secondary)]">Kaydedildi</span>
+        {/if}
+      </div>
+    {/if}
+    <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] opacity-0 transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)] group-hover/editor:opacity-100">
       <Upload size={13} />
       {uploading ? `${uploadProgress || 0}%` : 'Ekle'}
       <input type="file" multiple class="hidden" disabled={uploading} onchange={onUploadAttachment} />
@@ -136,7 +156,7 @@
     <button
       type="button"
       onclick={onDeleteDocument}
-      class="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] text-[var(--text-muted)] transition-colors hover:border-[var(--danger)] hover:text-[var(--danger)]"
+      class="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] text-[var(--text-muted)] opacity-0 transition-colors hover:border-[var(--danger)] hover:text-[var(--danger)] group-hover/editor:opacity-100"
       aria-label="Notu sil"
     >
       <Trash2 size={13} />
@@ -226,7 +246,7 @@
 
       <div class="notes-editor-surface">
         <BlockEditor
-          sourceKey={selectedDoc?.id ?? 'notes-empty'}
+          sourceKey={editorSourceKey}
           {blocks}
           notesMode
           emptyLabel="Yazmaya basla..."
@@ -252,6 +272,8 @@
       {#if wordCount > 0}
         <span class="text-[var(--text-faint)]">·</span>
         <span>{wordCount} kelime</span>
+        <span class="text-[var(--text-faint)]">·</span>
+        <span>{charCount} karakter</span>
         <span class="text-[var(--text-faint)]">·</span>
         <span>~{readTime} min read</span>
       {/if}

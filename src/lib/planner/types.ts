@@ -108,8 +108,11 @@ export type NotesDocument = {
   slug: string | null;
   kind: DocumentKind;
   category_id: string | null;
+  folder_id: string | null;
   starred: boolean;
+  is_starred: boolean;
   deleted_at: string | null;
+  color: string | null;
   sort_order: number;
   cover_image_url: string | null;
   word_count: number;
@@ -118,6 +121,17 @@ export type NotesDocument = {
   first_image_url: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type NoteTag = {
+  id: string;
+  name: string;
+  user_id: string | null;
+};
+
+export type NoteTagLink = {
+  note_id: string;
+  tag_id: string;
 };
 
 export type NoteBlock = {
@@ -247,6 +261,8 @@ export type NotesViewData = {
   blocks: PlannerBlock[];
   attachments: TaskAttachment[];
   categories: NoteCategory[];
+  tags: NoteTag[];
+  noteTags: NoteTagLink[];
 };
 
 export type OneTimeViewData = {
