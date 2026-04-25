@@ -7,6 +7,7 @@
     Copy,
     GripVertical,
     Heading1,
+    ImageIcon,
     Italic,
     Link2,
     ListChecks,
@@ -33,7 +34,8 @@
     emptyLabel = 'Start writing',
     emptyBlockType = 'paragraph',
     insertOrder = ['heading', 'paragraph', 'checklist', 'divider'],
-    onCommit
+    onCommit,
+    onUploadImage
   }: {
     sourceKey: string;
     blocks: PlannerBlock[];
@@ -42,15 +44,18 @@
     emptyBlockType?: PlannerBlock['type'];
     insertOrder?: PlannerBlock['type'][];
     onCommit?: (blocks: PlannerBlock[]) => void | Promise<void>;
+    onUploadImage?: (file: File) => Promise<string>;
   } = $props();
 
   let localBlocks = $state<PlannerBlock[]>([]);
   let isSaving = $state(false);
   let editorElement = $state<HTMLDivElement | null>(null);
+  let imageInputEl = $state<HTMLInputElement | null>(null);
   let activeBlockId = $state<string | null>(null);
   let editingBlockId = $state<string | null>(null);
   let blockMenuId = $state<string | null>(null);
   let floatingToolbar = $state<{ x: number; y: number } | null>(null);
+  let pendingImageInsert = $state<{ index: number; mode: 'insert' | 'replace' } | null>(null);
   let slashMenu = $state<{
     blockId: string;
     index: number;
@@ -62,7 +67,11 @@
   const availableTypes = $derived(
     [...new Set(insertOrder)].filter(
       (type): type is PlannerBlock['type'] =>
-        type === 'heading' || type === 'paragraph' || type === 'checklist' || type === 'divider'
+        type === 'heading' ||
+        type === 'paragraph' ||
+        type === 'checklist' ||
+        type === 'divider' ||
+        (type === 'image' && !!onUploadImage)
     )
   );
 
@@ -184,6 +193,11 @@
   }
 
   function addBlock(type: PlannerBlock['type']) {
+    if (type === 'image') {
+      pendingImageInsert = { index: localBlocks.length - 1, mode: 'insert' };
+      imageInputEl?.click();
+      return;
+    }
     const block = createBlock(type);
     const next = [...cloneBlocks(localBlocks), block];
     updateBlock(next);
@@ -192,6 +206,11 @@
   }
 
   function insertBlockAt(index: number, type: PlannerBlock['type']) {
+    if (type === 'image') {
+      pendingImageInsert = { index, mode: 'insert' };
+      imageInputEl?.click();
+      return;
+    }
     const block = createBlock(type);
     const next = cloneBlocks(localBlocks);
     next.splice(index + 1, 0, block);
@@ -204,6 +223,12 @@
   function replaceBlockType(index: number, type: PlannerBlock['type']) {
     const target = localBlocks[index];
     if (!target) return;
+    if (type === 'image') {
+      pendingImageInsert = { index, mode: 'replace' };
+      slashMenu = null;
+      imageInputEl?.click();
+      return;
+    }
     const next = cloneBlocks(localBlocks);
     next[index] = { ...target, type, text: '', checked: type === 'checklist' ? false : null, level: type === 'heading' ? 2 : null };
     updateBlock(next);
@@ -211,6 +236,32 @@
     void commit(next);
     if (type !== 'divider') void focusBlock(target.id, 'start');
     else activeBlockId = target.id;
+  }
+
+  async function handleImageFileSelected(files: FileList | null) {
+    if (!files || files.length === 0 || !onUploadImage || !pendingImageInsert) return;
+    const file = files[0];
+    const { index, mode } = pendingImageInsert;
+    pendingImageInsert = null;
+    if (imageInputEl) imageInputEl.value = '';
+
+    let url: string;
+    try {
+      url = await onUploadImage(file);
+    } catch {
+      return;
+    }
+
+    const block: PlannerBlock = { id: crypto.randomUUID(), type: 'image', text: url, checked: null, level: null };
+    const next = cloneBlocks(localBlocks);
+    if (mode === 'replace') {
+      next.splice(index, 1, block);
+    } else {
+      next.splice(index + 1, 0, block);
+    }
+    updateBlock(next);
+    void commit(next);
+    activeBlockId = block.id;
   }
 
   async function removeBlock(index: number, requireConfirmation = true) {
@@ -403,6 +454,7 @@
     if (type === 'heading') return 'Heading';
     if (type === 'paragraph') return 'Text';
     if (type === 'checklist') return 'Checklist';
+    if (type === 'image') return 'Image';
     return 'Divider';
   }
 
@@ -542,6 +594,33 @@
               />
             </label>
 
+          {:else if block.type === 'image'}
+            <div class="group/img relative">
+              {#if block.text}
+                <img
+                  src={block.text}
+                  alt="Inline"
+                  class="max-w-full rounded-[12px] border border-[var(--border)]"
+                />
+                <button
+                  type="button"
+                  aria-label="Delete image"
+                  onclick={() => removeBlock(index, false)}
+                  class="absolute right-2 top-2 hidden rounded-lg bg-[var(--panel-strong)] p-1 text-[var(--text-muted)] transition-colors hover:text-red-500 group-hover/img:flex"
+                >
+                  <Trash2 size={13} />
+                </button>
+              {:else}
+                <button
+                  type="button"
+                  onclick={() => { pendingImageInsert = { index, mode: 'replace' }; imageInputEl?.click(); }}
+                  class="flex w-full items-center justify-center gap-2 rounded-[12px] border border-dashed border-[var(--border-strong)] px-4 py-6 text-sm text-[var(--text-faint)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-primary)]"
+                >
+                  <ImageIcon size={16} /> Click to upload image
+                </button>
+              {/if}
+            </div>
+
           {:else}
             <!-- Divider -->
             <button
@@ -574,6 +653,7 @@
                       {#if type === 'heading'}<Heading1 size={13} />
                       {:else if type === 'paragraph'}<Pilcrow size={13} />
                       {:else if type === 'divider'}<Minus size={13} />
+                      {:else if type === 'image'}<ImageIcon size={13} />
                       {:else}<ListChecks size={13} />{/if}
                       {labelFor(type)}
                     </button>
@@ -598,6 +678,7 @@
                   {#if type === 'heading'}<Heading1 size={13} />
                   {:else if type === 'paragraph'}<Pilcrow size={13} />
                   {:else if type === 'divider'}<Minus size={13} />
+                  {:else if type === 'image'}<ImageIcon size={13} />
                   {:else}<ListChecks size={13} />{/if}
                   {labelFor(type)}
                 </button>
@@ -624,6 +705,16 @@
       </div>
     {/each}
   </div>
+
+  {#if onUploadImage}
+    <input
+      bind:this={imageInputEl}
+      type="file"
+      accept="image/*"
+      class="hidden"
+      onchange={(e) => handleImageFileSelected((e.currentTarget as HTMLInputElement).files)}
+    />
+  {/if}
 
   {#if isSaving}
     <p class="px-1.5 pt-1 text-[10px] text-[var(--text-faint)]">Saving…</p>

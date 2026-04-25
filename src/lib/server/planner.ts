@@ -11,6 +11,7 @@ import {
   type DocumentKind,
   type HistoryViewData,
   type MonthViewData,
+  type NoteCategory,
   type NotesDocument,
   type NotesViewData,
   type OneTimeViewData,
@@ -161,15 +162,34 @@ function normalizeAttachment(row: Partial<TaskAttachment>): TaskAttachment {
   };
 }
 
-function normalizeDocument(row: Partial<NotesDocument>): NotesDocument {
+function normalizeDocument(row: Partial<NotesDocument & { category_id?: string | null }>): NotesDocument {
   return {
     id: row.id ?? crypto.randomUUID(),
     title: row.title ?? 'Untitled',
     slug: row.slug ?? null,
     kind: row.kind === 'one-time' ? 'one-time' : 'note',
+    category_id: row.category_id ?? null,
     created_at: row.created_at ?? new Date().toISOString(),
     updated_at: row.updated_at ?? new Date().toISOString()
   };
+}
+
+async function getNoteCategories(): Promise<NoteCategory[]> {
+  const { data, error: queryError } = await supabaseAdmin
+    .from('note_categories')
+    .select('id, name, parent_id, color, sort_order')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (queryError) throw error(500, queryError.message);
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    parent_id: row.parent_id ? String(row.parent_id) : null,
+    color: row.color ? String(row.color) : null,
+    sort_order: Number(row.sort_order ?? 0)
+  }));
 }
 
 function sortTemplates(templates: TaskTemplate[]): TaskTemplate[] {
@@ -704,7 +724,7 @@ export async function getCalendarViewData(inputMonthKey: string): Promise<Pick<M
 async function getDocumentWorkspaceData(
   kind: DocumentKind,
   selectedDocumentId: string | null | undefined
-): Promise<NotesViewData> {
+): Promise<Omit<NotesViewData, 'categories'>> {
   const { data: initialDocuments, error: docsError } = await supabaseAdmin
     .from('notes_documents')
     .select('*')
@@ -811,7 +831,11 @@ async function getDocumentWorkspaceData(
 }
 
 export async function getNotesViewData(selectedDocumentId: string | null | undefined): Promise<NotesViewData> {
-  return getDocumentWorkspaceData('note', selectedDocumentId);
+  const [workspace, categories] = await Promise.all([
+    getDocumentWorkspaceData('note', selectedDocumentId),
+    getNoteCategories()
+  ]);
+  return { ...workspace, categories };
 }
 
 export async function getOneTimeViewData(

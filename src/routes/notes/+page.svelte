@@ -1,11 +1,11 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
-  import { FileText, Paperclip, Plus, Search, Trash2, Upload } from 'lucide-svelte';
+  import { ChevronRight, FileText, Paperclip, Pencil, Plus, Search, Trash2, Upload } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import { apiFetch, apiSendJson } from '$lib/client/api';
   import { showConfirm } from '$lib/stores/confirm';
-  import type { PlannerBlock, TaskAttachment } from '$lib/planner/types';
+  import type { NoteCategory, PlannerBlock, TaskAttachment } from '$lib/planner/types';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -20,13 +20,46 @@
     return () => clearTimeout(t);
   });
 
-  const displayedDocs = $derived(
-    debouncedQuery.trim()
-      ? data.view.documents.filter((d) =>
-          d.title.toLowerCase().includes(debouncedQuery.toLowerCase())
-        )
-      : data.view.documents
-  );
+  // ── Categories state ──────────────────────────────────────────────────────
+  let selectedCategoryId = $state<string | null>(null);
+  let expandedCategories = $state<Set<string>>(new Set());
+  let renamingCategoryId = $state<string | null>(null);
+  let renameValue = $state('');
+  let categoryPickerOpen = $state(false);
+
+  type CategoryNode = NoteCategory & { children: CategoryNode[] };
+
+  const categoryTree = $derived.by<CategoryNode[]>(() => {
+    const nodeMap = new Map<string, CategoryNode>();
+    for (const c of data.view.categories) nodeMap.set(c.id, { ...c, children: [] });
+    const roots: CategoryNode[] = [];
+    for (const node of nodeMap.values()) {
+      if (node.parent_id && nodeMap.has(node.parent_id)) {
+        nodeMap.get(node.parent_id)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    return roots;
+  });
+
+  function toggleExpand(id: string) {
+    const next = new Set(expandedCategories);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    expandedCategories = next;
+  }
+
+  // ── Filtered + searched doc list ──────────────────────────────────────────
+  const displayedDocs = $derived.by(() => {
+    let docs = selectedCategoryId !== null
+      ? data.view.documents.filter((d) => d.category_id === selectedCategoryId)
+      : data.view.documents;
+    if (debouncedQuery.trim()) {
+      const q = debouncedQuery.toLowerCase();
+      docs = docs.filter((d) => d.title.toLowerCase().includes(q));
+    }
+    return docs;
+  });
 
   // ── Progressive preview cache ─────────────────────────────────────────────
   let previewCache = $state<Record<string, string>>({});
@@ -48,6 +81,11 @@
   // ── Status bar ────────────────────────────────────────────────────────────
   const selectedDoc = $derived(
     data.view.documents.find((d) => d.id === data.view.selectedDocumentId)
+  );
+  const selectedDocCategory = $derived(
+    selectedDoc?.category_id
+      ? data.view.categories.find((c) => c.id === selectedDoc.category_id) ?? null
+      : null
   );
   const checklistBlocks = $derived(data.view.blocks.filter((b) => b.type === 'checklist'));
   const doneCount = $derived(checklistBlocks.filter((b) => b.checked === true).length);
@@ -150,6 +188,59 @@
     }
   }
 
+  // ── Category actions ──────────────────────────────────────────────────────
+  async function createCategory() {
+    try {
+      const cat = await apiSendJson<NoteCategory>('/api/notes/categories', 'POST', {
+        name: 'New Category',
+        parent_id: null,
+        color: null
+      });
+      await invalidateAll();
+      renamingCategoryId = cat.id;
+      renameValue = cat.name;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create category');
+    }
+  }
+
+  async function commitRename(id: string) {
+    const trimmed = renameValue.trim();
+    renamingCategoryId = null;
+    if (!trimmed) return;
+    try {
+      await apiSendJson(`/api/notes/categories/${id}`, 'PATCH', { name: trimmed });
+      await invalidateAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to rename category');
+    }
+  }
+
+  async function deleteCategory(id: string) {
+    if (!await showConfirm('Bu kategori silinecek. İçindeki notlar kategorisiz olacak.', 'Kategori silinsin mi?')) return;
+    try {
+      await apiFetch(`/api/notes/categories/${id}`, { method: 'DELETE' });
+      if (selectedCategoryId === id) selectedCategoryId = null;
+      await invalidateAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete category');
+    }
+  }
+
+  async function setDocumentCategory(categoryId: string | null) {
+    categoryPickerOpen = false;
+    if (!selectedDoc || categoryId === selectedDoc.category_id) return;
+    try {
+      await apiSendJson(`/api/notes/documents/${data.view.selectedDocumentId}`, 'PATCH', {
+        title: selectedDoc.title,
+        category_id: categoryId
+      });
+      await invalidateAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update category');
+    }
+  }
+
   // ── Attachment actions ────────────────────────────────────────────────────
   async function uploadAttachment(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -186,6 +277,17 @@
       toast.error(e instanceof Error ? e.message : 'Failed to remove attachment');
     }
   }
+
+  async function uploadInlineImage(file: File): Promise<string> {
+    const form = new FormData();
+    form.set('file', file);
+    const res = await apiFetch(
+      `/api/notes/documents/${data.view.selectedDocumentId}/attachments`,
+      { method: 'POST', body: form }
+    );
+    const json = await res.json() as { public_url: string };
+    return json.public_url;
+  }
 </script>
 
 <svelte:head>
@@ -195,7 +297,7 @@
 <div class="flex h-full overflow-hidden">
 
   <!-- ══════════════════════════════════════════════════════════════════
-       LEFT PANEL — Note list
+       LEFT PANEL — Category tree + Note list
   ══════════════════════════════════════════════════════════════════ -->
   <aside
     class="hidden w-[260px] shrink-0 flex-col border-r border-[var(--border)] md:flex"
@@ -229,6 +331,122 @@
       </div>
     </div>
 
+    <!-- ── Category tree ──────────────────────────────────────────────── -->
+    <div class="shrink-0 border-b border-[var(--border)] px-2 pb-2">
+      <!-- All Notes -->
+      <button
+        type="button"
+        onclick={() => (selectedCategoryId = null)}
+        class="flex w-full items-center rounded-md px-2 py-1 text-[12px] transition-colors hover:bg-[var(--bg)] {selectedCategoryId === null ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
+        style={selectedCategoryId === null ? 'box-shadow: inset 2px 0 0 var(--accent)' : ''}
+      >
+        <span class="flex-1 truncate text-left">Tüm Notlar</span>
+        <span class="text-[10px] text-[var(--text-faint)]">{data.view.documents.length}</span>
+      </button>
+
+      <!-- Top-level categories -->
+      {#each categoryTree as cat (cat.id)}
+        <div>
+          <div class="group flex items-center gap-0.5 rounded-md px-1 py-0.5 hover:bg-[var(--bg)]">
+            {#if cat.children.length > 0}
+              <button
+                type="button"
+                onclick={() => toggleExpand(cat.id)}
+                class="shrink-0 rounded p-0.5 text-[var(--text-faint)] transition-transform hover:text-[var(--text-secondary)] {expandedCategories.has(cat.id) ? 'rotate-90' : ''}"
+                aria-label="Genişlet"
+              >
+                <ChevronRight size={11} />
+              </button>
+            {:else}
+              <span class="w-[18px] shrink-0"></span>
+            {/if}
+
+            {#if renamingCategoryId === cat.id}
+              <input
+                class="flex-1 rounded border border-[var(--border)] bg-[var(--panel)] px-1 py-0.5 text-[12px] outline-none"
+                bind:value={renameValue}
+                onblur={() => commitRename(cat.id)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') commitRename(cat.id);
+                  if (e.key === 'Escape') renamingCategoryId = null;
+                }}
+              />
+            {:else}
+              <button
+                type="button"
+                onclick={() => (selectedCategoryId = cat.id)}
+                class="flex-1 truncate text-left text-[12px] {selectedCategoryId === cat.id ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
+                style={selectedCategoryId === cat.id ? 'box-shadow: inset 2px 0 0 var(--accent)' : ''}
+              >{cat.name}</button>
+            {/if}
+
+            <div class="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+              <button
+                type="button"
+                onclick={() => { renamingCategoryId = cat.id; renameValue = cat.name; }}
+                class="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text-secondary)]"
+                aria-label="Yeniden adlandır"
+              ><Pencil size={9} /></button>
+              <button
+                type="button"
+                onclick={() => deleteCategory(cat.id)}
+                class="rounded p-0.5 text-[var(--text-faint)] hover:text-red-500"
+                aria-label="Sil"
+              ><Trash2 size={9} /></button>
+            </div>
+          </div>
+
+          {#if expandedCategories.has(cat.id) && cat.children.length > 0}
+            {#each cat.children as child (child.id)}
+              <div class="group ml-4 flex items-center gap-0.5 rounded-md px-1 py-0.5 hover:bg-[var(--bg)]">
+                <span class="w-[18px] shrink-0"></span>
+                {#if renamingCategoryId === child.id}
+                  <input
+                    class="flex-1 rounded border border-[var(--border)] bg-[var(--panel)] px-1 py-0.5 text-[12px] outline-none"
+                    bind:value={renameValue}
+                    onblur={() => commitRename(child.id)}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') commitRename(child.id);
+                      if (e.key === 'Escape') renamingCategoryId = null;
+                    }}
+                  />
+                {:else}
+                  <button
+                    type="button"
+                    onclick={() => (selectedCategoryId = child.id)}
+                    class="flex-1 truncate text-left text-[12px] {selectedCategoryId === child.id ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
+                    style={selectedCategoryId === child.id ? 'box-shadow: inset 2px 0 0 var(--accent)' : ''}
+                  >{child.name}</button>
+                {/if}
+                <div class="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+                  <button
+                    type="button"
+                    onclick={() => { renamingCategoryId = child.id; renameValue = child.name; }}
+                    class="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text-secondary)]"
+                    aria-label="Yeniden adlandır"
+                  ><Pencil size={9} /></button>
+                  <button
+                    type="button"
+                    onclick={() => deleteCategory(child.id)}
+                    class="rounded p-0.5 text-[var(--text-faint)] hover:text-red-500"
+                    aria-label="Sil"
+                  ><Trash2 size={9} /></button>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/each}
+
+      <button
+        type="button"
+        onclick={createCategory}
+        class="mt-0.5 flex w-full items-center gap-1 rounded-md px-2 py-1 text-[11px] text-[var(--text-faint)] transition-colors hover:text-[var(--text-secondary)]"
+      >
+        <Plus size={10} /> Yeni Kategori
+      </button>
+    </div>
+
     <!-- Note list -->
     <div class="no-scrollbar flex-1 overflow-y-auto py-1">
       {#each displayedDocs as doc (doc.id)}
@@ -246,7 +464,7 @@
               <div class="shrink-0 text-[10px] text-[var(--text-faint)]">{relDateShort(doc.updated_at)}</div>
             </div>
             <div class="line-clamp-2 text-[11px] leading-[1.5] text-[var(--text-muted)]">
-              {getPreview(doc.id) || ' '}
+              {getPreview(doc.id) || ' '}
             </div>
           </div>
         </a>
@@ -254,7 +472,7 @@
 
       {#if displayedDocs.length === 0}
         <p class="px-5 py-3 text-[12px] text-[var(--text-muted)]">
-          {debouncedQuery.trim() ? 'Eşleşen not yok.' : 'Henüz not yok.'}
+          {debouncedQuery.trim() ? 'Eşleşen not yok.' : selectedCategoryId ? 'Bu kategoride not yok.' : 'Henüz not yok.'}
         </p>
       {/if}
     </div>
@@ -327,9 +545,44 @@
             if (e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLElement).blur(); }
             if (e.key === 'Escape') { (e.currentTarget as HTMLElement).blur(); }
           }}
-          class="mb-7 w-full bg-transparent text-[var(--text-primary)] outline-none"
+          class="mb-3 w-full bg-transparent text-[var(--text-primary)] outline-none"
           style="font-size:32px;font-weight:700;letter-spacing:-0.04em;line-height:1.15;word-break:break-word"
         ></div>
+
+        <!-- Category picker -->
+        <div class="relative mb-7">
+          <button
+            type="button"
+            onclick={() => (categoryPickerOpen = !categoryPickerOpen)}
+            class="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-0.5 text-[11px] text-[var(--text-faint)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)]"
+          >
+            {selectedDocCategory?.name ?? 'Kategorisiz'}
+          </button>
+
+          {#if categoryPickerOpen}
+            <button
+              type="button"
+              class="fixed inset-0 z-40"
+              onclick={() => (categoryPickerOpen = false)}
+              aria-label="Kapat"
+            ></button>
+            <div class="absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-[var(--border)] bg-[var(--panel)] py-1 shadow-lg">
+              <button
+                type="button"
+                onclick={() => setDocumentCategory(null)}
+                class="flex w-full items-center px-3 py-1.5 text-[12px] transition-colors hover:bg-[var(--panel-soft)] {!selectedDoc?.category_id ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
+              >Kategorisiz</button>
+              {#each data.view.categories as cat (cat.id)}
+                <button
+                  type="button"
+                  onclick={() => setDocumentCategory(cat.id)}
+                  class="flex w-full items-center px-3 py-1.5 text-[12px] transition-colors hover:bg-[var(--panel-soft)] {selectedDoc?.category_id === cat.id ? 'font-medium text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
+                  style={cat.parent_id ? 'padding-left: 1.5rem' : ''}
+                >{cat.name}</button>
+              {/each}
+            </div>
+          {/if}
+        </div>
 
         <!-- Attachments -->
         {#if data.view.attachments.length > 0}
@@ -393,7 +646,9 @@
           sourceKey={data.view.selectedDocumentId}
           blocks={data.view.blocks}
           emptyLabel="Yazmaya başla…"
+          insertOrder={['heading', 'paragraph', 'checklist', 'divider', 'image']}
           onCommit={saveBlocks}
+          onUploadImage={uploadInlineImage}
         />
       </div>
     </div>
@@ -411,6 +666,10 @@
         {#if checklistBlocks.length > 0}
           <span style="color:var(--border-strong)">·</span>
           <span>{doneCount}/{checklistBlocks.length} görev</span>
+        {/if}
+        {#if selectedDocCategory}
+          <span style="color:var(--border-strong)">·</span>
+          <span>{selectedDocCategory.name}</span>
         {/if}
       </div>
     {/if}

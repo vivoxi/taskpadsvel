@@ -20,7 +20,7 @@ export function normalizeBlocks(value: unknown): PlannerBlock[] {
 
     const block = entry as Record<string, unknown>;
     const type = block.type;
-    if (type !== 'heading' && type !== 'paragraph' && type !== 'checklist' && type !== 'divider') {
+    if (type !== 'heading' && type !== 'paragraph' && type !== 'checklist' && type !== 'divider' && type !== 'image') {
       return [];
     }
 
