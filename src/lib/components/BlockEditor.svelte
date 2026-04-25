@@ -580,14 +580,21 @@
     document.addEventListener('selectionchange', handleSelectionChange);
     return () => document.removeEventListener('selectionchange', handleSelectionChange);
   });
+
+  $effect(() => {
+    if (blockMenuId === null) return;
+    function close(e: MouseEvent) {
+      const target = e.target as Element | null;
+      if (!target?.closest('[data-block-menu]')) {
+        blockMenuId = null;
+      }
+    }
+    document.addEventListener('click', close, true);
+    return () => document.removeEventListener('click', close, true);
+  });
 </script>
 
 <div bind:this={editorElement} class={notesMode ? 'space-y-1.5' : `space-y-2 ${compact ? '' : 'space-y-3'}`}>
-  {#if blockMenuId !== null}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="fixed inset-0 z-10" onclick={() => (blockMenuId = null)}></div>
-  {/if}
 
   {#if localBlocks.length === 0}
     <button
@@ -848,7 +855,7 @@
 
         <!-- Context menu (opens on drag-handle click) -->
         {#if blockMenuId === block.id}
-          <div class="absolute left-8 top-0 z-20 min-w-[176px] overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
+          <div data-block-menu class="absolute left-8 top-0 z-20 min-w-[176px] overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)] shadow-[var(--shadow-card)]">
             <div class="border-b border-[var(--border)] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Turn into</div>
             <div class="p-1.5">
               {#each availableTypes as type (type)}

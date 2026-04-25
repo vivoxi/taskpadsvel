@@ -82,6 +82,18 @@
     titleDraft = currentTitle;
   });
 
+  $effect(() => {
+    if (!categoryPickerOpen) return;
+    function close(e: MouseEvent) {
+      const target = e.target as Element | null;
+      if (!target?.closest('[data-category-picker]')) {
+        onCloseCategoryPicker();
+      }
+    }
+    document.addEventListener('click', close, true);
+    return () => document.removeEventListener('click', close, true);
+  });
+
   function syncTitleHeight() {
     if (!titleInput) return;
     titleInput.style.height = '0px';
@@ -217,8 +229,7 @@
         {/if}
 
         {#if categoryPickerOpen}
-          <button type="button" class="fixed inset-0 z-40" onclick={onCloseCategoryPicker} aria-label="Kapat"></button>
-          <div class="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] py-1 shadow-lg">
+          <div data-category-picker class="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] py-1 shadow-lg">
             <button
               type="button"
               onclick={() => onSetDocumentCategory(null)}
