@@ -126,6 +126,20 @@
     return data.view.documents.filter((doc) => doc.category_id && ids.has(doc.category_id)).length;
   }
 
+  function nextCategoryName(parentId: string | null): string {
+    const base = parentId ? 'Yeni alt kategori' : 'Yeni kategori';
+    const siblings = data.view.categories.filter((category) => category.parent_id === parentId);
+    const names = new Set(siblings.map((category) => category.name));
+    if (!names.has(base)) return base;
+
+    for (let index = 2; index < 100; index += 1) {
+      const candidate = `${base} ${index}`;
+      if (!names.has(candidate)) return candidate;
+    }
+
+    return `${base} ${siblings.length + 1}`;
+  }
+
   // ── Status bar ────────────────────────────────────────────────────────────
   const selectedDoc = $derived(
     data.view.documents.find((d) => d.id === data.view.selectedDocumentId)
@@ -135,6 +149,10 @@
       ? data.view.categories.find((c) => c.id === selectedDoc.category_id) ?? null
       : null
   );
+  const selectedCategory = $derived(
+    selectedCategoryId ? data.view.categories.find((category) => category.id === selectedCategoryId) ?? null : null
+  );
+  const canCreateSubcategory = $derived(selectedCategory !== null && selectedCategory.parent_id === null);
   const checklistBlocks = $derived(data.view.blocks.filter((b) => b.type === 'checklist'));
   const doneCount = $derived(checklistBlocks.filter((b) => b.checked === true).length);
   const wordCount = $derived(
@@ -159,6 +177,13 @@
         if (document.activeElement !== el) el.textContent = next;
       }
     };
+  }
+
+  function selectOnMount(el: HTMLInputElement) {
+    requestAnimationFrame(() => {
+      el.focus();
+      el.select();
+    });
   }
 
   // ── Date helpers ──────────────────────────────────────────────────────────
@@ -201,7 +226,10 @@
   // ── Document actions ──────────────────────────────────────────────────────
   async function createDocument() {
     try {
-      const doc = await apiSendJson<{ id: string }>('/api/notes/documents', 'POST', { title: 'Untitled' });
+      const doc = await apiSendJson<{ id: string }>('/api/notes/documents', 'POST', {
+        title: 'Untitled',
+        category_id: selectedCategoryId
+      });
       await goto(`/notes?doc=${doc.id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to create note');
@@ -240,7 +268,7 @@
   async function createCategory(parentId: string | null = null) {
     try {
       const cat = await apiSendJson<NoteCategory>('/api/notes/categories', 'POST', {
-        name: 'New Category',
+        name: nextCategoryName(parentId),
         parent_id: parentId,
         color: null
       });
@@ -250,6 +278,7 @@
         next.add(parentId);
         expandedCategories = next;
       }
+      selectedCategoryId = cat.id;
       renamingCategoryId = cat.id;
       renameValue = cat.name;
     } catch (e) {
@@ -352,20 +381,33 @@
   style="background:#151210"
 >
   <aside class="hidden min-w-0 border-r border-[#2b241f] bg-[#1a1613] md:flex md:flex-col">
-    <div class="flex items-center justify-between px-4 pb-3 pt-4">
+    <div class="px-4 pb-3 pt-4">
       <div>
         <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8d7f70]">Tags</div>
         <div class="mt-1 text-[12px] text-[#6f6256]">{data.view.categories.length} kategori</div>
       </div>
-      <button
-        type="button"
-        onclick={() => createCategory(null)}
-        class="flex h-7 w-7 items-center justify-center rounded-md text-[#9b8a7a] transition-colors hover:bg-[#2a231e] hover:text-[#f0a45d]"
-        aria-label="Yeni kategori"
-        title="Yeni kategori"
-      >
-        <Plus size={15} />
-      </button>
+      <div class="mt-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onclick={() => createCategory(null)}
+          class="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#3a3028] bg-[#241d18] px-2 py-1.5 text-[12px] font-medium text-[#d8c5b2] transition-colors hover:border-[#c86f35] hover:text-[#f0a45d]"
+          aria-label="Yeni kategori"
+        >
+          <Plus size={13} />
+          Kategori
+        </button>
+        <button
+          type="button"
+          disabled={!canCreateSubcategory}
+          onclick={() => selectedCategoryId && createCategory(selectedCategoryId)}
+          class="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#3a3028] bg-[#1f1915] px-2 py-1.5 text-[12px] font-medium text-[#bda995] transition-colors hover:border-[#c86f35] hover:text-[#f0a45d] disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Seçili kategoriye alt kategori ekle"
+          title={canCreateSubcategory ? 'Seçili kategoriye alt kategori ekle' : 'Önce ana kategori seç'}
+        >
+          <Plus size={13} />
+          Alt
+        </button>
+      </div>
     </div>
 
     <div class="border-y border-[#2b241f] px-2 py-2">
@@ -399,6 +441,7 @@
 
             {#if renamingCategoryId === cat.id}
               <input
+                use:selectOnMount
                 class="min-w-0 flex-1 rounded-md border border-[#5c4030] bg-[#120f0d] px-2 py-1 text-[13px] text-[#f4e8d8] outline-none"
                 bind:value={renameValue}
                 onblur={() => commitRename(cat.id)}
@@ -448,6 +491,7 @@
                 <div class="group/subtag flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-[#241d19]">
                   {#if renamingCategoryId === child.id}
                     <input
+                      use:selectOnMount
                       class="min-w-0 flex-1 rounded-md border border-[#5c4030] bg-[#120f0d] px-2 py-1 text-[13px] text-[#f4e8d8] outline-none"
                       bind:value={renameValue}
                       onblur={() => commitRename(child.id)}

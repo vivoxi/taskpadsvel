@@ -12,13 +12,15 @@ export const POST: RequestHandler = async ({ request }) => {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const title = typeof body?.title === 'string' && body.title.trim() ? body.title.trim() : 'Untitled';
   const kind: DocumentKind = body?.kind === 'one-time' ? 'one-time' : 'note';
+  const category_id = typeof body?.category_id === 'string' ? body.category_id : null;
 
   const { data, error: insertError } = await supabaseAdmin
     .from('notes_documents')
     .insert({
       title,
       slug: null,
-      kind
+      kind,
+      category_id
     })
     .select('*')
     .single();
