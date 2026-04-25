@@ -2,7 +2,7 @@
 CREATE TABLE public.note_categories (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text NOT NULL,
-  parent_id   uuid REFERENCES public.note_categories(id) ON DELETE CASCADE,
+  parent_id   uuid REFERENCES public.note_categories(id) ON DELETE SET NULL,
   color       text,
   sort_order  integer NOT NULL DEFAULT 0,
   created_at  timestamptz NOT NULL DEFAULT timezone('utc', now())
@@ -16,9 +16,9 @@ CREATE INDEX note_categories_sort_idx   ON public.note_categories (sort_order);
 
 -- ── Link documents to categories ──────────────────────────────────────────
 ALTER TABLE public.notes_documents
-  ADD COLUMN category_id uuid REFERENCES public.note_categories(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES public.note_categories(id) ON DELETE SET NULL;
 
-CREATE INDEX notes_documents_category_idx ON public.notes_documents (category_id);
+CREATE INDEX IF NOT EXISTS notes_documents_category_idx ON public.notes_documents (category_id);
 
 -- ── Extend note_blocks to support image blocks ────────────────────────────
 ALTER TABLE public.note_blocks DROP CONSTRAINT IF EXISTS note_blocks_type_check;
