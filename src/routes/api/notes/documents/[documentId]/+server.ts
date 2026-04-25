@@ -21,12 +21,14 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   const title = typeof body?.title === 'string' ? body.title.trim() : '';
   if (!title) throw error(400, 'Title is required');
 
+  const updates: Record<string, unknown> = { title, updated_at: new Date().toISOString() };
+  if ('category_id' in (body ?? {})) {
+    updates.category_id = typeof body?.category_id === 'string' ? body.category_id : null;
+  }
+
   const { error: updateError } = await supabaseAdmin
     .from('notes_documents')
-    .update({
-      title,
-      updated_at: new Date().toISOString()
-    })
+    .update(updates)
     .eq('id', documentId);
 
   if (updateError) throw error(500, updateError.message);
