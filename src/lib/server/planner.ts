@@ -816,6 +816,7 @@ async function getDocumentWorkspaceData(
           .from('note_blocks')
           .select('document_id, type, text, sort_order')
           .in('document_id', documentIds)
+          .lte('sort_order', 5)
           .order('sort_order', { ascending: true }),
         kind === 'note'
           ? supabaseAdmin

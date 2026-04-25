@@ -72,6 +72,8 @@
     selected: number;
   } | null>(null);
   let commitTimer: ReturnType<typeof setTimeout> | null = null;
+  let saveInFlight = false;
+  let pendingCommit: PlannerBlock[] | null = null;
 
   const flipDurationMs = $derived(compact ? 120 : 160);
   const availableTypes = $derived(
@@ -149,15 +151,33 @@
       clearTimeout(commitTimer);
       commitTimer = null;
     }
+    const payload = cloneBlocks(next);
+    if (saveInFlight) {
+      pendingCommit = payload;
+      return;
+    }
+
+    saveInFlight = true;
     isSaving = true;
-    try { await onCommit(cloneBlocks(next)); } finally { isSaving = false; }
+    try {
+      await onCommit(payload);
+    } finally {
+      saveInFlight = false;
+      if (pendingCommit) {
+        const pending = pendingCommit;
+        pendingCommit = null;
+        void commit(pending);
+      } else {
+        isSaving = false;
+      }
+    }
   }
 
-  function scheduleCommit(next = localBlocks) {
+  function scheduleCommit() {
     if (!notesMode || !onCommit) return;
     if (commitTimer) clearTimeout(commitTimer);
     commitTimer = setTimeout(() => {
-      void commit(next);
+      void commit();
     }, 800);
   }
 
@@ -176,10 +196,9 @@
   }
 
   function setText(index: number, text: string) {
-    const next = cloneBlocks(localBlocks);
-    next[index] = { ...next[index], text };
-    updateBlock(next);
-    scheduleCommit(next);
+    if (!localBlocks[index]) return;
+    localBlocks[index] = { ...localBlocks[index], text };
+    scheduleCommit();
   }
 
   function toggleChecklist(index: number) {
