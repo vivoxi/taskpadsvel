@@ -6,6 +6,15 @@ export function requireAuth(request: Request): Response | null {
   return _requireAuth(request, process.env.ADMIN_PASSWORD);
 }
 
+/**
+ * Use in +page.server.ts load functions to gate private page data.
+ * Returns false when auth is required but the request has no valid Bearer token.
+ */
+export function canReadPage(event: { request: Request; authRequired: boolean }): boolean {
+  if (!event.authRequired) return true;
+  return _requireAuth(event.request, process.env.ADMIN_PASSWORD) === null;
+}
+
 export function isAdminAuthRequired(input: {
   adminPassword: string | undefined;
   publicAuthRequired: string | undefined;

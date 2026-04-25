@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { requireAuth } from '$lib/server/auth';
+import { canReadPage } from '$lib/server/auth';
 import { NotesValidationError } from '$lib/notes-v2/validation';
 
 export function notesValidationJsonResponse(caughtError: unknown): Response | null {
@@ -10,10 +10,6 @@ export function notesValidationJsonResponse(caughtError: unknown): Response | nu
   return null;
 }
 
-export function canReadNotesPage(event: {
-  request: Request;
-  authRequired: boolean;
-}): boolean {
-  if (!event.authRequired) return true;
-  return requireAuth(event.request) === null;
+export function canReadNotesPage(event: { request: Request; authRequired: boolean }): boolean {
+  return canReadPage(event);
 }
