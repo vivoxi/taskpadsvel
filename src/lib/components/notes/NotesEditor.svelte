@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Hash, Plus, Trash2, Upload } from 'lucide-svelte';
+  import { Hash, Trash2, Upload } from 'lucide-svelte';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import NotesAttachments from '$lib/components/notes/NotesAttachments.svelte';
   import type { NoteCategory, NotesDocument, PlannerBlock, TaskAttachment } from '$lib/planner/types';
@@ -15,12 +15,11 @@
     wordCount,
     doneCount,
     checklistCount,
-    currentTitle,
     categoryPath,
     relDate,
     relDateShort,
     attachmentHref,
-    titleSync,
+    currentTitle,
     onRenameDocument,
     onSetDocumentCategory,
     onToggleCategoryPicker,
@@ -41,12 +40,11 @@
     wordCount: number;
     doneCount: number;
     checklistCount: number;
-    currentTitle: string;
     categoryPath: (categoryId: string | null) => string;
     relDate: (iso: string) => string;
     relDateShort: (iso: string) => string;
     attachmentHref: (filePath: string) => string;
-    titleSync: (el: HTMLElement, title: string) => { update(next: string): void };
+    currentTitle: string;
     onRenameDocument: (title: string) => void | Promise<void>;
     onSetDocumentCategory: (categoryId: string | null) => void | Promise<void>;
     onToggleCategoryPicker: () => void;
@@ -57,6 +55,23 @@
     onSaveBlocks: (blocks: PlannerBlock[]) => void | Promise<void>;
     onUploadInlineImage: (file: File) => Promise<string>;
   } = $props();
+
+  let titleDraft = $state('');
+  let titleInput: HTMLTextAreaElement | null = null;
+
+  $effect(() => {
+    titleDraft = currentTitle;
+  });
+
+  function syncTitleHeight() {
+    if (!titleInput) return;
+    titleInput.style.height = '0px';
+    titleInput.style.height = `${titleInput.scrollHeight}px`;
+  }
+
+  $effect(() => {
+    syncTitleHeight();
+  });
 </script>
 
 <section class="group/editor relative flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
@@ -92,20 +107,27 @@
 
   <div class="flex-1 overflow-y-auto">
     <article class="mx-auto max-w-[800px] px-5 pb-24 pt-10 md:px-12 md:pt-16">
-      <div
-        contenteditable="true"
-        role="textbox"
-        tabindex="0"
+      <textarea
+        bind:this={titleInput}
+        bind:value={titleDraft}
+        rows="1"
+        spellcheck="false"
         aria-label="Note title"
-        use:titleSync={currentTitle}
-        onblur={(event) => onRenameDocument((event.currentTarget as HTMLElement).textContent?.trim() ?? '')}
+        oninput={syncTitleHeight}
+        onblur={() => onRenameDocument(titleDraft)}
         onkeydown={(event) => {
-          if (event.key === 'Enter') { event.preventDefault(); (event.currentTarget as HTMLElement).blur(); }
-          if (event.key === 'Escape') { (event.currentTarget as HTMLElement).blur(); }
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
+          if (event.key === 'Escape') {
+            titleDraft = currentTitle;
+            event.currentTarget.blur();
+          }
         }}
-        class="mb-3 w-full bg-transparent text-[2.3rem] font-bold leading-tight text-[var(--text-primary)] outline-none"
+        class="mb-3 min-h-[3rem] w-full resize-none overflow-hidden border-none bg-transparent p-0 text-[2.3rem] font-bold leading-tight text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
         style="letter-spacing:0;word-break:break-word"
-      ></div>
+      ></textarea>
 
       <div class="relative mb-8 flex flex-wrap items-center gap-2">
         <button

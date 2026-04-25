@@ -159,15 +159,6 @@
     });
   }
 
-  function titleSync(element: HTMLElement, title: string) {
-    element.textContent = title;
-    return {
-      update(next: string) {
-        if (document.activeElement !== element) element.textContent = next;
-      }
-    };
-  }
-
   function toggleCategory(categoryId: string) {
     const next = new Set(expandedCategories);
     if (next.has(categoryId)) next.delete(categoryId);
@@ -430,7 +421,6 @@
     {relDate}
     {relDateShort}
     {attachmentHref}
-    {titleSync}
     onRenameDocument={renameDocument}
     onSetDocumentCategory={setDocumentCategory}
     onToggleCategoryPicker={() => (categoryPickerOpen = !categoryPickerOpen)}
