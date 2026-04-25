@@ -24,6 +24,7 @@
     type DndEvent
   } from 'svelte-dnd-action';
   import { cloneBlocks, createBlock } from '$lib/planner/blocks';
+  import { escapeHtml, toRichTextHtml } from '$lib/planner/rich-text';
   import { showConfirm } from '$lib/stores/confirm';
   import type { PlannerBlock } from '$lib/planner/types';
 
@@ -89,29 +90,11 @@
   // We detect that case and convert once; after the first edit the block is
   // saved as HTML and the conversion is never needed again.
 
-  function escapeHtml(t: string) {
-    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  function markdownToHtml(text: string): string {
-    if (!text.trim()) return '';
-    let h = escapeHtml(text);
-    h = h.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
-    h = h.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
-    h = h.replace(/_([^_\n]+?)_/g, '<em>$1</em>');
-    h = h.replace(/~~(.+?)~~/gs, '<s>$1</s>');
-    h = h.replace(/`([^`\n]+?)`/g, '<code class="rounded bg-[var(--panel-soft)] px-1 font-mono text-[0.85em] text-[var(--text-primary)]">$1</code>');
-    h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline underline-offset-2 hover:opacity-80">$1</a>');
-    h = h.replace(/\n/g, '<br>');
-    return h;
-  }
-
   /** Return text ready to set as innerHTML.
    *  If it already contains HTML tags it is returned as-is;
    *  otherwise it is treated as legacy markdown and converted. */
   function toHtml(text: string): string {
-    if (/<\/?(?:strong|em|s|code|a|br)\b/.test(text)) return text;
-    return markdownToHtml(text);
+    return toRichTextHtml(text);
   }
 
   // ── Svelte action: keep innerHTML in sync without resetting the cursor ────

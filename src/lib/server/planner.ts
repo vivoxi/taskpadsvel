@@ -4,6 +4,7 @@ import {
   format
 } from 'date-fns';
 import { cloneBlocks, createBlock, normalizeBlocks, toNoteBlockPayload } from '$lib/planner/blocks';
+import { mergeIntoDayBuckets } from '$lib/planner/tasks';
 import {
   DAY_NAMES,
   type CapacitySnapshot,
@@ -634,23 +635,13 @@ export async function getWeekViewData(inputWeekKey: string): Promise<WeekViewDat
   const seenTaskIds = new Set<string>();
   const tasksByDay: TasksByDay = {};
 
-  for (const instance of [...weekTasks, ...monthlyDayTasks]) {
-    if (!instance.day_name || seenTaskIds.has(instance.id)) continue;
-    const bucket = tasksByDay[instance.day_name] ?? [];
-    bucket.push(instance);
-    tasksByDay[instance.day_name] = bucket;
-    seenTaskIds.add(instance.id);
-  }
-
-  for (const instance of scheduleDayTasks) {
-    if (seenTaskIds.has(instance.id)) continue;
-    const assignment = softAssignments[instance.id];
-    if (!assignment?.dayName) continue;
-    const bucket = tasksByDay[assignment.dayName] ?? [];
-    bucket.push(instance);
-    tasksByDay[assignment.dayName] = bucket;
-    seenTaskIds.add(instance.id);
-  }
+  mergeIntoDayBuckets(tasksByDay, [...weekTasks, ...monthlyDayTasks], seenTaskIds);
+  mergeIntoDayBuckets(
+    tasksByDay,
+    scheduleDayTasks,
+    seenTaskIds,
+    (task) => softAssignments[task.id]?.dayName
+  );
 
   const notesByDay = new Map<string, PlannerBlock[]>();
   for (const row of noteRows ?? []) {

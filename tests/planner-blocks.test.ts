@@ -32,4 +32,17 @@ describe('planner blocks', () => {
     expect(blocks[2]?.checked).toBe(true);
     expect(blocks[3]?.type).toBe('divider');
   });
+
+  it('clamps heading levels and drops invalid entries', () => {
+    const blocks = normalizeBlocks([
+      { id: 'h', type: 'heading', text: 'Too deep', level: 9 },
+      { id: 'p', type: 'paragraph', text: 42 },
+      null,
+      ['not', 'a', 'block']
+    ]);
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]?.level).toBe(3);
+    expect(blocks[1]?.text).toBe('');
+  });
 });

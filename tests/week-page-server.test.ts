@@ -1,21 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { mergeIntoDayBuckets } from '../src/lib/planner/tasks';
 import type { TaskInstance } from '../src/lib/planner/types';
-
-// Copy of the function we are about to extract — test drives the shape.
-function mergeIntoDayBuckets(
-  byDay: Partial<Record<string, TaskInstance[]>>,
-  instances: TaskInstance[],
-  seenTaskIds = new Set<string>()
-): void {
-  for (const task of instances) {
-    if (!task.day_name) continue;
-    if (seenTaskIds.has(task.id)) continue;
-    const bucket = byDay[task.day_name] ?? [];
-    bucket.push(task);
-    byDay[task.day_name] = bucket;
-    seenTaskIds.add(task.id);
-  }
-}
 
 function makeInstance(overrides: Partial<TaskInstance>): TaskInstance {
   return {
@@ -80,5 +65,14 @@ describe('mergeIntoDayBuckets', () => {
     mergeIntoDayBuckets(byDay, [task], seenTaskIds);
 
     expect(byDay['Monday']).toEqual([task]);
+  });
+
+  it('can bucket scheduled soft assignments by derived day', () => {
+    const byDay: Partial<Record<string, TaskInstance[]>> = {};
+    const task = makeInstance({ id: 'scheduled', day_name: null });
+
+    mergeIntoDayBuckets(byDay, [task], new Set<string>(), () => 'Tuesday');
+
+    expect(byDay['Tuesday']).toEqual([task]);
   });
 });
