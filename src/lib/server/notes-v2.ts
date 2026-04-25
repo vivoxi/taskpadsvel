@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
+import { deleteNoteUploadFile } from '$lib/server/notes-v2-files';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { getPublicUploadPath } from '$lib/server/uploads';
 import { buildPlainText, buildPreview } from '$lib/notes-v2/validation';
 import type {
   NoteAttachment,
@@ -56,7 +56,7 @@ function toSummary(row: NoteRow, attachmentCount = 0): NoteSummary {
 function toAttachment(row: AttachmentRow): NoteAttachment {
   return {
     ...row,
-    public_url: getPublicUploadPath(row.file_path)
+    public_url: `/api/notes/${row.note_id}/attachments/${row.id}/download`
   };
 }
 
@@ -212,6 +212,19 @@ export async function updateNoteRow(
 
 export async function deleteNoteRow(noteId: string, permanent: boolean): Promise<boolean> {
   if (permanent) {
+    const { data: attachments, error: attachmentError } = await supabaseAdmin
+      .from('note_attachments')
+      .select('file_path')
+      .eq('note_id', noteId);
+
+    if (attachmentError) throw error(500, attachmentError.message);
+
+    await Promise.all(
+      (attachments ?? []).map(async (attachment) => {
+        await deleteNoteUploadFile(String(attachment.file_path));
+      })
+    );
+
     const { error: deleteError } = await supabaseAdmin.from('notes').delete().eq('id', noteId);
     if (deleteError) throw error(500, deleteError.message);
     return true;

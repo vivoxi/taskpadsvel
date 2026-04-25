@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { notesValidationJsonResponse } from '../src/lib/server/notes-v2-errors';
 import {
   NotesValidationError,
   buildNoteUploadPath,
@@ -82,5 +83,12 @@ describe('notes v2 validation', () => {
       color: '#6366f1',
       sort_order: 2
     });
+  });
+
+  it('maps NotesValidationError to a 400 json response', async () => {
+    const response = notesValidationJsonResponse(new NotesValidationError('Bad content'));
+
+    expect(response?.status).toBe(400);
+    await expect(response?.json()).resolves.toEqual({ error: 'Bad content' });
   });
 });

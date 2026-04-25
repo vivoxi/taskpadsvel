@@ -5,7 +5,7 @@ Taskpad Svelte is a focused personal planning app rebuilt around four primary su
 - `Dashboard`: the default calendar workspace
 - `Week`: weekly execution plus daily notes
 - `Planner`: month-level recurring work and scheduling
-- `Notes`: a lightweight block-based writing space
+- `Notes`: a simple server-backed notes surface with folders, attachments, and soft delete
 
 ## Stack
 
@@ -19,7 +19,7 @@ Taskpad Svelte is a focused personal planning app rebuilt around four primary su
 - `/dashboard`: default calendar board with drag-and-drop task placement
 - `/week`: weekly execution plus editable daily notes
 - `/planner`: recurring weekly/monthly planning for the selected month
-- `/notes`: document-style notes with headings, paragraphs, and checklists
+- `/notes`: Notes v2 with simple blocks, folders, trash, and auth-gated attachments
 - `/one-time`: document-style one-time notes/tasks
 - `/history`: completed, carried, and archived task history
 
@@ -34,7 +34,7 @@ Legacy routes redirect to the current surfaces:
 - Past weeks stay editable. There is no snapshot or archive mode.
 - Recurring work is modeled through `task_templates` and concrete `task_instances`.
 - Weekly notes are block-based per weekday and can be edited on any week.
-- General notes use a simple document + block model instead of a rich text editor.
+- General notes use Notes v2: server-only Supabase access, simple JSON blocks, category folders, and disk-backed attachments behind auth.
 
 ## Development
 
@@ -65,7 +65,7 @@ Required app values:
 
 ## Supabase Notes
 
-Apply the planner schema migration first, then the lock-down migration and later feature migrations in timestamp order.
+Apply the planner schema migration first, then the lock-down migration and later feature migrations in timestamp order. Notes v2 uses its own tables and does not migrate old `notes_documents` data.
 
 - `supabase/migrations/20260406_rebuild_planner_core.sql`
 - `supabase/migrations/20260404_enable_rls_and_lock_public_tables.sql`
@@ -73,14 +73,15 @@ Apply the planner schema migration first, then the lock-down migration and later
 - `supabase/migrations/20260407c_add_notes_document_kinds.sql`
 - `supabase/migrations/20260407_operations_planner_phase1.sql`
 - `supabase/migrations/20260424_note_categories_and_image_blocks.sql`
+- `supabase/migrations/20260426_notes_v2.sql`
 
 The rebuilt app uses these tables:
 
 - `task_templates`
 - `task_instances`
 - `weekly_notes`
-- `notes_documents`
-- `note_blocks`
 - `note_categories`
+- `notes`
+- `note_attachments`
 
-That setup assumes the app talks to Supabase through server endpoints using `SUPABASE_SERVICE_KEY`, not from the browser.
+`/notes` talks to Supabase only through SvelteKit server endpoints using `SUPABASE_SERVICE_KEY`. Browser code does not query notes tables directly, and Notes v2 attachments are downloaded through auth-protected API routes instead of public upload URLs.

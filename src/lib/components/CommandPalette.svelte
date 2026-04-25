@@ -107,7 +107,7 @@
       label: note.title,
       meta: note.snippet,
       icon: NotebookPen,
-      run: () => goto(note.kind === 'one-time' ? `/one-time?doc=${note.id}` : `/notes?doc=${note.id}`)
+      run: () => goto(note.kind === 'one-time' ? `/one-time?doc=${note.id}` : `/notes?note=${note.id}`)
     })),
     ...results.attachments.map((attachment) => ({
       id: `attachment-${attachment.id}`,

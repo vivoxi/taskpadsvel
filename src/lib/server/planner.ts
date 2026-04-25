@@ -1177,9 +1177,10 @@ export async function searchPlannerData(query: string): Promise<SearchResults> {
       .order('updated_at', { ascending: false })
       .limit(8),
     supabaseAdmin
-      .from('note_blocks')
-      .select('document_id, text, notes_documents!inner(id, title, kind)')
-      .ilike('text', pattern)
+      .from('notes')
+      .select('id, title, plain_text')
+      .is('deleted_at', null)
+      .ilike('plain_text', pattern)
       .order('updated_at', { ascending: false })
       .limit(6),
     supabaseAdmin
@@ -1197,12 +1198,12 @@ export async function searchPlannerData(query: string): Promise<SearchResults> {
     tasks: (tasksQuery.data ?? []).map((row) => normalizeTask(row as TaskInstance)),
     notes: (notesQuery.data ?? []).map((row) => {
       const noteRow = row as Record<string, unknown>;
-      const document = (noteRow.notes_documents ?? {}) as Record<string, unknown>;
+      const plainText = String(noteRow.plain_text ?? '');
       return {
-        id: String(document.id ?? ''),
-        title: String(document.title ?? 'Untitled'),
-        snippet: String(noteRow.text ?? '').slice(0, 120),
-        kind: document.kind === 'one-time' ? 'one-time' : 'note'
+        id: String(noteRow.id ?? ''),
+        title: String(noteRow.title ?? 'Untitled'),
+        snippet: plainText.slice(0, 120),
+        kind: 'note'
       };
     }),
     attachments: (attachmentsQuery.data ?? []) as SearchResults['attachments']

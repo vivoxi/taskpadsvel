@@ -1,3 +1,4 @@
+import { rm } from 'fs/promises';
 import path from 'path';
 import { NotesValidationError } from '$lib/notes-v2/validation';
 import { NORMALIZED_UPLOADS_DIR, UPLOADS_DIR, normalizeRelativeUploadPath } from '$lib/server/uploads';
@@ -8,4 +9,8 @@ export function resolveNoteUploadAbsolutePath(relativePath: string): string {
     throw new NotesValidationError('Invalid upload path', 400);
   }
   return absolutePath;
+}
+
+export async function deleteNoteUploadFile(relativePath: string): Promise<void> {
+  await rm(resolveNoteUploadAbsolutePath(relativePath), { force: true });
 }

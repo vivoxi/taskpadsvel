@@ -24,6 +24,10 @@ function getMimeType(ext: string): string {
 
 export const handle: Handle = async ({ event, resolve }) => {
   if (event.url.pathname.startsWith('/uploads/')) {
+    if (event.url.pathname.startsWith('/uploads/notes/')) {
+      return new Response('Not found', { status: 404 });
+    }
+
     const relativePath = event.url.pathname.slice('/uploads/'.length);
     const filePath = path.resolve(UPLOADS_DIR, relativePath);
 
