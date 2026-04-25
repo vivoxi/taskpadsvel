@@ -3,17 +3,23 @@
   import { onMount, tick } from 'svelte';
   import {
     Bold,
+    CheckSquare,
     Code,
     Copy,
     GripVertical,
     Heading1,
+    Heading2,
+    Heading3,
     ImageIcon,
     Italic,
     Link2,
+    List,
+    ListOrdered,
     ListChecks,
     Minus,
     Pilcrow,
     Plus,
+    Quote,
     Strikethrough,
     Trash2,
     Underline
@@ -65,15 +71,25 @@
     query: string;
     selected: number;
   } | null>(null);
+  let commitTimer: ReturnType<typeof setTimeout> | null = null;
 
   const flipDurationMs = $derived(compact ? 120 : 160);
   const availableTypes = $derived(
     [...new Set(insertOrder)].filter(
       (type): type is PlannerBlock['type'] =>
         type === 'heading' ||
+        type === 'heading1' ||
+        type === 'heading2' ||
+        type === 'heading3' ||
         type === 'paragraph' ||
         type === 'checklist' ||
+        type === 'todo' ||
+        type === 'bullet_list' ||
+        type === 'numbered_list' ||
+        type === 'code' ||
+        type === 'quote' ||
         type === 'divider' ||
+        type === 'file' ||
         (type === 'image' && !!onUploadImage)
     )
   );
@@ -129,19 +145,46 @@
 
   async function commit(next = localBlocks) {
     if (!onCommit) return;
+    if (commitTimer) {
+      clearTimeout(commitTimer);
+      commitTimer = null;
+    }
     isSaving = true;
     try { await onCommit(cloneBlocks(next)); } finally { isSaving = false; }
+  }
+
+  function scheduleCommit(next = localBlocks) {
+    if (!notesMode || !onCommit) return;
+    if (commitTimer) clearTimeout(commitTimer);
+    commitTimer = setTimeout(() => {
+      void commit(next);
+    }, 800);
+  }
+
+  function isHeading(type: PlannerBlock['type']): boolean {
+    return type === 'heading' || type === 'heading1' || type === 'heading2' || type === 'heading3';
+  }
+
+  function headingLevel(block: PlannerBlock): number {
+    if (block.type === 'heading1') return 1;
+    if (block.type === 'heading3') return 3;
+    return block.level ?? 2;
+  }
+
+  function isTodo(type: PlannerBlock['type']): boolean {
+    return type === 'checklist' || type === 'todo';
   }
 
   function setText(index: number, text: string) {
     const next = cloneBlocks(localBlocks);
     next[index] = { ...next[index], text };
     updateBlock(next);
+    scheduleCommit(next);
   }
 
   function toggleChecklist(index: number) {
     const t = localBlocks[index];
-    if (!t || t.type !== 'checklist') return;
+    if (!t || !isTodo(t.type)) return;
     const next = cloneBlocks(localBlocks);
     next[index] = { ...t, checked: !t.checked };
     updateBlock(next);
@@ -215,7 +258,13 @@
       return;
     }
     const next = cloneBlocks(localBlocks);
-    next[index] = { ...target, type, text: '', checked: type === 'checklist' ? false : null, level: type === 'heading' ? 2 : null };
+    next[index] = {
+      ...target,
+      type,
+      text: '',
+      checked: isTodo(type) ? false : null,
+      level: type === 'heading1' ? 1 : type === 'heading3' ? 3 : isHeading(type) ? 2 : null
+    };
     updateBlock(next);
     slashMenu = null;
     void commit(next);
@@ -263,7 +312,7 @@
   }
 
   function getFollowupType(type: PlannerBlock['type']): PlannerBlock['type'] {
-    if (type === 'heading' || type === 'divider') return 'paragraph';
+    if (isHeading(type) || type === 'divider' || type === 'code' || type === 'quote') return 'paragraph';
     return type;
   }
 
@@ -389,11 +438,34 @@
     insertBlockAt(index, getFollowupType(block.type));
   }
 
+  function markdownTypeFor(value: string): PlannerBlock['type'] | null {
+    const text = value.trim();
+    if (text === '#') return 'heading1';
+    if (text === '##') return 'heading2';
+    if (text === '###') return 'heading3';
+    if (text === '-' || text === '*') return 'bullet_list';
+    if (text === '1.') return 'numbered_list';
+    if (text === '>' ) return 'quote';
+    if (text === '[]' || text === '[ ]') return 'todo';
+    if (text === '```') return 'code';
+    if (text === '---') return 'divider';
+    return null;
+  }
+
   function handleKeydown(
     index: number,
     block: PlannerBlock,
     event: KeyboardEvent & { currentTarget: HTMLElement }
   ) {
+    if (block.type === 'paragraph' && event.key === ' ') {
+      const nextType = markdownTypeFor(event.currentTarget.textContent ?? '');
+      if (nextType) {
+        event.preventDefault();
+        replaceBlockType(index, nextType);
+        return;
+      }
+    }
+
     // ── Formatting shortcuts (paragraph only) ────────────────────────────────
     if (block.type === 'paragraph') {
       const mod = event.metaKey || event.ctrlKey;
@@ -436,11 +508,31 @@
   }
 
   function labelFor(type: PlannerBlock['type']): string {
-    if (type === 'heading') return 'Heading';
+    if (type === 'heading' || type === 'heading2') return 'Heading 2';
+    if (type === 'heading1') return 'Heading 1';
+    if (type === 'heading3') return 'Heading 3';
     if (type === 'paragraph') return 'Text';
-    if (type === 'checklist') return 'Checklist';
+    if (type === 'checklist' || type === 'todo') return 'Todo';
+    if (type === 'bullet_list') return 'Bullet list';
+    if (type === 'numbered_list') return 'Numbered list';
+    if (type === 'code') return 'Code';
+    if (type === 'quote') return 'Quote';
     if (type === 'image') return 'Image';
+    if (type === 'file') return 'File';
     return 'Divider';
+  }
+
+  function shortcutFor(type: PlannerBlock['type']): string {
+    if (type === 'heading1') return '#';
+    if (type === 'heading2' || type === 'heading') return '##';
+    if (type === 'heading3') return '###';
+    if (type === 'bullet_list') return '-';
+    if (type === 'numbered_list') return '1.';
+    if (type === 'todo' || type === 'checklist') return '[]';
+    if (type === 'code') return '```';
+    if (type === 'quote') return '>';
+    if (type === 'divider') return '---';
+    return `/${labelFor(type).toLowerCase().split(' ')[0]}`;
   }
 
   function toggleBlockMenu(blockId: string) {
@@ -524,7 +616,7 @@
 
         <!-- Block content -->
         <div class="min-w-0 flex-1">
-          {#if block.type === 'heading'}
+          {#if isHeading(block.type)}
             <input
               data-block-input={block.id}
               value={block.text}
@@ -533,8 +625,16 @@
               onpaste={(e) => onInputPaste(index, e)}
               onfocus={() => { activeBlockId = block.id; editingBlockId = block.id; }}
               onblur={() => { editingBlockId = null; void commit(); }}
-              placeholder="Heading"
-              class={`w-full border-none bg-transparent p-0 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${notesMode ? 'text-2xl font-semibold leading-tight tracking-normal' : compact ? 'text-base font-semibold tracking-[-0.03em]' : 'text-xl font-semibold tracking-[-0.03em]'}`}
+              placeholder={labelFor(block.type)}
+              class={`w-full border-none bg-transparent p-0 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${
+                notesMode
+                  ? headingLevel(block) === 1
+                    ? 'text-3xl font-bold leading-tight tracking-normal'
+                    : headingLevel(block) === 3
+                      ? 'text-xl font-semibold leading-snug tracking-normal'
+                      : 'text-2xl font-semibold leading-tight tracking-normal'
+                  : compact ? 'text-base font-semibold tracking-[-0.03em]' : 'text-xl font-semibold tracking-[-0.03em]'
+              }`}
             />
 
           {:else if block.type === 'paragraph'}
@@ -564,7 +664,63 @@
               {/if}
             </div>
 
-          {:else if block.type === 'checklist'}
+          {:else if block.type === 'bullet_list' || block.type === 'numbered_list'}
+            <label class="flex items-start gap-3">
+              <span class="mt-1.5 w-5 shrink-0 text-right text-sm text-[var(--text-faint)]">
+                {block.type === 'bullet_list' ? '•' : `${index + 1}.`}
+              </span>
+              <input
+                data-block-input={block.id}
+                value={block.text}
+                oninput={(e) => { setText(index, e.currentTarget.value); openSlashMenu(index, e.currentTarget.value); }}
+                onkeydown={(e) => handleKeydown(index, block, e)}
+                onpaste={(e) => onInputPaste(index, e)}
+                onfocus={() => { activeBlockId = block.id; editingBlockId = block.id; }}
+                onblur={() => { editingBlockId = null; void commit(); }}
+                placeholder="List item"
+                class={`w-full border-none bg-transparent p-0 outline-none placeholder:text-[var(--text-faint)] ${notesMode ? 'text-base leading-7' : 'text-sm'} text-[var(--text-secondary)]`}
+              />
+            </label>
+
+          {:else if block.type === 'quote'}
+            <div class="border-l-2 border-[var(--accent)] pl-3">
+              <input
+                data-block-input={block.id}
+                value={block.text}
+                oninput={(e) => { setText(index, e.currentTarget.value); openSlashMenu(index, e.currentTarget.value); }}
+                onkeydown={(e) => handleKeydown(index, block, e)}
+                onpaste={(e) => onInputPaste(index, e)}
+                onfocus={() => { activeBlockId = block.id; editingBlockId = block.id; }}
+                onblur={() => { editingBlockId = null; void commit(); }}
+                placeholder="Quote"
+                class={`w-full border-none bg-transparent p-0 italic outline-none placeholder:text-[var(--text-faint)] ${notesMode ? 'text-base leading-7' : 'text-sm'} text-[var(--text-secondary)]`}
+              />
+            </div>
+
+          {:else if block.type === 'code'}
+            <div class="group/code relative rounded-md border border-[var(--border)] bg-[var(--panel-soft)] p-3">
+              <textarea
+                data-block-input={block.id}
+                value={block.text}
+                rows="3"
+                spellcheck="false"
+                oninput={(e) => { setText(index, e.currentTarget.value); openSlashMenu(index, e.currentTarget.value); }}
+                onkeydown={(e) => handleKeydown(index, block, e)}
+                onfocus={() => { activeBlockId = block.id; editingBlockId = block.id; }}
+                onblur={() => { editingBlockId = null; void commit(); }}
+                placeholder="Code"
+                class="min-h-20 w-full resize-y border-none bg-transparent p-0 font-mono text-sm leading-6 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+              ></textarea>
+              <button
+                type="button"
+                onclick={() => navigator.clipboard?.writeText(block.text)}
+                class="absolute right-2 top-2 rounded border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-[10px] text-[var(--text-muted)] opacity-0 transition hover:text-[var(--text-primary)] group-hover/code:opacity-100"
+              >
+                Copy
+              </button>
+            </div>
+
+          {:else if isTodo(block.type)}
             <label class="flex items-start gap-3">
               <input
                 type="checkbox"
@@ -641,12 +797,20 @@
                       class={`flex w-full items-center gap-2 rounded-[12px] px-3 py-1.5 text-left text-sm transition-colors ${si === slashMenu.selected ? 'bg-[var(--panel-soft)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--panel-soft)]/70'}`}
                       onmousedown={(e) => { e.preventDefault(); replaceBlockType(index, type); }}
                     >
-                      {#if type === 'heading'}<Heading1 size={13} />
+                      {#if type === 'heading1'}<Heading1 size={13} />
+                      {:else if type === 'heading' || type === 'heading2'}<Heading2 size={13} />
+                      {:else if type === 'heading3'}<Heading3 size={13} />
                       {:else if type === 'paragraph'}<Pilcrow size={13} />
+                      {:else if type === 'bullet_list'}<List size={13} />
+                      {:else if type === 'numbered_list'}<ListOrdered size={13} />
+                      {:else if type === 'todo' || type === 'checklist'}<CheckSquare size={13} />
+                      {:else if type === 'code'}<Code size={13} />
+                      {:else if type === 'quote'}<Quote size={13} />
                       {:else if type === 'divider'}<Minus size={13} />
                       {:else if type === 'image'}<ImageIcon size={13} />
                       {:else}<ListChecks size={13} />{/if}
-                      {labelFor(type)}
+                      <span class="min-w-0 flex-1">{labelFor(type)}</span>
+                      <span class="text-[10px] text-[var(--text-faint)]">{shortcutFor(type)}</span>
                     </button>
                   {/each}
                 </div>
@@ -666,8 +830,15 @@
                   class="flex w-full items-center gap-2 rounded-[12px] px-3 py-1.5 text-left text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
                   onmousedown={(e) => { e.preventDefault(); replaceBlockType(index, type); blockMenuId = null; }}
                 >
-                  {#if type === 'heading'}<Heading1 size={13} />
+                  {#if type === 'heading1'}<Heading1 size={13} />
+                  {:else if type === 'heading' || type === 'heading2'}<Heading2 size={13} />
+                  {:else if type === 'heading3'}<Heading3 size={13} />
                   {:else if type === 'paragraph'}<Pilcrow size={13} />
+                  {:else if type === 'bullet_list'}<List size={13} />
+                  {:else if type === 'numbered_list'}<ListOrdered size={13} />
+                  {:else if type === 'todo' || type === 'checklist'}<CheckSquare size={13} />
+                  {:else if type === 'code'}<Code size={13} />
+                  {:else if type === 'quote'}<Quote size={13} />
                   {:else if type === 'divider'}<Minus size={13} />
                   {:else if type === 'image'}<ImageIcon size={13} />
                   {:else}<ListChecks size={13} />{/if}
@@ -745,6 +916,14 @@
       <button type="button" title="Underline (⌘U)" onclick={() => applyFmt('underline')}
         class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
         <Underline size={12} />
+      </button>
+      <button type="button" title="Strikethrough" onclick={() => applyFmt('strikeThrough')}
+        class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
+        <Strikethrough size={12} />
+      </button>
+      <button type="button" title="Inline code" onclick={applyCode}
+        class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">
+        <Code size={12} />
       </button>
       <button type="button" title="Link (⌘K)" onclick={applyLink}
         class="rounded px-1.5 py-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]">

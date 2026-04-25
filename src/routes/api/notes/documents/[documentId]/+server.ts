@@ -18,13 +18,33 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   if (!documentId) throw error(400, 'Document id is required');
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const title = typeof body?.title === 'string' ? body.title.trim() : '';
-  if (!title) throw error(400, 'Title is required');
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-  const updates: Record<string, unknown> = { title, updated_at: new Date().toISOString() };
+  if ('title' in (body ?? {})) {
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    if (!title) throw error(400, 'Title is required');
+    updates.title = title;
+  }
   if ('category_id' in (body ?? {})) {
     updates.category_id = typeof body?.category_id === 'string' ? body.category_id : null;
   }
+  if ('starred' in (body ?? {})) {
+    updates.starred = body?.starred === true;
+  }
+  if ('deleted_at' in (body ?? {})) {
+    updates.deleted_at = typeof body?.deleted_at === 'string' ? body.deleted_at : null;
+  }
+  if (typeof body?.sort_order === 'number') {
+    updates.sort_order = body.sort_order;
+  }
+  if ('cover_image_url' in (body ?? {})) {
+    updates.cover_image_url = typeof body?.cover_image_url === 'string' ? body.cover_image_url : null;
+  }
+  if (typeof body?.word_count === 'number') {
+    updates.word_count = body.word_count;
+  }
+
+  if (Object.keys(updates).length === 1) throw error(400, 'No valid fields to update');
 
   const { error: updateError } = await supabaseAdmin
     .from('notes_documents')
@@ -36,12 +56,28 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   return json({ success: true });
 };
 
-export const DELETE: RequestHandler = async ({ params, request }) => {
+export const DELETE: RequestHandler = async ({ params, request, url }) => {
   const authError = requireAuth(request);
   if (authError) return authError;
 
   const documentId = params.documentId;
   if (!documentId) throw error(400, 'Document id is required');
+
+  const permanent = url.searchParams.get('permanent') === '1';
+  if (!permanent) {
+    const { error: softDeleteError } = await supabaseAdmin
+      .from('notes_documents')
+      .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', documentId);
+
+    if (!softDeleteError) {
+      return json({ success: true, deleted: 'soft' });
+    }
+
+    if (!softDeleteError.message.toLowerCase().includes('deleted_at')) {
+      throw error(500, softDeleteError.message);
+    }
+  }
 
   const { data: attachments, error: attachmentsError } = await supabaseAdmin
     .from('task_attachments')

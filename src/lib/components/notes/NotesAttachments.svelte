@@ -17,6 +17,10 @@
   } = $props();
 
   const total = $derived(images.length + files.length);
+
+  function href(attachment: TaskAttachment): string {
+    return attachment.public_url ?? attachmentHref(attachment.file_path);
+  }
 </script>
 
 {#if total > 0}
@@ -30,9 +34,9 @@
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {#each images as attachment (attachment.id)}
           <figure class="group/image overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)]">
-            <a href={attachmentHref(attachment.file_path)} target="_blank" rel="noreferrer" class="block">
+            <a href={href(attachment)} target="_blank" rel="noreferrer" class="block">
               <img
-                src={attachmentHref(attachment.file_path)}
+                src={href(attachment)}
                 alt={attachment.file_name}
                 class="aspect-[4/3] w-full object-cover"
                 loading="lazy"
@@ -41,7 +45,7 @@
             <figcaption class="flex items-center gap-2 px-3 py-2 text-xs text-[var(--text-muted)]">
               <ImageIcon size={13} class="shrink-0 text-[var(--accent)]" />
               <a
-                href={attachmentHref(attachment.file_path)}
+                href={href(attachment)}
                 target="_blank"
                 rel="noreferrer"
                 class="min-w-0 flex-1 truncate text-[var(--text-secondary)] no-underline hover:text-[var(--text-primary)]"
@@ -71,7 +75,7 @@
             </div>
             <div class="min-w-0 flex-1">
               <a
-                href={attachmentHref(attachment.file_path)}
+                href={href(attachment)}
                 target="_blank"
                 rel="noreferrer"
                 class="block truncate text-sm font-semibold text-[var(--text-secondary)] no-underline hover:text-[var(--text-primary)]"
@@ -79,7 +83,7 @@
                 {attachment.file_name}
               </a>
               <p class="mt-0.5 truncate text-[11px] text-[var(--text-muted)]">
-                {attachment.mime_type ?? 'dosya'} · {relDateShort(attachment.created_at)}
+                {attachment.mime_type ?? 'dosya'}{attachment.file_size ? ` · ${Math.ceil(attachment.file_size / 1024)} KB` : ''} · {relDateShort(attachment.created_at)}
               </p>
             </div>
             <button

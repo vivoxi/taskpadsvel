@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Hash, Trash2, Upload } from 'lucide-svelte';
+  import { AlertCircle, Check, Hash, Loader2, RotateCcw, Trash2, Upload } from 'lucide-svelte';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import NotesAttachments from '$lib/components/notes/NotesAttachments.svelte';
   import type { NoteCategory, NotesDocument, PlannerBlock, TaskAttachment } from '$lib/planner/types';
@@ -11,8 +11,11 @@
     images,
     files,
     uploading,
+    uploadProgress,
     categoryPickerOpen,
+    saveState,
     wordCount,
+    readTime,
     doneCount,
     checklistCount,
     categoryPath,
@@ -25,8 +28,11 @@
     onToggleCategoryPicker,
     onCloseCategoryPicker,
     onUploadAttachment,
+    onUploadFiles,
     onDeleteAttachment,
     onDeleteDocument,
+    onRestoreDocument,
+    onDeleteDocumentPermanently,
     onSaveBlocks,
     onUploadInlineImage
   }: {
@@ -36,8 +42,11 @@
     images: TaskAttachment[];
     files: TaskAttachment[];
     uploading: boolean;
+    uploadProgress: number;
     categoryPickerOpen: boolean;
+    saveState: 'saved' | 'saving' | 'error';
     wordCount: number;
+    readTime: number;
     doneCount: number;
     checklistCount: number;
     categoryPath: (categoryId: string | null) => string;
@@ -50,14 +59,18 @@
     onToggleCategoryPicker: () => void;
     onCloseCategoryPicker: () => void;
     onUploadAttachment: (event: Event) => void | Promise<void>;
+    onUploadFiles: (files: File[]) => void | Promise<void>;
     onDeleteAttachment: (attachmentId: string) => void | Promise<void>;
     onDeleteDocument: () => void | Promise<void>;
+    onRestoreDocument: () => void | Promise<void>;
+    onDeleteDocumentPermanently: () => void | Promise<void>;
     onSaveBlocks: (blocks: PlannerBlock[]) => void | Promise<void>;
     onUploadInlineImage: (file: File) => Promise<string>;
   } = $props();
 
   let titleDraft = $state('');
   let titleInput: HTMLTextAreaElement | null = null;
+  let dragActive = $state(false);
 
   $effect(() => {
     titleDraft = currentTitle;
@@ -72,9 +85,34 @@
   $effect(() => {
     syncTitleHeight();
   });
+
+  function filesFromDrag(event: DragEvent): File[] {
+    return Array.from(event.dataTransfer?.files ?? []);
+  }
 </script>
 
-<section class="group/editor relative flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
+<section
+  aria-label="Note editor"
+  class="group/editor relative flex min-w-0 flex-1 flex-col bg-[var(--bg)]"
+  ondragover={(event) => {
+    event.preventDefault();
+    if (filesFromDrag(event).length > 0) dragActive = true;
+  }}
+  ondragleave={(event) => {
+    if (event.currentTarget === event.target) dragActive = false;
+  }}
+  ondrop={(event) => {
+    event.preventDefault();
+    dragActive = false;
+    void onUploadFiles(filesFromDrag(event));
+  }}
+>
+  {#if dragActive}
+    <div class="pointer-events-none absolute inset-3 z-30 flex items-center justify-center rounded-md border border-dashed border-[var(--accent)] bg-[var(--accent-subtle)] text-sm font-medium text-[var(--accent)]">
+      Drop files to attach
+    </div>
+  {/if}
+
   <div class="border-b border-[var(--border)] bg-[var(--panel-soft)] px-4 py-3 md:hidden">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0">
@@ -83,8 +121,8 @@
       </div>
       <label class="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]">
         <Upload size={13} />
-        {uploading ? '...' : 'Ekle'}
-        <input type="file" class="hidden" disabled={uploading} onchange={onUploadAttachment} />
+        {uploading ? `${uploadProgress || 0}%` : 'Ekle'}
+        <input type="file" multiple class="hidden" disabled={uploading} onchange={onUploadAttachment} />
       </label>
     </div>
   </div>
@@ -92,8 +130,8 @@
   <div class="absolute right-4 top-4 z-20 hidden items-center gap-1 opacity-0 transition-opacity md:flex md:group-hover/editor:opacity-100">
     <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]">
       <Upload size={13} />
-      {uploading ? 'Yukleniyor' : 'Ekle'}
-      <input type="file" class="hidden" disabled={uploading} onchange={onUploadAttachment} />
+      {uploading ? `${uploadProgress || 0}%` : 'Ekle'}
+      <input type="file" multiple class="hidden" disabled={uploading} onchange={onUploadAttachment} />
     </label>
     <button
       type="button"
@@ -107,6 +145,22 @@
 
   <div class="flex-1 overflow-y-auto">
     <article class="mx-auto max-w-[800px] px-5 pb-24 pt-10 md:px-12 md:pt-16">
+      {#if selectedDoc?.deleted_at}
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-3 text-sm text-[var(--text-secondary)]">
+          <span>This note is in Trash.</span>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick={onRestoreDocument} class="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+              <RotateCcw size={13} />
+              Restore
+            </button>
+            <button type="button" onclick={onDeleteDocumentPermanently} class="inline-flex items-center gap-1 rounded-md border border-[var(--danger)] px-2.5 py-1.5 text-xs text-[var(--danger)]">
+              <Trash2 size={13} />
+              Delete forever
+            </button>
+          </div>
+        </div>
+      {/if}
+
       <textarea
         bind:this={titleInput}
         bind:value={titleDraft}
@@ -176,7 +230,7 @@
           {blocks}
           notesMode
           emptyLabel="Yazmaya basla..."
-          insertOrder={['heading', 'paragraph', 'checklist', 'divider', 'image']}
+          insertOrder={['heading1', 'heading2', 'heading3', 'paragraph', 'bullet_list', 'numbered_list', 'todo', 'code', 'quote', 'divider', 'image']}
           onCommit={onSaveBlocks}
           onUploadImage={onUploadInlineImage}
         />
@@ -186,10 +240,20 @@
 
   {#if selectedDoc}
     <div class="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--panel-soft)] px-5 py-2 text-[11px] text-[var(--text-muted)] md:px-8">
+      {#if saveState === 'saving'}
+        <span class="inline-flex items-center gap-1 text-[var(--accent)]"><Loader2 size={12} /> Saving...</span>
+      {:else if saveState === 'error'}
+        <span class="inline-flex items-center gap-1 text-[var(--danger)]"><AlertCircle size={12} /> Failed to save</span>
+      {:else}
+        <span class="inline-flex items-center gap-1"><Check size={12} /> Saved</span>
+      {/if}
+      <span class="text-[var(--text-faint)]">·</span>
       <span>{relDate(selectedDoc.updated_at)}</span>
       {#if wordCount > 0}
         <span class="text-[var(--text-faint)]">·</span>
         <span>{wordCount} kelime</span>
+        <span class="text-[var(--text-faint)]">·</span>
+        <span>~{readTime} min read</span>
       {/if}
       {#if checklistCount > 0}
         <span class="text-[var(--text-faint)]">·</span>

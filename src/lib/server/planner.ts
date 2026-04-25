@@ -48,6 +48,7 @@ import {
   weekLabel
 } from '$lib/planner/dates';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { getPublicUploadPath } from '$lib/server/uploads';
 
 const SETTINGS_DEFAULTS: Omit<PlannerSettings, 'id' | 'created_at' | 'updated_at'> = {
   label: 'Primary schedule',
@@ -152,13 +153,16 @@ function normalizeScheduleBlock(row: Partial<ScheduleBlock>): ScheduleBlock {
 }
 
 function normalizeAttachment(row: Partial<TaskAttachment>): TaskAttachment {
+  const publicUrl = row.public_url ?? (row.file_path ? getPublicUploadPath(row.file_path) : null);
   return {
     id: row.id ?? crypto.randomUUID(),
     task_instance_id: row.task_instance_id ?? null,
     note_document_id: row.note_document_id ?? null,
     file_name: row.file_name ?? 'attachment',
     file_path: row.file_path ?? '',
+    file_size: typeof row.file_size === 'number' ? row.file_size : null,
     mime_type: row.mime_type ?? null,
+    public_url: publicUrl,
     created_at: row.created_at ?? new Date().toISOString()
   };
 }
@@ -170,9 +174,28 @@ function normalizeDocument(row: Partial<NotesDocument & { category_id?: string |
     slug: row.slug ?? null,
     kind: row.kind === 'one-time' ? 'one-time' : 'note',
     category_id: row.category_id ?? null,
+    starred: row.starred === true,
+    deleted_at: row.deleted_at ?? null,
+    sort_order: typeof row.sort_order === 'number' ? row.sort_order : 0,
+    cover_image_url: row.cover_image_url ?? null,
+    word_count: typeof row.word_count === 'number' ? row.word_count : 0,
+    preview: row.preview ?? '',
+    attachment_count: typeof row.attachment_count === 'number' ? row.attachment_count : 0,
+    first_image_url: row.first_image_url ?? null,
     created_at: row.created_at ?? new Date().toISOString(),
     updated_at: row.updated_at ?? new Date().toISOString()
   };
+}
+
+function plainText(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 async function getNoteCategories(): Promise<NoteCategory[]> {
@@ -188,7 +211,8 @@ async function getNoteCategories(): Promise<NoteCategory[]> {
     id: String(row.id),
     name: String(row.name),
     parent_id: row.parent_id ? String(row.parent_id) : null,
-    color: row.color ? String(row.color) : null,
+    color: row.color ? String(row.color) : '#6366f1',
+    icon: null,
     sort_order: Number(row.sort_order ?? 0)
   }));
 }
@@ -780,8 +804,68 @@ async function getDocumentWorkspaceData(
     documents = [normalizeDocument(seedDocument)];
   }
 
+  const documentIds = documents.map((document) => document.id);
+  const previewByDocument = new Map<string, string>();
+  const firstImageByDocument = new Map<string, string>();
+  const attachmentCountByDocument = new Map<string, number>();
+
+  if (documentIds.length > 0) {
+    const [{ data: previewRows, error: previewError }, { data: attachmentRows, error: attachmentSummaryError }] =
+      await Promise.all([
+        supabaseAdmin
+          .from('note_blocks')
+          .select('document_id, type, text, sort_order')
+          .in('document_id', documentIds)
+          .order('sort_order', { ascending: true }),
+        kind === 'note'
+          ? supabaseAdmin
+              .from('task_attachments')
+              .select('note_document_id, file_path, mime_type')
+              .in('note_document_id', documentIds)
+              .order('created_at', { ascending: true })
+          : Promise.resolve({ data: [], error: null })
+      ]);
+
+    if (previewError) throw error(500, previewError.message);
+    if (attachmentSummaryError) throw error(500, attachmentSummaryError.message);
+
+    for (const row of previewRows ?? []) {
+      const documentId = String(row.document_id);
+      const blockType = String(row.type);
+      const text = typeof row.text === 'string' ? row.text : '';
+      if (!previewByDocument.has(documentId)) {
+        const preview = plainText(text);
+        if (preview && blockType !== 'divider' && blockType !== 'image') {
+          previewByDocument.set(documentId, preview.slice(0, 180));
+        }
+      }
+      if (!firstImageByDocument.has(documentId) && blockType === 'image' && text) {
+        firstImageByDocument.set(documentId, text);
+      }
+    }
+
+    for (const row of attachmentRows ?? []) {
+      const documentId = String(row.note_document_id ?? '');
+      if (!documentId) continue;
+      attachmentCountByDocument.set(documentId, (attachmentCountByDocument.get(documentId) ?? 0) + 1);
+      if (!firstImageByDocument.has(documentId) && String(row.mime_type ?? '').startsWith('image/') && row.file_path) {
+        firstImageByDocument.set(documentId, getPublicUploadPath(String(row.file_path)));
+      }
+    }
+
+    documents = documents.map((document) => ({
+      ...document,
+      preview: previewByDocument.get(document.id) ?? '',
+      attachment_count: attachmentCountByDocument.get(document.id) ?? 0,
+      first_image_url: document.cover_image_url ?? firstImageByDocument.get(document.id) ?? null
+    }));
+  }
+
+  const selectableDocuments = documents.filter((document) => !document.deleted_at);
   const selectedId =
-    documents.find((document) => document.id === selectedDocumentId)?.id ?? documents[0]?.id;
+    documents.find((document) => document.id === selectedDocumentId)?.id ??
+    selectableDocuments[0]?.id ??
+    documents[0]?.id;
 
   if (!selectedId) {
     throw error(500, 'Unable to select a note document');

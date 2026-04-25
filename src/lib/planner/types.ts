@@ -14,7 +14,21 @@ export type TaskInstanceStatus = 'open' | 'done';
 export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskSourceType = 'weekly' | 'monthly' | 'inbox';
 export type SyncState = 'saving' | 'synced' | 'offline' | 'conflict';
-export type BlockType = 'heading' | 'paragraph' | 'checklist' | 'divider' | 'image';
+export type BlockType =
+  | 'heading'
+  | 'heading1'
+  | 'heading2'
+  | 'heading3'
+  | 'paragraph'
+  | 'checklist'
+  | 'todo'
+  | 'bullet_list'
+  | 'numbered_list'
+  | 'code'
+  | 'quote'
+  | 'divider'
+  | 'image'
+  | 'file';
 export type DocumentKind = 'note' | 'one-time';
 
 export type PlannerBlock = {
@@ -84,6 +98,7 @@ export type NoteCategory = {
   name: string;
   parent_id: string | null;
   color: string | null;
+  icon: string | null;
   sort_order: number;
 };
 
@@ -93,6 +108,14 @@ export type NotesDocument = {
   slug: string | null;
   kind: DocumentKind;
   category_id: string | null;
+  starred: boolean;
+  deleted_at: string | null;
+  sort_order: number;
+  cover_image_url: string | null;
+  word_count: number;
+  preview: string;
+  attachment_count: number;
+  first_image_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -115,7 +138,9 @@ export type TaskAttachment = {
   note_document_id: string | null;
   file_name: string;
   file_path: string;
+  file_size: number | null;
   mime_type: string | null;
+  public_url: string | null;
   created_at: string;
 };
 

@@ -22,6 +22,9 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   if ('color' in (body ?? {})) {
     updates.color = typeof body?.color === 'string' ? body.color : null;
   }
+  if ('icon' in (body ?? {})) {
+    updates.icon = typeof body?.icon === 'string' ? body.icon : null;
+  }
   if (typeof body?.sort_order === 'number') {
     updates.sort_order = body.sort_order;
   }
