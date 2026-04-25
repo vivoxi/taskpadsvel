@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertCircle, Check, Hash, Loader2, RotateCcw, Trash2, Upload } from 'lucide-svelte';
+  import { AlertCircle, Check, Folder, Loader2, RotateCcw, Trash2, Upload } from 'lucide-svelte';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
   import NotesAttachments from '$lib/components/notes/NotesAttachments.svelte';
   import type { NoteCategory, NotesDocument, PlannerBlock, TaskAttachment } from '$lib/planner/types';
@@ -189,8 +189,8 @@
           onclick={onToggleCategoryPicker}
           class="inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-subtle)] px-2.5 py-1 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--panel-soft)]"
         >
-          <Hash size={12} />
-          {categoryPath(selectedDoc?.category_id ?? null).slice(1)}
+          <Folder size={12} />
+          {categoryPath(selectedDoc?.category_id ?? null)}
         </button>
         {#if selectedDoc}
           <span class="text-xs text-[var(--text-muted)]">{relDate(selectedDoc.updated_at)}</span>
@@ -203,14 +203,14 @@
               type="button"
               onclick={() => onSetDocumentCategory(null)}
               class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--panel-soft)] {!selectedDoc?.category_id ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
-            ><Hash size={12} /> untagged</button>
+            ><Folder size={12} /> No Folder</button>
             {#each categories as category (category.id)}
               <button
                 type="button"
                 onclick={() => onSetDocumentCategory(category.id)}
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--panel-soft)] {selectedDoc?.category_id === category.id ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
                 style={category.parent_id ? 'padding-left: 1.75rem' : ''}
-              ><Hash size={12} /> {categoryPath(category.id).slice(1)}</button>
+              ><Folder size={12} /> {categoryPath(category.id)}</button>
             {/each}
           </div>
         {/if}

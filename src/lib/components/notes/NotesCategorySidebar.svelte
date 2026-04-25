@@ -99,8 +99,8 @@
   <div class="border-b border-[var(--border)] px-4 py-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)]">Kategoriler</p>
-        <p class="mt-1 text-xs text-[var(--text-muted)]">{categories.length} klasor</p>
+        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)]">Folders</p>
+        <p class="mt-1 text-xs text-[var(--text-muted)]">{categories.length} folders</p>
       </div>
       <Folder size={17} class="mt-0.5 shrink-0 text-[var(--accent)]" />
     </div>
@@ -112,17 +112,17 @@
         class="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
       >
         <Plus size={13} />
-        Kategori
+        Folder
       </button>
       <button
         type="button"
         disabled={!canCreateSubcategory}
         onclick={() => selectedCategoryId && onCreateCategory(selectedCategoryId)}
-        title={canCreateSubcategory ? 'Secili ana kategoriye alt kategori ekle' : 'Once ana kategori sec'}
+        title={canCreateSubcategory ? 'Add subfolder to selected folder' : 'Select a top-level folder first'}
         class="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-transparent px-2 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
       >
         <FolderPlus size={13} />
-        Alt
+        Sub
       </button>
     </div>
   </div>
@@ -160,7 +160,7 @@
               type="button"
               onclick={() => onToggleCategory(category.id)}
               class="shrink-0 rounded p-1 text-[var(--text-faint)] transition hover:text-[var(--text-secondary)] {expandedCategories.has(category.id) ? 'rotate-90' : ''}"
-              aria-label="Alt kategorileri ac"
+              aria-label="Toggle subfolders"
             >
               <ChevronRight size={13} />
             </button>
@@ -191,17 +191,17 @@
           {/if}
 
           <div class="hidden shrink-0 items-center gap-0.5 group-hover/category:flex">
-            <button type="button" onclick={() => onCreateCategory(category.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--accent)]" aria-label="Alt kategori ekle"><Plus size={11} /></button>
-            <button type="button" onclick={() => onStartRename(category)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--text-secondary)]" aria-label="Yeniden adlandir"><Pencil size={10} /></button>
-            <button type="button" onclick={() => (colorMenuId = colorMenuId === category.id ? null : category.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--accent)]" aria-label="Renk sec"><MoreHorizontal size={11} /></button>
-            <button type="button" onclick={() => onDeleteCategory(category.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--danger)]" aria-label="Sil"><Trash2 size={10} /></button>
+            <button type="button" onclick={() => onCreateCategory(category.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--accent)]" aria-label="Add subfolder"><Plus size={11} /></button>
+            <button type="button" onclick={() => onStartRename(category)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--text-secondary)]" aria-label="Rename folder"><Pencil size={10} /></button>
+            <button type="button" onclick={() => (colorMenuId = colorMenuId === category.id ? null : category.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--accent)]" aria-label="Pick color"><MoreHorizontal size={11} /></button>
+            <button type="button" onclick={() => onDeleteCategory(category.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--danger)]" aria-label="Delete folder"><Trash2 size={10} /></button>
           </div>
 
           {#if colorMenuId === category.id}
             <div class="absolute right-1 top-8 z-30 w-44 rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 shadow-[var(--shadow-card)]">
               <div class="mb-2 flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
                 <Palette size={12} />
-                Renk
+                Color
               </div>
               <div class="grid grid-cols-4 gap-1.5">
                 {#each COLOR_PRESETS as color (color)}
@@ -209,7 +209,7 @@
                     type="button"
                     class="h-7 rounded-md border border-[var(--border)]"
                     style={`background:${color}`}
-                    aria-label={`Renk ${color}`}
+                    aria-label={`Color ${color}`}
                     onclick={() => {
                       colorMenuId = null;
                       void onUpdateCategoryColor(category.id, color);
@@ -250,16 +250,16 @@
                 {/if}
 
                 <div class="hidden shrink-0 items-center gap-0.5 group-hover/subcategory:flex">
-                  <button type="button" onclick={() => onStartRename(child)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--text-secondary)]" aria-label="Yeniden adlandir"><Pencil size={10} /></button>
-                  <button type="button" onclick={() => (colorMenuId = colorMenuId === child.id ? null : child.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--accent)]" aria-label="Renk sec"><MoreHorizontal size={11} /></button>
-                  <button type="button" onclick={() => onDeleteCategory(child.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--danger)]" aria-label="Sil"><Trash2 size={10} /></button>
+                  <button type="button" onclick={() => onStartRename(child)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--text-secondary)]" aria-label="Rename folder"><Pencil size={10} /></button>
+                  <button type="button" onclick={() => (colorMenuId = colorMenuId === child.id ? null : child.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--accent)]" aria-label="Pick color"><MoreHorizontal size={11} /></button>
+                  <button type="button" onclick={() => onDeleteCategory(child.id)} class="rounded p-1 text-[var(--text-faint)] hover:text-[var(--danger)]" aria-label="Delete folder"><Trash2 size={10} /></button>
                 </div>
 
                 {#if colorMenuId === child.id}
                   <div class="absolute right-1 top-8 z-30 w-44 rounded-md border border-[var(--border)] bg-[var(--panel)] p-2 shadow-[var(--shadow-card)]">
                     <div class="mb-2 flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
                       <Palette size={12} />
-                      Renk
+                      Color
                     </div>
                     <div class="grid grid-cols-4 gap-1.5">
                       {#each COLOR_PRESETS as color (color)}
@@ -267,7 +267,7 @@
                           type="button"
                           class="h-7 rounded-md border border-[var(--border)]"
                           style={`background:${color}`}
-                          aria-label={`Renk ${color}`}
+                          aria-label={`Color ${color}`}
                           onclick={() => {
                             colorMenuId = null;
                             void onUpdateCategoryColor(child.id, color);
@@ -289,7 +289,7 @@
     <button
       type="button"
       class="absolute right-[-3px] top-0 hidden h-full w-1 cursor-col-resize bg-transparent hover:bg-[var(--accent-subtle)] md:block"
-      aria-label="Sidebar genisligini ayarla"
+      aria-label="Resize sidebar"
       onpointerdown={onStartSidebarResize}
     ></button>
   {/if}

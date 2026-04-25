@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { Keyboard, Menu, Plus, Search, X } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
@@ -129,6 +129,65 @@
   });
 
   const categoryById = $derived.by(() => new Map(data.view.categories.map((category) => [category.id, category])));
+
+  function patchDocument(documentId: string, patch: Partial<NotesDocument>) {
+    data = {
+      ...data,
+      view: {
+        ...data.view,
+        documents: data.view.documents.map((document) =>
+          document.id === documentId ? { ...document, ...patch } : document
+        )
+      }
+    };
+  }
+
+  function removeDocument(documentId: string) {
+    data = {
+      ...data,
+      view: {
+        ...data.view,
+        documents: data.view.documents.filter((document) => document.id !== documentId)
+      }
+    };
+  }
+
+  function patchCategory(categoryId: string, patch: Partial<NoteCategory>) {
+    data = {
+      ...data,
+      view: {
+        ...data.view,
+        categories: data.view.categories.map((category) =>
+          category.id === categoryId ? { ...category, ...patch } : category
+        )
+      }
+    };
+  }
+
+  function removeCategory(categoryId: string) {
+    data = {
+      ...data,
+      view: {
+        ...data.view,
+        categories: data.view.categories
+          .filter((category) => category.id !== categoryId)
+          .map((category) => category.parent_id === categoryId ? { ...category, parent_id: null } : category),
+        documents: data.view.documents.map((document) =>
+          document.category_id === categoryId ? { ...document, category_id: null } : document
+        )
+      }
+    };
+  }
+
+  function setSelectedAttachments(attachments: TaskAttachment[]) {
+    data = {
+      ...data,
+      view: {
+        ...data.view,
+        attachments
+      }
+    };
+  }
 
   function isDeleted(document: NotesDocument): boolean {
     return Boolean(document.deleted_at);
@@ -276,14 +335,14 @@
   }
 
   function categoryPath(categoryId: string | null): string {
-    if (!categoryId) return '#untagged';
+    if (!categoryId) return 'No Folder';
 
     const category = categoryById.get(categoryId);
-    if (!category) return '#untagged';
-    if (!category.parent_id) return `#${category.name}`;
+    if (!category) return 'No Folder';
+    if (!category.parent_id) return category.name;
 
     const parent = categoryById.get(category.parent_id);
-    return parent ? `#${parent.name}/${category.name}` : `#${category.name}`;
+    return parent ? `${parent.name} / ${category.name}` : category.name;
   }
 
   function categoryCount(categoryId: string): number {
@@ -292,7 +351,7 @@
   }
 
   function nextCategoryName(parentId: string | null): string {
-    const base = parentId ? 'Yeni alt kategori' : 'Yeni kategori';
+    const base = parentId ? 'New Subfolder' : 'New Folder';
     const siblings = data.view.categories.filter((category) => category.parent_id === parentId);
     const names = new Set(siblings.map((category) => category.name));
     if (!names.has(base)) return base;
@@ -405,12 +464,16 @@
   }
 
   async function renameDocument(title: string) {
+    if (!selectedDoc) return;
+    const nextTitle = title.trim() || 'Untitled';
+    const previousTitle = selectedDoc.title;
+    patchDocument(selectedDoc.id, { title: nextTitle });
     try {
       await apiSendJson(`/api/notes/documents/${data.view.selectedDocumentId}`, 'PATCH', {
-        title: title.trim() || 'Untitled'
+        title: nextTitle
       });
-      await invalidateAll();
     } catch (error) {
+      patchDocument(selectedDoc.id, { title: previousTitle });
       toast.error(error instanceof Error ? error.message : 'Failed to rename note');
     }
   }
@@ -418,22 +481,32 @@
   async function deleteDocument() {
     if (!selectedDoc) return;
     if (!await showConfirm('This note will move to Trash. You can restore it later.', 'Delete note?')) return;
+    const deletedAt = new Date().toISOString();
+    const documentId = selectedDoc.id;
+    patchDocument(documentId, { deleted_at: deletedAt });
+    selectedSmartFolder = 'trash';
+    selectedCategoryId = null;
+    mobilePane = 'notes';
     try {
-      await apiFetch(`/api/notes/documents/${data.view.selectedDocumentId}`, { method: 'DELETE' });
-      await goto('/notes');
+      await apiFetch(`/api/notes/documents/${documentId}`, { method: 'DELETE' });
+      toast.success('Moved to Trash');
     } catch (error) {
+      patchDocument(documentId, { deleted_at: null });
       toast.error(error instanceof Error ? error.message : 'Failed to delete note');
     }
   }
 
   async function restoreDocument() {
     if (!selectedDoc) return;
+    const documentId = selectedDoc.id;
+    const previousDeletedAt = selectedDoc.deleted_at;
+    patchDocument(documentId, { deleted_at: null });
+    selectedSmartFolder = 'all';
     try {
-      await apiSendJson(`/api/notes/documents/${selectedDoc.id}`, 'PATCH', { deleted_at: null });
-      selectedSmartFolder = 'all';
-      await invalidateAll();
+      await apiSendJson(`/api/notes/documents/${documentId}`, 'PATCH', { deleted_at: null });
       toast.success('Note restored');
     } catch (error) {
+      patchDocument(documentId, { deleted_at: previousDeletedAt });
       toast.error(error instanceof Error ? error.message : 'Failed to restore note');
     }
   }
@@ -441,19 +514,23 @@
   async function deleteDocumentPermanently() {
     if (!selectedDoc) return;
     if (!await showConfirm('This permanently deletes the note and attachments.', 'Delete forever?')) return;
+    const previousDocuments = data.view.documents;
+    removeDocument(selectedDoc.id);
     try {
       await apiFetch(`/api/notes/documents/${selectedDoc.id}?permanent=1`, { method: 'DELETE' });
       await goto('/notes');
     } catch (error) {
+      data = { ...data, view: { ...data.view, documents: previousDocuments } };
       toast.error(error instanceof Error ? error.message : 'Failed to delete note');
     }
   }
 
   async function toggleStar(document: NotesDocument) {
+    patchDocument(document.id, { starred: !document.starred });
     try {
       await apiSendJson(`/api/notes/documents/${document.id}`, 'PATCH', { starred: !document.starred });
-      await invalidateAll();
     } catch (error) {
+      patchDocument(document.id, { starred: document.starred });
       toast.error(error instanceof Error ? error.message : 'Failed to update star');
     }
   }
@@ -481,6 +558,13 @@
         parent_id: parentId,
         color: '#6366f1'
       });
+      data = {
+        ...data,
+        view: {
+          ...data.view,
+          categories: [...data.view.categories, category]
+        }
+      };
       if (parentId) {
         const next = new Set(expandedCategories);
         next.add(parentId);
@@ -490,75 +574,96 @@
       renamingCategoryId = category.id;
       renameValue = category.name;
       mobilePane = 'categories';
-      await invalidateAll();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create category');
+      toast.error(error instanceof Error ? error.message : 'Failed to create folder');
     }
   }
 
   async function commitRename(categoryId: string) {
     const trimmed = renameValue.trim();
+    const previous = data.view.categories.find((category) => category.id === categoryId)?.name ?? '';
     renamingCategoryId = null;
     renameValue = '';
     if (!trimmed) return;
 
+    patchCategory(categoryId, { name: trimmed });
     try {
       await apiSendJson(`/api/notes/categories/${categoryId}`, 'PATCH', { name: trimmed });
-      await invalidateAll();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to rename category');
+      patchCategory(categoryId, { name: previous });
+      toast.error(error instanceof Error ? error.message : 'Failed to rename folder');
     }
   }
 
   async function deleteCategory(categoryId: string) {
-    if (!await showConfirm('Bu kategori silinecek. Icindeki notlar kategorisiz olacak.', 'Kategori silinsin mi?')) return;
+    if (!await showConfirm('This folder will be deleted. Notes inside it will move to No Folder.', 'Delete folder?')) return;
+    const previousCategories = data.view.categories;
+    const previousDocuments = data.view.documents;
+    removeCategory(categoryId);
     try {
       await apiFetch(`/api/notes/categories/${categoryId}`, { method: 'DELETE' });
       if (selectedCategoryId === categoryId) selectedCategoryId = null;
-      await invalidateAll();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete category');
+      data = { ...data, view: { ...data.view, categories: previousCategories, documents: previousDocuments } };
+      toast.error(error instanceof Error ? error.message : 'Failed to delete folder');
     }
   }
 
   async function updateCategoryColor(categoryId: string, color: string) {
+    const previous = data.view.categories.find((category) => category.id === categoryId)?.color ?? null;
+    patchCategory(categoryId, { color });
     try {
       await apiSendJson(`/api/notes/categories/${categoryId}`, 'PATCH', { color });
-      await invalidateAll();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update category color');
+      patchCategory(categoryId, { color: previous });
+      toast.error(error instanceof Error ? error.message : 'Failed to update folder color');
     }
   }
 
   async function setDocumentCategory(categoryId: string | null) {
     categoryPickerOpen = false;
     if (!selectedDoc || categoryId === selectedDoc.category_id) return;
+    const documentId = selectedDoc.id;
+    const previousCategoryId = selectedDoc.category_id;
+    patchDocument(documentId, { category_id: categoryId });
     try {
-      await apiSendJson(`/api/notes/documents/${data.view.selectedDocumentId}`, 'PATCH', {
+      await apiSendJson(`/api/notes/documents/${documentId}`, 'PATCH', {
         category_id: categoryId
       });
-      await invalidateAll();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update category');
+      patchDocument(documentId, { category_id: previousCategoryId });
+      toast.error(error instanceof Error ? error.message : 'Failed to move note');
     }
   }
 
   async function uploadFiles(files: File[]) {
-    if (!files.length) return;
+    if (!files.length || !selectedDoc) return;
     uploading = true;
     uploadProgress = 0;
+    const uploaded: TaskAttachment[] = [];
     try {
       for (const [index, file] of files.entries()) {
         const form = new FormData();
         form.set('file', file);
-        await apiFetch(`/api/notes/documents/${data.view.selectedDocumentId}/attachments`, {
+        const response = await apiFetch(`/api/notes/documents/${selectedDoc.id}/attachments`, {
           method: 'POST',
           body: form
         });
+        uploaded.push(await response.json() as TaskAttachment);
         uploadProgress = Math.round(((index + 1) / files.length) * 100);
       }
+      setSelectedAttachments([...uploaded, ...data.view.attachments]);
+      patchDocument(selectedDoc.id, {
+        attachment_count: (selectedDoc.attachment_count ?? 0) + uploaded.length,
+        first_image_url:
+          selectedDoc.first_image_url ??
+          uploaded.find((attachment) => isImage(attachment))?.public_url ??
+          (uploaded.find((attachment) => isImage(attachment))?.file_path
+            ? attachmentHref(uploaded.find((attachment) => isImage(attachment))!.file_path)
+            : null) ??
+          null
+      });
       toast.success(files.length === 1 ? 'File attached' : `${files.length} files attached`);
-      await invalidateAll();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Upload failed');
     } finally {
@@ -576,14 +681,23 @@
 
   async function deleteAttachment(attachmentId: string) {
     if (!await showConfirm('This attachment will be permanently removed.', 'Remove attachment?')) return;
+    const previousAttachments = data.view.attachments;
+    const removed = previousAttachments.find((attachment) => attachment.id === attachmentId);
+    setSelectedAttachments(previousAttachments.filter((attachment) => attachment.id !== attachmentId));
+    if (selectedDoc) {
+      patchDocument(selectedDoc.id, {
+        attachment_count: Math.max(0, (selectedDoc.attachment_count ?? previousAttachments.length) - 1),
+        first_image_url: removed && isImage(removed) ? null : selectedDoc.first_image_url
+      });
+    }
     try {
       await apiFetch(
         `/api/notes/documents/${data.view.selectedDocumentId}/attachments/${attachmentId}`,
         { method: 'DELETE' }
       );
       toast('Attachment removed');
-      await invalidateAll();
     } catch (error) {
+      setSelectedAttachments(previousAttachments);
       toast.error(error instanceof Error ? error.message : 'Failed to remove attachment');
     }
   }
@@ -693,7 +807,7 @@
       class="inline-flex items-center justify-center gap-1 rounded-md border border-[var(--border)] px-3 py-2 text-xs {mobilePane === 'categories' ? 'bg-[var(--panel)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}"
     >
       {#if mobilePane === 'categories'}<X size={14} />{:else}<Menu size={14} />{/if}
-      Kategori
+      Folder
     </button>
     <button
       type="button"
@@ -786,7 +900,7 @@
         <select bind:value={searchCategoryId} class="rounded-md border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-1 text-[var(--text-secondary)] outline-none">
           <option value="">All categories</option>
           {#each data.view.categories as category (category.id)}
-            <option value={category.id}>{categoryPath(category.id).slice(1)}</option>
+            <option value={category.id}>{categoryPath(category.id)}</option>
           {/each}
         </select>
         <select bind:value={searchDateRange} class="rounded-md border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-1 text-[var(--text-secondary)] outline-none">
@@ -854,7 +968,7 @@
         <div class="flex justify-between gap-4"><span>Search</span><kbd>Cmd K</kbd></div>
         <div class="flex justify-between gap-4"><span>Delete note</span><kbd>Cmd Delete</kbd></div>
         <div class="flex justify-between gap-4"><span>Star note</span><kbd>Cmd Shift S</kbd></div>
-        <div class="flex justify-between gap-4"><span>Move category</span><kbd>Cmd Shift M</kbd></div>
+        <div class="flex justify-between gap-4"><span>Move folder</span><kbd>Cmd Shift M</kbd></div>
       </div>
     </div>
   </div>

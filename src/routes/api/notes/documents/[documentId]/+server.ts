@@ -74,9 +74,11 @@ export const DELETE: RequestHandler = async ({ params, request, url }) => {
       return json({ success: true, deleted: 'soft' });
     }
 
-    if (!softDeleteError.message.toLowerCase().includes('deleted_at')) {
-      throw error(500, softDeleteError.message);
+    if (softDeleteError.message.toLowerCase().includes('deleted_at')) {
+      throw error(409, 'Trash is not available until the notes migration is applied.');
     }
+
+    throw error(500, softDeleteError.message);
   }
 
   const { data: attachments, error: attachmentsError } = await supabaseAdmin
