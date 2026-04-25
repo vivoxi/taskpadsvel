@@ -32,6 +32,7 @@
     sourceKey,
     blocks,
     compact = false,
+    notesMode = false,
     emptyLabel = 'Start writing',
     emptyBlockType = 'paragraph',
     insertOrder = ['heading', 'paragraph', 'checklist', 'divider'],
@@ -41,6 +42,7 @@
     sourceKey: string;
     blocks: PlannerBlock[];
     compact?: boolean;
+    notesMode?: boolean;
     emptyLabel?: string;
     emptyBlockType?: PlannerBlock['type'];
     insertOrder?: PlannerBlock['type'][];
@@ -461,7 +463,7 @@
   });
 </script>
 
-<div bind:this={editorElement} class={`space-y-2 ${compact ? '' : 'space-y-3'}`}>
+<div bind:this={editorElement} class={notesMode ? 'space-y-1.5' : `space-y-2 ${compact ? '' : 'space-y-3'}`}>
   {#if blockMenuId !== null}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -471,7 +473,9 @@
   {#if localBlocks.length === 0}
     <button
       type="button"
-      class="w-full rounded-[18px] border border-dashed border-[var(--border-strong)] bg-[var(--panel-soft)] px-4 py-4 text-left text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-primary)]"
+      class={notesMode
+        ? 'w-full rounded-md border border-dashed border-[var(--border)] bg-transparent px-3 py-3 text-left text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]'
+        : 'w-full rounded-[18px] border border-dashed border-[var(--border-strong)] bg-[var(--panel-soft)] px-4 py-4 text-left text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-primary)]'}
       onclick={() => addBlock(emptyBlockType)}
     >
       {emptyLabel}
@@ -482,15 +486,15 @@
     use:dragHandleZone={{ items: localBlocks, flipDurationMs, dragDisabled: localBlocks.length < 2 }}
     onconsider={handleDndReorder}
     onfinalize={finalizeDndReorder}
-    class="space-y-2"
+    class={notesMode ? 'space-y-1.5' : 'space-y-2'}
   >
     {#each localBlocks as block, index (block.id)}
       <div
         animate:flip={{ duration: flipDurationMs }}
-        class={`group relative flex items-start gap-2 rounded-[16px] px-1.5 py-1.5 transition-colors ${
-          activeBlockId === block.id
-            ? 'bg-[var(--panel-soft)] ring-1 ring-[var(--border-strong)]'
-            : 'hover:bg-[var(--panel-soft)]/70 focus-within:bg-[var(--panel-soft)]/70'
+        class={`group relative flex items-start gap-2 transition-colors ${
+          notesMode
+            ? `rounded-md px-0 py-1 ${activeBlockId === block.id ? 'bg-transparent' : 'hover:bg-transparent focus-within:bg-transparent'}`
+            : `rounded-[16px] px-1.5 py-1.5 ${activeBlockId === block.id ? 'bg-[var(--panel-soft)] ring-1 ring-[var(--border-strong)]' : 'hover:bg-[var(--panel-soft)]/70 focus-within:bg-[var(--panel-soft)]/70'}`
         }`}
       >
         <!-- Left: add + drag handle -->
@@ -530,7 +534,7 @@
               onfocus={() => { activeBlockId = block.id; editingBlockId = block.id; }}
               onblur={() => { editingBlockId = null; void commit(); }}
               placeholder="Heading"
-              class={`w-full border-none bg-transparent p-0 tracking-[-0.03em] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${compact ? 'text-base font-semibold' : 'text-xl font-semibold'}`}
+              class={`w-full border-none bg-transparent p-0 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] ${notesMode ? 'text-2xl font-semibold leading-tight tracking-normal' : compact ? 'text-base font-semibold tracking-[-0.03em]' : 'text-xl font-semibold tracking-[-0.03em]'}`}
             />
 
           {:else if block.type === 'paragraph'}
@@ -549,10 +553,14 @@
                 onpaste={(e) => onParaPaste(e as ClipboardEvent & { currentTarget: HTMLDivElement })}
                 onfocus={() => { activeBlockId = block.id; editingBlockId = block.id; }}
                 onblur={() => { editingBlockId = null; void commit(); }}
-                class="min-h-[1.5rem] w-full cursor-text whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-secondary)] outline-none"
+                class={notesMode
+                  ? 'min-h-[1.75rem] w-full cursor-text whitespace-pre-wrap break-words text-base leading-7 text-[var(--text-secondary)] outline-none'
+                  : 'min-h-[1.5rem] w-full cursor-text whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-secondary)] outline-none'}
               ></div>
               {#if !block.text}
-                <span class="pointer-events-none absolute left-0 top-0 text-sm leading-6 text-[var(--text-faint)]">Write a note</span>
+                <span class={notesMode
+                  ? 'pointer-events-none absolute left-0 top-0 text-base leading-7 text-[var(--text-faint)]'
+                  : 'pointer-events-none absolute left-0 top-0 text-sm leading-6 text-[var(--text-faint)]'}>Write a note</span>
               {/if}
             </div>
 
@@ -573,7 +581,7 @@
                 onfocus={() => { activeBlockId = block.id; editingBlockId = block.id; }}
                 onblur={() => { editingBlockId = null; void commit(); }}
                 placeholder="Checklist item"
-                class={`w-full border-none bg-transparent p-0 text-sm outline-none placeholder:text-[var(--text-faint)] ${block.checked ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-secondary)]'}`}
+                class={`w-full border-none bg-transparent p-0 outline-none placeholder:text-[var(--text-faint)] ${notesMode ? 'text-base leading-7' : 'text-sm'} ${block.checked ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-secondary)]'}`}
               />
             </label>
 
