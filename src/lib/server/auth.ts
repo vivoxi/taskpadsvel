@@ -1,4 +1,7 @@
+import type { Cookies } from '@sveltejs/kit';
+
 export const SESSION_COOKIE_NAME = 'taskpad-session';
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 /**
  * Parses the Cookie header from a Request into a key→value map.
@@ -38,6 +41,20 @@ export function requireAuth(request: Request): Response | null {
 export function canReadPage(event: { request: Request; authRequired: boolean }): boolean {
   if (!event.authRequired) return true;
   return _requireAuth(event.request, process.env.ADMIN_PASSWORD) === null;
+}
+
+export function applySessionCookie(cookies: Pick<Cookies, 'set'>, password: string): void {
+  cookies.set(SESSION_COOKIE_NAME, password, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SESSION_MAX_AGE_SECONDS
+  });
+}
+
+export function clearSessionCookie(cookies: Pick<Cookies, 'delete'>): void {
+  cookies.delete(SESSION_COOKIE_NAME, { path: '/' });
 }
 
 export function isAdminAuthRequired(input: {

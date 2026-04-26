@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { resetScheduleForMonth } from '$lib/server/planner';
 import { requireAuth } from '$lib/server/auth';
+import { assertMonthKey } from '$lib/server/planner/validation';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -8,9 +9,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (authError) return authError;
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const monthKey = typeof body?.monthKey === 'string' ? body.monthKey : '';
-
-  if (!monthKey) throw error(400, 'monthKey is required');
+  const monthKey = assertMonthKey(body?.monthKey);
 
   return json(await resetScheduleForMonth(monthKey));
 };

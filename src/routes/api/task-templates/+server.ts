@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { DAY_NAMES, type DayName, type TaskPriority, type TaskSourceType } from '$lib/planner/types';
 import { syncTemplateHoursDefault, syncTemplatePlanningDefaults, syncTemplateSnapshot } from '$lib/server/planner';
 import { requireAuth } from '$lib/server/auth';
+import { parseNullableHours } from '$lib/server/planner/validation';
 import { supabaseAdmin } from '$lib/server/supabase';
 import type { RequestHandler } from './$types';
 
@@ -98,10 +99,10 @@ export const PATCH: RequestHandler = async ({ request }) => {
   if (typeof body.title === 'string') updates.title = body.title.trim();
   if (typeof body.active === 'boolean') updates.active = body.active;
   if (typeof body.estimate_hours === 'number' || body.estimate_hours === null) {
-    updates.estimate_hours = body.estimate_hours;
+    updates.estimate_hours = parseNullableHours(body.estimate_hours, 'estimate_hours');
   }
   if (typeof body.hours_needed_default === 'number' || body.hours_needed_default === null) {
-    updates.hours_needed_default = body.hours_needed_default;
+    updates.hours_needed_default = parseNullableHours(body.hours_needed_default, 'hours_needed_default');
   }
   if ('priority_default' in body) {
     const priority = parsePriority(body.priority_default);

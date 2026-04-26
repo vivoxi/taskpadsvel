@@ -41,6 +41,17 @@ Legacy routes redirect to the current surfaces:
 - Weekly notes are block-based per weekday and can be edited on any week.
 - General notes use Notes v2: server-only Supabase access, simple JSON blocks, category folders, and disk-backed attachments behind auth.
 - One-Time is still live, but it is intended to fold into Notes over time instead of remaining a long-term primary surface.
+- Legacy `notes_documents` and `note_blocks` are still present for migration/export work only; Notes v2 is the primary notes system.
+
+## Legacy Inventory
+
+See [docs/legacy-systems.md](/Users/mbtkimya/Documents/taskpad%20svelte%20v2/docs/legacy-systems.md) for the current compatibility map and migration direction for:
+
+- `notes_documents`
+- `note_blocks`
+- `/api/notes/documents/*`
+- `/one-time`
+- legacy `task_attachments.note_document_id`
 
 ## Development
 
@@ -63,11 +74,11 @@ Copy `.env.example` to `.env` and fill the required values.
 
 Required app values:
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
 - `ADMIN_PASSWORD`
+- `PUBLIC_AUTH_REQUIRED`
+- `UPLOADS_DIR`
 
 ## Supabase Notes
 

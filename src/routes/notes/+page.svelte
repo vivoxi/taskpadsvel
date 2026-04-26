@@ -23,7 +23,6 @@
   import PanelCard from '$lib/components/ui/PanelCard.svelte';
   import { buildPlainText, buildPreview, createNoteBlock } from '$lib/notes-v2/validation';
   import { showConfirm } from '$lib/stores/confirm';
-  import { authPassword } from '$lib/stores';
   import type { NoteCategory, NoteDetail, NoteSummary } from '$lib/notes-v2/types';
   import type { PageData } from './$types';
 
@@ -53,22 +52,13 @@
   let saveInFlight = false;
   let queuedSave = false;
   let initializedFromLoad = false;
-  let initialLocked = false;
 
   $effect(() => {
     if (initializedFromLoad) return;
     categories = [...data.categories];
     notes = [...data.notes];
     selectedNote = data.selectedNote;
-    initialLocked = data.locked;
     initializedFromLoad = true;
-  });
-
-  $effect(() => {
-    if (!$authPassword || !initialLocked || !initializedFromLoad) return;
-    initialLocked = false;
-    void refreshCategories();
-    void refreshNotes({ keepSelection: true });
   });
 
   const sortedNotes = $derived.by(() =>

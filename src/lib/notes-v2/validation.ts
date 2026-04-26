@@ -10,6 +10,7 @@ export const MAX_NOTE_TITLE_LENGTH = 200;
 export const MAX_BLOCK_TEXT_LENGTH = 5000;
 export const MAX_NOTE_BLOCKS = 300;
 export const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_FILE_NAME_LENGTH = 180;
 
 export const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   'image/jpeg',
@@ -227,6 +228,12 @@ export function buildNoteUploadPath(noteId: string, fileName: string, uploadId: 
 }
 
 export function validateAttachmentFile(file: File) {
+  if (file.name.trim().length === 0) {
+    throw new NotesValidationError('File name is required');
+  }
+  if (file.name.length > MAX_UPLOAD_FILE_NAME_LENGTH) {
+    throw new NotesValidationError(`File name cannot exceed ${MAX_UPLOAD_FILE_NAME_LENGTH} characters`);
+  }
   if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.type)) {
     throw new NotesValidationError('Unsupported file type');
   }

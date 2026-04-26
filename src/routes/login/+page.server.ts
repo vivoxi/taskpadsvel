@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { SESSION_COOKIE_NAME, isAdminAuthRequired } from '$lib/server/auth';
+import { SESSION_COOKIE_NAME, applySessionCookie, isAdminAuthRequired } from '$lib/server/auth';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ cookies, url }) => {
@@ -29,13 +29,7 @@ export const actions: Actions = {
       return fail(400, { error: 'Invalid password' });
     }
 
-    cookies.set(SESSION_COOKIE_NAME, password, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7 // 7 days
-    });
+    applySessionCookie(cookies, password);
 
     const next = url.searchParams.get('next') ?? '/dashboard';
     const safeNext = next.startsWith('/') ? next : '/dashboard';

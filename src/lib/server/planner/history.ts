@@ -1,0 +1,1 @@
+export { getHistoryViewData } from './legacy';

@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { requireAuth } from '$lib/server/auth';
+import { validateUploadFileNameLength } from '$lib/server/planner/validation';
 import { supabaseAdmin } from '$lib/server/supabase';
 import {
   UPLOADS_DIR,
@@ -52,6 +53,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
     throw error(400, 'File is empty');
   }
 
+  validateUploadFileNameLength(file.name || 'attachment');
+
   const relativeDir = path.posix.join('notes', documentId);
   const absoluteDir = path.join(UPLOADS_DIR, relativeDir);
   await mkdir(absoluteDir, { recursive: true });
@@ -77,7 +80,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
     .select('*')
     .single();
 
-  if (insertError) throw error(500, insertError.message);
+  if (insertError) {
+    const { rm } = await import('fs/promises');
+    await rm(absolutePath, { force: true });
+    throw error(500, insertError.message);
+  }
 
   const { error: docUpdateError } = await supabaseAdmin
     .from('notes_documents')

@@ -7,6 +7,7 @@ import {
   createNoteBlock,
   validateCategoryInput,
   validateCreateNoteInput,
+  validateAttachmentFile,
   validateNoteBlocks,
   validateUpdateNoteInput
 } from '../src/lib/notes-v2/validation';
@@ -75,6 +76,12 @@ describe('notes v2 validation', () => {
 
     expect(relativePath).toBe('notes/123e4567-e89b-12d3-a456-426614174000/file-1.pdf');
     expect(() => resolveNoteUploadAbsolutePath('../secret.txt')).toThrow(NotesValidationError);
+  });
+
+  it('rejects attachment file names that are too long', () => {
+    const longName = `${'a'.repeat(181)}.pdf`;
+    const file = new File(['hello'], longName, { type: 'application/pdf' });
+    expect(() => validateAttachmentFile(file)).toThrow(NotesValidationError);
   });
 
   it('validates category input', () => {

@@ -6,9 +6,8 @@
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
-  import { initializeTheme, themeMode } from '$lib/stores/theme';
+  import { initializeTheme } from '$lib/stores/theme';
   import { commandPaletteOpen } from '$lib/stores';
-  import { clientAuthenticated } from '$lib/client/api';
   import type { LayoutData } from './$types';
   import type { Snippet } from 'svelte';
 
@@ -19,9 +18,6 @@
     initializeTheme();
   });
 
-  $effect(() => {
-    clientAuthenticated.set(data.authenticated);
-  });
 </script>
 
 <svelte:head>

@@ -1,16 +1,5 @@
-import { env } from '$env/dynamic/public';
 import { browser } from '$app/environment';
-import { get, writable } from 'svelte/store';
-import { authPassword, syncState } from '$lib/stores';
-
-export const clientAuthRequired = env.PUBLIC_AUTH_REQUIRED === 'true';
-
-/**
- * Set to true by the layout once the server confirms the user is authenticated
- * (via session cookie). Used by canUseClientApi so cookie-auth users are not
- * incorrectly blocked from making API mutations.
- */
-export const clientAuthenticated = writable(false);
+import { syncState } from '$lib/stores';
 
 export class ApiError extends Error {
   status: number;
@@ -22,19 +11,8 @@ export class ApiError extends Error {
   }
 }
 
-export function canUseClientApi(password: string): boolean {
-  return !clientAuthRequired || password.trim().length > 0 || get(clientAuthenticated);
-}
-
 function buildHeaders(input?: HeadersInit): Headers {
-  const headers = new Headers(input);
-  const password = get(authPassword).trim();
-
-  if (password) {
-    headers.set('Authorization', `Bearer ${password}`);
-  }
-
-  return headers;
+  return new Headers(input);
 }
 
 async function getErrorMessage(response: Response): Promise<string> {
@@ -65,7 +43,8 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   try {
     response = await fetch(input, {
       ...init,
-      headers
+      headers,
+      credentials: 'same-origin'
     });
   } catch (fetchError) {
     if (browser && isMutation) {

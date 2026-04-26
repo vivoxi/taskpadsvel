@@ -63,5 +63,8 @@
     <Button href="/history" variant="ghost" size="sm" className="w-full justify-start" onclick={onNavigate}>
       History
     </Button>
+    <Button href="/logout" variant="ghost" size="sm" className="w-full justify-start" onclick={onNavigate}>
+      Log out
+    </Button>
   </div>
 </nav>

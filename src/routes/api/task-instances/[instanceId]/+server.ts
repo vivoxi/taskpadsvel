@@ -2,6 +2,13 @@ import { error, json } from '@sveltejs/kit';
 import { DAY_NAMES, type DayName, type TaskInstanceStatus, type TaskPriority } from '$lib/planner/types';
 import { inferWeekIndex } from '$lib/server/planner';
 import { requireAuth } from '$lib/server/auth';
+import {
+  assertMonthKey,
+  assertWeekKey,
+  parseNullableHours,
+  parseNullableIsoDate,
+  parseNullableIsoDateTime
+} from '$lib/server/planner/validation';
 import { supabaseAdmin } from '$lib/server/supabase';
 import type { RequestHandler } from './$types';
 
@@ -25,17 +32,6 @@ function parseStatus(value: unknown): TaskInstanceStatus | null {
 
 function parsePriority(value: unknown): TaskPriority | null {
   return value === 'high' || value === 'medium' || value === 'low' ? value : null;
-}
-
-function parseNullableDate(value: unknown): string | null {
-  if (value === null || value === '') return null;
-  return typeof value === 'string' ? value : null;
-}
-
-function parseNullableNumber(value: unknown): number | null {
-  if (value === null || value === '') return null;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  return null;
 }
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
@@ -66,11 +62,13 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   }
 
   if ('week_key' in body) {
-    updates.week_key = typeof body.week_key === 'string' && body.week_key ? body.week_key : null;
+    updates.week_key =
+      body.week_key === null || body.week_key === '' ? null : assertWeekKey(body.week_key, 'week_key');
   }
 
   if ('month_key' in body && (typeof body.month_key === 'string' || body.month_key === null)) {
-    updates.month_key = body.month_key;
+    updates.month_key =
+      body.month_key === null || body.month_key === '' ? null : assertMonthKey(body.month_key, 'month_key');
   }
 
   if ('priority' in body) {
@@ -80,11 +78,11 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   }
 
   if ('due_date' in body) {
-    updates.due_date = parseNullableDate(body.due_date);
+    updates.due_date = parseNullableIsoDate(body.due_date, 'due_date');
   }
 
   if ('hours_needed' in body) {
-    updates.hours_needed = parseNullableNumber(body.hours_needed);
+    updates.hours_needed = parseNullableHours(body.hours_needed, 'hours_needed');
   }
 
   if ('category' in body) {
@@ -110,7 +108,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   }
 
   if ('archived_at' in body) {
-    updates.archived_at = typeof body.archived_at === 'string' && body.archived_at ? body.archived_at : null;
+    updates.archived_at = parseNullableIsoDateTime(body.archived_at, 'archived_at');
   }
 
   if ('linked_schedule_block_id' in body) {
@@ -121,11 +119,17 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   }
 
   const monthKey =
-    (typeof body.month_key === 'string' ? body.month_key : null) ??
-    (typeof body.existing_month_key === 'string' ? body.existing_month_key : null);
+    ('month_key' in body
+      ? (updates.month_key as string | null | undefined) ?? null
+      : typeof body.existing_month_key === 'string'
+        ? assertMonthKey(body.existing_month_key, 'existing_month_key')
+        : null);
   const weekKey =
-    (typeof updates.week_key === 'string' ? updates.week_key : null) ??
-    (typeof body.existing_week_key === 'string' ? body.existing_week_key : null);
+    ('week_key' in updates
+      ? (updates.week_key as string | null | undefined) ?? null
+      : typeof body.existing_week_key === 'string'
+        ? assertWeekKey(body.existing_week_key, 'existing_week_key')
+        : null);
 
   if ('week_key' in updates || 'month_key' in updates) {
     updates.week_of_month = inferWeekIndex(weekKey, monthKey);

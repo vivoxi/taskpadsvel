@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { _requireAuth } from '../src/lib/server/auth';
+import { SESSION_COOKIE_NAME, _requireAuth } from '../src/lib/server/auth';
 
 /**
  * Tests that the auth guard used by the notes attachment download endpoint
@@ -7,10 +7,13 @@ import { _requireAuth } from '../src/lib/server/auth';
  * requests that are missing or have invalid Bearer tokens.
  */
 describe('notes protected download auth guard', () => {
-  function makeDownloadRequest(authHeader?: string): Request {
+  function makeDownloadRequest(input: { authHeader?: string; cookie?: string } = {}): Request {
     return new Request('http://localhost/api/notes/note-1/attachments/att-1/download', {
       method: 'GET',
-      headers: authHeader ? { Authorization: authHeader } : {}
+      headers: {
+        ...(input.authHeader ? { Authorization: input.authHeader } : {}),
+        ...(input.cookie ? { Cookie: input.cookie } : {})
+      }
     });
   }
 
@@ -23,19 +26,24 @@ describe('notes protected download auth guard', () => {
   });
 
   it('rejects download with a malformed Authorization header', async () => {
-    const request = makeDownloadRequest('Token secret');
+    const request = makeDownloadRequest({ authHeader: 'Token secret' });
     const response = _requireAuth(request, 'secret');
     expect(response?.status).toBe(401);
   });
 
   it('rejects download with an incorrect password', async () => {
-    const request = makeDownloadRequest('Bearer bad-password');
+    const request = makeDownloadRequest({ authHeader: 'Bearer bad-password' });
     const response = _requireAuth(request, 'secret');
     expect(response?.status).toBe(401);
   });
 
   it('allows download with the correct Bearer token', () => {
-    const request = makeDownloadRequest('Bearer secret');
+    const request = makeDownloadRequest({ authHeader: 'Bearer secret' });
+    expect(_requireAuth(request, 'secret')).toBeNull();
+  });
+
+  it('allows download with a valid session cookie', () => {
+    const request = makeDownloadRequest({ cookie: `${SESSION_COOKIE_NAME}=secret` });
     expect(_requireAuth(request, 'secret')).toBeNull();
   });
 
