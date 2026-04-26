@@ -1,8 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import {
-    CalendarDays, Rows3, NotebookPen,
-    CalendarRange
+    CalendarDays, Rows3, NotebookPen
   } from 'lucide-svelte';
 
   let {
@@ -13,8 +12,7 @@
   const nav = [
     { href: '/dashboard', label: 'Calendar', icon: CalendarDays },
     { href: '/week',      label: 'Week',     icon: Rows3        },
-    { href: '/notes',     label: 'Notes',    icon: NotebookPen  },
-    { href: '/planner',   label: 'Planner',  icon: CalendarRange},
+    { href: '/notes',     label: 'Notes',    icon: NotebookPen  }
   ];
 </script>
 

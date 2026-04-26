@@ -1,11 +1,11 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
-  import { ChevronDown, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-svelte';
+  import { ChevronDown, Ellipsis, Plus, RotateCcw, Sparkles } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
   import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
   import { DAY_NAMES, type CapacitySnapshot, type ScheduleHealth, type TaskTemplate } from '$lib/planner/types';
-  import { apiFetch, apiSendJson } from '$lib/client/api';
+  import { apiSendJson } from '$lib/client/api';
   import { showConfirm } from '$lib/stores/confirm';
 
   let {
@@ -30,13 +30,8 @@
   let monthlyWeek = $state('');
   let busyKey = $state<string | null>(null);
   let expandedSection = $state<'weekly' | 'monthly' | null>(null);
-  let initializedSection = false;
-
-  $effect(() => {
-    if (initializedSection) return;
-    expandedSection = compact ? null : 'weekly';
-    initializedSection = true;
-  });
+  let weeklyMoreOptions = $state(false);
+  let monthlyMoreOptions = $state(false);
 
   function templateSort(left: TaskTemplate, right: TaskTemplate) {
     return (
@@ -149,22 +144,6 @@
     }
   }
 
-  async function deleteTemplate(templateId: string) {
-    const confirmed = await showConfirm('This recurring template will be permanently removed.', 'Delete template?');
-    if (!confirmed) return;
-
-    busyKey = templateId;
-    try {
-      await apiFetch(`/api/task-templates/${templateId}`, { method: 'DELETE' });
-      toast.success('Template deleted');
-      await invalidateAll();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete template');
-    } finally {
-      busyKey = null;
-    }
-  }
-
   function toggleSection(section: 'weekly' | 'monthly') {
     expandedSection = expandedSection === section ? null : section;
   }
@@ -203,7 +182,7 @@
       </button>
       <button
         type="button"
-        class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 rounded-md border border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.08)] px-3 py-2 text-xs text-[var(--danger)] transition-colors hover:bg-[rgba(239,68,68,0.14)] disabled:opacity-50"
         onclick={resetSchedule}
         disabled={busyKey === 'reset'}
       >
@@ -238,24 +217,17 @@
               placeholder="Weekly recurring work"
               class="w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
             />
-            <div class="grid grid-cols-[minmax(0,1fr)_96px_120px_auto] gap-2">
-              <input
-                bind:value={weeklyHours}
-                type="number"
-                min="0.25"
-                step="0.25"
-                placeholder="Hours"
-                class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
-              />
-              <select
-                bind:value={weeklyDay}
-                class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="">Any day</option>
-                {#each DAY_NAMES as day}
-                  <option value={day}>{day.slice(0, 3)}</option>
-                {/each}
-              </select>
+            <div class="flex flex-wrap items-center gap-2">
+              {#if !compact}
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 py-2 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+                  onclick={() => (weeklyMoreOptions = !weeklyMoreOptions)}
+                >
+                  <Ellipsis size={12} />
+                  {weeklyMoreOptions ? 'Less options' : 'More options'}
+                </button>
+              {/if}
               <button
                 type="button"
                 class="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
@@ -266,6 +238,27 @@
                 Add
               </button>
             </div>
+            {#if !compact && weeklyMoreOptions}
+              <div class="grid grid-cols-2 gap-2">
+                <input
+                  bind:value={weeklyHours}
+                  type="number"
+                  min="0.25"
+                  step="0.25"
+                  placeholder="Hours"
+                  class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+                />
+                <select
+                  bind:value={weeklyDay}
+                  class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="">Any day</option>
+                  {#each DAY_NAMES as day}
+                    <option value={day}>{day.slice(0, 3)}</option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
           </div>
 
           {#if weeklyTemplates.length === 0}
@@ -291,19 +284,14 @@
                       {/if}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    class="rounded-full p-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)] disabled:opacity-40"
-                    onclick={() => deleteTemplate(template.id)}
-                    disabled={busyKey === template.id}
-                    aria-label="Delete weekly template"
-                  >
-                    <Trash2 size={14} />
-                  </button>
                 </div>
               {/each}
             </div>
           {/if}
+
+          <p class="text-xs text-[var(--text-faint)]">
+            Edit or delete weekly templates in <a class="underline underline-offset-2" href={`/planner?month=${monthKey}`}>Advanced Planner</a>.
+          </p>
         </div>
       {/if}
     </article>
@@ -332,26 +320,17 @@
               placeholder="Monthly recurring work"
               class="w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
             />
-            <div class="grid grid-cols-[minmax(0,1fr)_96px_120px_auto] gap-2">
-              <input
-                bind:value={monthlyHours}
-                type="number"
-                min="0.25"
-                step="0.25"
-                placeholder="Hours"
-                class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
-              />
-              <select
-                bind:value={monthlyWeek}
-                class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="">Any week</option>
-                <option value="1">Week 1</option>
-                <option value="2">Week 2</option>
-                <option value="3">Week 3</option>
-                <option value="4">Week 4</option>
-                <option value="5">Week 5</option>
-              </select>
+            <div class="flex flex-wrap items-center gap-2">
+              {#if !compact}
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 py-2 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+                  onclick={() => (monthlyMoreOptions = !monthlyMoreOptions)}
+                >
+                  <Ellipsis size={12} />
+                  {monthlyMoreOptions ? 'Less options' : 'More options'}
+                </button>
+              {/if}
               <button
                 type="button"
                 class="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
@@ -362,6 +341,29 @@
                 Add
               </button>
             </div>
+            {#if !compact && monthlyMoreOptions}
+              <div class="grid grid-cols-2 gap-2">
+                <input
+                  bind:value={monthlyHours}
+                  type="number"
+                  min="0.25"
+                  step="0.25"
+                  placeholder="Hours"
+                  class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+                />
+                <select
+                  bind:value={monthlyWeek}
+                  class="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="">Any week</option>
+                  <option value="1">Week 1</option>
+                  <option value="2">Week 2</option>
+                  <option value="3">Week 3</option>
+                  <option value="4">Week 4</option>
+                  <option value="5">Week 5</option>
+                </select>
+              </div>
+            {/if}
           </div>
 
           {#if monthlyTemplates.length === 0}
@@ -387,19 +389,14 @@
                       {/if}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    class="rounded-full p-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)] disabled:opacity-40"
-                    onclick={() => deleteTemplate(template.id)}
-                    disabled={busyKey === template.id}
-                    aria-label="Delete monthly template"
-                  >
-                    <Trash2 size={14} />
-                  </button>
                 </div>
               {/each}
             </div>
           {/if}
+
+          <p class="text-xs text-[var(--text-faint)]">
+            Edit or delete monthly templates in <a class="underline underline-offset-2" href={`/planner?month=${monthKey}`}>Advanced Planner</a>.
+          </p>
         </div>
       {/if}
     </article>
