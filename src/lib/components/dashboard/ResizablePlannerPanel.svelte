@@ -150,6 +150,7 @@
         class={`absolute left-0 top-1/2 z-10 h-24 w-3 -translate-x-1/2 -translate-y-1/2 cursor-col-resize rounded-full border border-[var(--border)] bg-[var(--panel)]/95 text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)] ${resizingPlannerPanel ? 'text-[var(--accent)]' : ''}`}
         onmousedown={startPlannerResize}
         aria-label="Resize planner panel"
+        title="Drag to resize planner panel"
       ></button>
     {/if}
 

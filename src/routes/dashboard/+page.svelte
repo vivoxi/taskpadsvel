@@ -15,6 +15,13 @@
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { isSameDay } from 'date-fns';
   import { apiSendJson } from '$lib/client/api';
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import MetricCard from '$lib/components/ui/MetricCard.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import PanelCard from '$lib/components/ui/PanelCard.svelte';
+  import TaskRow from '$lib/components/ui/TaskRow.svelte';
   import { DAY_NAMES, type DayName, type TaskInstance } from '$lib/planner/types';
   import {
     getMonthKey,
@@ -44,6 +51,7 @@
 
   let cells = $state<CalendarCell[]>([]);
   let unassigned = $state<TaskInstance[]>([]);
+  let addingToCellId = $state<string | null>(null);
 
   $effect(() => {
     const { instances, weeks, monthKey } = data.view;
@@ -231,6 +239,32 @@
     }
   }
 
+  async function addTaskToCell(cell: CalendarCell) {
+    addingToCellId = cell.id;
+
+    try {
+      const result = await apiSendJson<{ instance: TaskInstance }>('/api/task-instances', 'POST', {
+        title: 'New task',
+        monthKey: data.view.monthKey,
+        hoursNeeded: null
+      });
+
+      const instance = result.instance;
+      await apiSendJson(`/api/task-instances/${instance.id}`, 'PATCH', {
+        week_key: cell.weekKey,
+        day_name: cell.dayName,
+        existing_month_key: data.view.monthKey,
+        existing_week_key: null
+      });
+
+      await invalidateAll();
+    } catch {
+      toast.error('Failed to add task');
+    } finally {
+      addingToCellId = null;
+    }
+  }
+
   // ── Inline edit ──────────────────────────────────────────────────────────
 
   let editingTaskId = $state<string | null>(null);
@@ -298,42 +332,23 @@
   );
 </script>
 
-<div class="flex h-full flex-col">
-  <!-- ── Header row 1: title + sequential nav ── -->
-  <div
-    class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--panel-soft)] px-6 py-3"
-  >
-    <div class="flex items-baseline gap-3">
-      <h1 class="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
-        {data.view.label}
-      </h1>
-      {#if totalTasks > 0}
-        <span class="text-xs text-[var(--text-faint)]">{doneTasks}/{totalTasks} done</span>
-      {/if}
-    </div>
+<svelte:head>
+  <title>Calendar · Taskpad</title>
+</svelte:head>
 
-    <div class="flex items-center gap-1">
-      <button
-        onclick={() => navMonth(-1)}
-        class="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-        aria-label="Previous month"
-      >
-        <ChevronLeft size={14} />
-      </button>
-      <button
-        onclick={() => void goto('/dashboard')}
-        class="h-7 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-      >
-        Today
-      </button>
-      <button
-        onclick={() => navMonth(1)}
-        class="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--panel)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-        aria-label="Next month"
-      >
-        <ChevronRight size={15} />
-      </button>
-    </div>
+<div class="flex h-full flex-col">
+  <div class="shrink-0 border-b border-[var(--border)] bg-[var(--panel-soft)] px-6 py-4">
+    <PageHeader title={data.view.label} meta={totalTasks > 0 ? `${doneTasks}/${totalTasks} done` : ''}>
+      {#snippet actions()}
+        <Button variant="icon" size="sm" onclick={() => navMonth(-1)} ariaLabel="Previous month">
+          <ChevronLeft size={14} />
+        </Button>
+        <Button variant="secondary" size="sm" onclick={() => void goto('/dashboard')}>Today</Button>
+        <Button variant="icon" size="sm" onclick={() => navMonth(1)} ariaLabel="Next month">
+          <ChevronRight size={15} />
+        </Button>
+      {/snippet}
+    </PageHeader>
   </div>
 
   <!-- ── Header row 2: year/month strip ── -->
@@ -344,7 +359,7 @@
     <ResizablePlannerPanel title="Planner">
       {#snippet main()}
     <!-- Mobile list view (< sm) -->
-    <div class="sm:hidden mb-4 rounded-lg border border-[var(--border)] bg-[var(--panel)] divide-y divide-[var(--border)]">
+    <PanelCard padded={false} className="mb-4 overflow-hidden sm:hidden">
       {#each data.view.weeks as week, wi (week.weekKey)}
         {@const weekCells = cells.slice(wi * 7, wi * 7 + 7).filter(c => c.isCurrentMonth || c.tasks.length > 0)}
         {#each weekCells as cell (cell.id)}
@@ -364,11 +379,11 @@
             <div class="min-w-0 flex-1">
               <div class="text-xs font-medium text-[var(--text-secondary)]">{cell.dayName}</div>
               {#if cell.tasks.length > 0}
-                <div class="text-[11px] text-[var(--text-faint)]">
-                  {cell.tasks.filter(t => t.status === 'done').length}/{cell.tasks.length} tasks
+                <div class="mt-0.5 text-[11px] text-[var(--text-faint)]">
+                  {cell.tasks.filter(t => t.status === 'done').length}/{cell.tasks.length} complete
                 </div>
               {:else}
-                <div class="text-[11px] text-[var(--text-faint)]">No tasks</div>
+                <div class="mt-0.5 text-[11px] text-[var(--text-faint)]">No tasks yet</div>
               {/if}
             </div>
             {#if cell.tasks.length > 0}
@@ -387,7 +402,7 @@
           </a>
         {/each}
       {/each}
-    </div>
+    </PanelCard>
 
     <!-- Desktop grid view (>= sm) -->
     <div class="hidden sm:block rounded-lg border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
@@ -414,11 +429,25 @@
           {#each weekCells as cell (cell.id)}
             <div
               class={[
-                'relative min-h-[7.5rem] border-r border-[var(--border)] p-1.5 last:border-r-0',
+                'group relative min-h-[8rem] border-r border-[var(--border)] p-2 last:border-r-0',
                 cell.isToday ? 'bg-[var(--panel-strong)]' : '',
                 !cell.isCurrentMonth ? 'bg-[var(--bg)]' : ''
               ].join(' ')}
             >
+              <div class="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="!gap-1 !px-2 !py-1 text-[11px]"
+                  onclick={() => void addTaskToCell(cell)}
+                  disabled={addingToCellId === cell.id}
+                  title={`Add task to ${cell.dayName}`}
+                >
+                  <Plus size={12} />
+                  {addingToCellId === cell.id ? 'Adding' : 'Add'}
+                </Button>
+              </div>
+
               <!-- Day number — links to that day on the week page -->
               <div class="mb-1.5">
                 <a
@@ -448,46 +477,16 @@
                   handleConsider(cell.id, e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
                 onfinalize={(e) =>
                   handleFinalize(cell.id, e as unknown as CustomEvent<DndEvent<TaskInstance>>)}
-                class="min-h-6 space-y-0.5"
+                class="min-h-6 space-y-1"
               >
                 {#each cell.tasks as task (task.id)}
-                  <div
-                    style="
-                      display:flex; align-items:center; gap:5px;
-                      padding:3px 6px; border-radius:4px;
-                      background:var(--panel-strong);
-                      border-left:2px solid {task.status === 'done' ? 'var(--success)' : 'var(--accent)'};
-                      font-size:11px; color:var(--text-secondary);
-                      cursor:grab; user-select:none;
-                      opacity:{task.status === 'done' ? '0.5' : '1'};
-                    "
-                    class="group active:cursor-grabbing select-none leading-tight"
-                  >
-                    <!-- Completion toggle -->
-                    <button
-                      style="
-                        flex-shrink:0; width:8px; height:8px; border-radius:50%;
-                        border:1px solid {task.status === 'done' ? 'var(--success)' : 'var(--border-strong)'};
-                        background:{task.status === 'done' ? 'var(--success)' : 'transparent'};
-                        cursor:pointer; padding:0;
-                      "
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        void toggleTask(task);
-                      }}
-                      title={task.status === 'done' ? 'Mark open' : 'Mark done'}
-                    ></button>
-
-                    <!-- Title -->
-                    <span
-                      style="min-width:0;flex:1;word-break:break-words;{task.status === 'done' ? 'text-decoration:line-through;color:var(--text-faint)' : ''}"
-                    >
-                      {task.title_snapshot}
-                    </span>
-                    {#if task.hours_needed}
-                      <span style="flex-shrink:0;font-size:9px;color:var(--text-faint)">{task.hours_needed}h</span>
-                    {/if}
-                  </div>
+                  <TaskRow
+                    task={task}
+                    compact
+                    draggable
+                    showMeta={false}
+                    onToggle={() => void toggleTask(task)}
+                  />
                 {/each}
               </div>
             </div>
@@ -497,23 +496,18 @@
     </div>
 
     <!-- ── Unassigned tasks panel ── -->
-    <div class="mt-4 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4">
+    <PanelCard title="Inbox" eyebrow="Unassigned" className="mt-4">
       <div class="mb-3 flex items-center justify-between">
-        <div class="text-[10px] font-medium uppercase tracking-widest text-[var(--text-faint)]">
-          Unassigned{unassigned.length > 0 ? ` · ${unassigned.length}` : ''}
-        </div>
-        <button
+        <Badge>{unassigned.length} task{unassigned.length === 1 ? '' : 's'}</Badge>
+        <Button
+          variant={addingTask ? 'primary' : 'secondary'}
+          size="sm"
           onclick={() => (addingTask = !addingTask)}
-          class={[
-            'flex h-6 w-6 items-center justify-center rounded-md border transition-colors',
-            addingTask
-              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]'
-              : 'border-[var(--border)] bg-[var(--panel-strong)] text-[var(--text-faint)] hover:text-[var(--text-primary)]'
-          ].join(' ')}
           title="Add one-time task"
         >
           <Plus size={12} />
-        </button>
+          Add task
+        </Button>
       </div>
 
       {#if addingTask}
@@ -536,13 +530,9 @@
             step="0.25"
             class="w-14 rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
           />
-          <button
-            type="submit"
-            disabled={!newTaskTitle.trim()}
-            class="rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-40"
-          >
+          <Button type="submit" variant="secondary" size="sm" disabled={!newTaskTitle.trim()}>
             Add
-          </button>
+          </Button>
         </form>
       {/if}
 
@@ -611,56 +601,26 @@
               </div>
             </div>
           {:else}
-            <div
-              class={[
-                'group flex cursor-grab items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-strong)] px-2 py-1.5 text-xs active:cursor-grabbing select-none',
-                task.status === 'done' ? 'opacity-40' : ''
-              ].join(' ')}
-            >
-              <button
-                class={[
-                  'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors',
-                  task.status === 'done'
-                    ? 'border-[var(--text-muted)] bg-[var(--text-muted)]'
-                    : 'border-[var(--border-strong)] hover:border-[var(--text-muted)]'
-                ].join(' ')}
-                onclick={(e) => { e.stopPropagation(); void toggleTask(task); }}
-              >
-                {#if task.status === 'done'}
-                  <svg width="7" height="7" viewBox="0 0 7 7" fill="none" class="text-[var(--accent-contrast)]">
-                    <path d="M1 3.5L2.8 5.25L6 1.75" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                {/if}
-              </button>
-              <span
-                class={[
-                  'min-w-0 flex-1 truncate',
-                  task.status === 'done' ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'
-                ].join(' ')}
-              >
-                {task.title_snapshot}
-              </span>
-              {#if task.hours_needed}
-                <span class="shrink-0 text-[9px] font-medium text-[var(--text-faint)]">{task.hours_needed}h</span>
-              {/if}
-              <button
-                onclick={(e) => { e.stopPropagation(); startEdit(task); }}
-                class="ml-0.5 shrink-0 rounded p-0.5 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--text-primary)]"
-                title="Edit"
-              >
-                <Pencil size={10} />
-              </button>
-            </div>
+            <TaskRow
+              task={task}
+              compact
+              draggable
+              showMeta={false}
+              onToggle={() => void toggleTask(task)}
+              onEdit={() => startEdit(task)}
+            />
           {/if}
         {/each}
       </div>
 
       {#if unassigned.length === 0 && !addingTask}
-        <p class="text-[11px] text-[var(--text-faint)]">
-          No unassigned tasks — click <Plus size={10} class="inline" /> to add one.
-        </p>
+        <EmptyState
+          compact
+          title="Inbox is clear"
+          description="New one-off tasks land here before you place them on a day."
+        />
       {/if}
-    </div>
+    </PanelCard>
       {/snippet}
       {#snippet panel()}
         <PlannerSidePanel

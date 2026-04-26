@@ -2,6 +2,8 @@
   import { browser } from '$app/environment';
   import { onDestroy } from 'svelte';
   import {
+    ChevronDown,
+    Ellipsis,
     Folder,
     LoaderCircle,
     Plus,
@@ -14,6 +16,11 @@
   import { toast } from 'svelte-sonner';
   import NotesBlocksEditor from '$lib/components/notes-v2/NotesBlocksEditor.svelte';
   import { apiFetch, apiJson, apiSendJson } from '$lib/client/api';
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import PanelCard from '$lib/components/ui/PanelCard.svelte';
   import { buildPlainText, buildPreview, createNoteBlock } from '$lib/notes-v2/validation';
   import { showConfirm } from '$lib/stores/confirm';
   import { authPassword } from '$lib/stores';
@@ -38,6 +45,8 @@
   let newCategoryName = $state('');
   let editingCategoryId = $state<string | null>(null);
   let editingCategoryName = $state('');
+  let openCategoryMenuId = $state<string | null>(null);
+  let attachmentsOpen = $state(true);
 
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -97,6 +106,13 @@
       updated_at: note.updated_at,
       attachment_count: note.attachment_count
     };
+  }
+
+  function noteTypeLabel(note: Pick<NoteSummary, 'plain_text'> | NoteDetail): 'normal' | 'checklist' {
+    if ('content' in note && note.content.some((block) => block.type === 'checklist')) {
+      return 'checklist';
+    }
+    return 'normal';
   }
 
   function setSelectedNote(note: NoteDetail | null) {
@@ -461,17 +477,17 @@
   });
 </script>
 
-<div class="grid min-h-full grid-cols-1 md:grid-cols-[250px_340px_minmax(0,1fr)]">
-  <aside class="border-r border-[var(--border)] bg-[var(--panel-soft)]">
+<svelte:head>
+  <title>Notes · Taskpad</title>
+</svelte:head>
+
+<div class="grid min-h-full grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[250px_340px_minmax(0,1fr)]">
+  <aside class="border-b border-[var(--border)] bg-[var(--panel-soft)] md:border-b-0 md:border-r">
     <div class="space-y-4 p-4">
-      <button
-        type="button"
-        class="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-        onclick={createNote}
-      >
+      <Button variant="primary" className="w-full" onclick={createNote}>
         <Plus size={16} />
         New Note
-      </button>
+      </Button>
 
       <label class="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-muted)]">
         <Search size={15} />
@@ -527,7 +543,7 @@
 
         <div class="space-y-2">
           {#each categories as category (category.id)}
-            <div class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2">
+            <div class={`relative rounded-lg border px-3 py-2 transition-colors ${selectedCategoryFilter === category.id ? 'border-[var(--accent)]/30 bg-[var(--panel)]' : 'border-[var(--border)] bg-[var(--panel)] hover:border-[var(--border-strong)]'}`}>
               <div class="flex items-center gap-2">
                 <button
                   type="button"
@@ -552,32 +568,46 @@
                 </button>
 
                 {#if editingCategoryId === category.id}
-                  <button
-                    type="button"
-                    class="text-xs text-[var(--accent)]"
-                    onclick={() => saveCategoryRename(category.id)}
-                  >
+                  <button type="button" class="text-xs text-[var(--accent)]" onclick={() => saveCategoryRename(category.id)}>
                     Save
                   </button>
                 {:else}
                   <button
                     type="button"
-                    class="text-xs text-[var(--text-muted)]"
+                    class="rounded-md p-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]"
                     onclick={() => {
-                      editingCategoryId = category.id;
-                      editingCategoryName = category.name;
+                      openCategoryMenuId = openCategoryMenuId === category.id ? null : category.id;
                     }}
+                    aria-label={`Folder actions for ${category.name}`}
                   >
-                    Rename
+                    <Ellipsis size={14} />
                   </button>
+                  {#if openCategoryMenuId === category.id}
+                    <div class="absolute right-3 top-10 z-10 w-32 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--panel-strong)] p-1 shadow-[0_16px_32px_rgba(0,0,0,0.2)]">
+                      <button
+                        type="button"
+                        class="block w-full rounded-md px-2.5 py-2 text-left text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+                        onclick={() => {
+                          editingCategoryId = category.id;
+                          editingCategoryName = category.name;
+                          openCategoryMenuId = null;
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        class="block w-full rounded-md px-2.5 py-2 text-left text-xs text-[var(--danger)] transition-colors hover:bg-[rgba(239,68,68,0.08)]"
+                        onclick={() => {
+                          openCategoryMenuId = null;
+                          void deleteCategory(category.id);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  {/if}
                 {/if}
-                <button
-                  type="button"
-                  class="text-xs text-[var(--text-muted)] hover:text-[var(--danger)]"
-                  onclick={() => deleteCategory(category.id)}
-                >
-                  Delete
-                </button>
               </div>
             </div>
           {/each}
@@ -590,11 +620,7 @@
             bind:value={newCategoryName}
             onkeydown={(event) => event.key === 'Enter' && createCategory()}
           />
-          <button
-            type="button"
-            class="rounded-lg border border-[var(--border)] px-3 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-            onclick={createCategory}
-          >
+          <button type="button" class="rounded-lg border border-[var(--border)] px-3 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]" onclick={createCategory}>
             Add
           </button>
         </div>
@@ -602,32 +628,23 @@
     </div>
   </aside>
 
-  <section class="border-r border-[var(--border)] bg-[var(--bg)]">
-    <div class="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-      <div>
-        <h1 class="text-lg font-semibold text-[var(--text-primary)]">Notes</h1>
-        <p class="text-sm text-[var(--text-muted)]">
-          {loadingList ? 'Refreshing...' : `${sortedNotes.length} note${sortedNotes.length === 1 ? '' : 's'}`}
-        </p>
-      </div>
+  <section class="border-b border-[var(--border)] bg-[var(--bg)] md:border-b-0 md:border-r">
+    <div class="border-b border-[var(--border)] px-4 py-4">
+      <PageHeader
+        title="Notes"
+        subtitle={loadingList ? 'Refreshing…' : `${sortedNotes.length} note${sortedNotes.length === 1 ? '' : 's'}`}
+      />
       {#if loadingList}
-        <LoaderCircle class="animate-spin text-[var(--text-muted)]" size={16} />
+        <LoaderCircle class="mt-3 animate-spin text-[var(--text-muted)]" size={16} />
       {/if}
     </div>
 
     <div class="space-y-2 p-3">
       {#if sortedNotes.length === 0}
-        <div class="rounded-xl border border-dashed border-[var(--border)] bg-[var(--panel-soft)] px-4 py-8 text-center text-sm text-[var(--text-muted)]">
-          {#if activeFilter === 'trash'}
-            Trash is empty.
-          {:else if searchInput.trim()}
-            No notes matched your search.
-          {:else if selectedCategoryFilter}
-            This folder has no notes yet.
-          {:else}
-            Create your first note to get started.
-          {/if}
-        </div>
+        <EmptyState
+          title={activeFilter === 'trash' ? 'Trash is empty' : searchInput.trim() ? 'No matching notes' : selectedCategoryFilter ? 'Folder is empty' : 'Create your first note'}
+          description={activeFilter === 'trash' ? 'Deleted notes will wait here.' : searchInput.trim() ? 'Try a shorter title or clear the search.' : selectedCategoryFilter ? 'New notes can start directly inside this folder.' : 'Notes stay lightweight here: title, blocks, attachments.'}
+        />
       {/if}
 
       {#each sortedNotes as note (note.id)}
@@ -643,7 +660,10 @@
           <div class="mb-2 flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="truncate text-sm font-medium text-[var(--text-primary)]">{note.title}</div>
-              <div class="text-xs text-[var(--text-faint)]">{noteDateLabel(note.updated_at)}</div>
+              <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
+                <span>{noteDateLabel(note.updated_at)}</span>
+                <Badge className="capitalize">{noteTypeLabel(note)}</Badge>
+              </div>
             </div>
             {#if note.is_starred}
               <Star size={14} class="fill-current text-[var(--warning)]" />
@@ -668,13 +688,16 @@
 
   <section class="min-w-0 bg-[var(--bg)]">
     {#if !selectedNote}
-      <div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <Folder size={32} class="text-[var(--text-faint)]" />
-        <div>
-          <h2 class="text-lg font-semibold text-[var(--text-primary)]">No note selected</h2>
-          <p class="mt-1 text-sm text-[var(--text-muted)]">
-            Pick a note from the list or create a fresh one.
-          </p>
+      <div class="px-6 py-8 md:flex md:h-full md:items-center md:justify-center">
+        <div class="w-full max-w-md">
+          <EmptyState
+            title="No note selected"
+            description="Pick a note from the list or create a fresh one."
+          >
+            {#snippet icon()}
+              <Folder size={32} />
+            {/snippet}
+          </EmptyState>
         </div>
       </div>
     {:else}
@@ -693,6 +716,7 @@
               >
                 {selectedNote.is_starred ? 'Starred' : 'Star'}
               </button>
+              <Badge className="capitalize">{noteTypeLabel(selectedNote)}</Badge>
 
               <select
                 class="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
@@ -744,15 +768,23 @@
             on:blur={() => void flushSave()}
           />
 
-          <div class="mt-8 rounded-xl border border-[var(--border)] bg-[var(--panel-soft)] p-4">
+          <PanelCard title="Attachments" eyebrow="Files" className="mt-8 bg-[var(--panel-soft)]">
             <div class="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h2 class="text-sm font-semibold text-[var(--text-primary)]">Attachments</h2>
                 <p class="text-xs text-[var(--text-muted)]">
                   Images, PDFs and office files up to 10 MB.
                 </p>
               </div>
-              <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="rounded-md p-1 text-[var(--text-faint)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+                  onclick={() => (attachmentsOpen = !attachmentsOpen)}
+                  aria-label="Toggle attachments"
+                >
+                  <ChevronDown size={15} class={`transition-transform ${attachmentsOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
                 {#if uploading}
                   <LoaderCircle class="animate-spin" size={14} />
                 {:else}
@@ -760,42 +792,43 @@
                 {/if}
                 Upload
                 <input class="hidden" type="file" multiple onchange={handleAttachmentUpload} />
-              </label>
+                </label>
+              </div>
             </div>
 
-            {#if selectedNote.attachments.length === 0}
-              <div class="rounded-lg border border-dashed border-[var(--border)] px-4 py-6 text-sm text-[var(--text-muted)]">
-                No attachments yet.
-              </div>
-            {:else}
-              <div class="space-y-3">
-                {#each selectedNote.attachments as attachment (attachment.id)}
-                  <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
-                    <div class="min-w-0">
-                      <a
-                        href={attachment.public_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        class="block truncate text-sm font-medium text-[var(--text-primary)] underline-offset-2 hover:underline"
-                      >
-                        {attachment.file_name}
-                      </a>
-                      <div class="mt-1 text-xs text-[var(--text-faint)]">
-                        {attachment.mime_type ?? 'file'}{#if attachment.file_size} · {Math.ceil(attachment.file_size / 1024)} KB{/if}
+            {#if attachmentsOpen}
+              {#if selectedNote.attachments.length === 0}
+                <EmptyState compact title="No attachments yet" description="Uploads live alongside the note instead of inside the text blocks." />
+              {:else}
+                <div class="space-y-3">
+                  {#each selectedNote.attachments as attachment (attachment.id)}
+                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
+                      <div class="min-w-0">
+                        <a
+                          href={attachment.public_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          class="block truncate text-sm font-medium text-[var(--text-primary)] underline-offset-2 hover:underline"
+                        >
+                          {attachment.file_name}
+                        </a>
+                        <div class="mt-1 text-xs text-[var(--text-faint)]">
+                          {attachment.mime_type ?? 'file'}{#if attachment.file_size} · {Math.ceil(attachment.file_size / 1024)} KB{/if}
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        class="text-xs text-[var(--text-muted)] hover:text-[var(--danger)]"
+                        onclick={() => deleteAttachment(attachment.id)}
+                      >
+                        Remove
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      class="text-xs text-[var(--text-muted)] hover:text-[var(--danger)]"
-                      onclick={() => deleteAttachment(attachment.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                {/each}
-              </div>
+                  {/each}
+                </div>
+              {/if}
             {/if}
-          </div>
+          </PanelCard>
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-6 py-4">

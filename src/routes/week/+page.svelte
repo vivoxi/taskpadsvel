@@ -1,12 +1,17 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/stores';
-  import { ChevronLeft, ChevronRight, Archive } from 'lucide-svelte';
+  import { ChevronDown, ChevronLeft, ChevronRight, Archive } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import CapacitySummary from '$lib/components/CapacitySummary.svelte';
   import DayNoteEditor from '$lib/components/DayNoteEditor.svelte';
-  import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
   import { apiSendJson } from '$lib/client/api';
+  import Button from '$lib/components/ui/Button.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import MetricCard from '$lib/components/ui/MetricCard.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import PanelCard from '$lib/components/ui/PanelCard.svelte';
+  import TaskRow from '$lib/components/ui/TaskRow.svelte';
   import { DAY_NAMES, type PlannerBlock, type TaskInstance, type TasksByDay } from '$lib/planner/types';
   import { getNextWeekKey, getPreviousWeekKey } from '$lib/planner/dates';
   import type { PageData } from './$types';
@@ -15,6 +20,7 @@
   let weeklyTasks = $state<TaskInstance[]>([]);
   let dayBuckets = $state<TasksByDay>({});
   let softAssignedTaskIds = $state<string[]>([]);
+  let completedOpen = $state(false);
 
   $effect(() => {
     weeklyTasks = structuredClone(data.view.tasks);
@@ -158,48 +164,27 @@
 <div class="px-4 py-4 sm:px-5 sm:py-5">
   <div class="mx-auto flex max-w-[1400px] flex-col gap-5">
     <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4 sm:px-5">
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 class="text-base font-medium tracking-[-0.02em] text-[var(--text-primary)]">
-          {data.view.label}
-        </h1>
-
-        <div class="flex items-center gap-1.5">
-          <a
-            href={`/week?week=${getPreviousWeekKey(data.view.weekKey)}`}
-            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-          >
+      <PageHeader title={data.view.label}>
+        {#snippet actions()}
+          <Button href={`/week?week=${getPreviousWeekKey(data.view.weekKey)}`} variant="secondary" size="sm">
             <ChevronLeft size={13} />
             Prev
-          </a>
-          <a
-            href="/week"
-            class="inline-flex items-center rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-          >
-            Today
-          </a>
-          <a
-            href={`/week?week=${getNextWeekKey(data.view.weekKey)}`}
-            class="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-          >
+          </Button>
+          <Button href="/week" variant="secondary" size="sm">Today</Button>
+          <Button href={`/week?week=${getNextWeekKey(data.view.weekKey)}`} variant="secondary" size="sm">
             Next
             <ChevronRight size={13} />
-          </a>
-        </div>
-      </div>
+          </Button>
+        {/snippet}
+      </PageHeader>
 
-      <div class="mt-4" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-radius:6px;overflow:hidden">
-        <div style="background:var(--panel-soft);padding:10px 12px">
-          <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Open</div>
-          <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{openTasks.length}</div>
-        </div>
-        <div style="background:var(--panel-soft);padding:10px 12px">
-          <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Days</div>
-          <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{DAY_NAMES.filter((dayName) => (dayBuckets[dayName] ?? []).length > 0).length}</div>
-        </div>
-        <div style="background:var(--panel-soft);padding:10px 12px">
-          <div style="font-size:10px;color:var(--text-faint);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px">Remaining</div>
-          <div style="font-size:18px;font-weight:500;color:var(--text-primary)">{data.view.capacity.remaining_hours}h</div>
-        </div>
+      <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <MetricCard label="Open" value={openTasks.length} />
+        <MetricCard
+          label="Days"
+          value={DAY_NAMES.filter((dayName) => (dayBuckets[dayName] ?? []).length > 0).length}
+        />
+        <MetricCard label="Remaining" value={`${data.view.capacity.remaining_hours}h`} tone="accent" />
       </div>
     </section>
 
@@ -223,94 +208,57 @@
       </section>
 
       <aside class="space-y-3.5 xl:sticky xl:top-6 xl:self-start">
-        <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
-          <div class="border-b border-[var(--border)] pb-3">
-            <div class="text-[10px] uppercase tracking-[0.05em] text-[var(--text-faint)]">Capacity</div>
-            <h2 class="mt-1 text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Weekly pressure</h2>
-          </div>
+        <PanelCard title="Weekly pressure" eyebrow="Capacity">
+          <CapacitySummary compact capacity={data.view.capacity} schedule={data.view.schedule} />
+        </PanelCard>
 
-          <div class="pt-3">
-            <CapacitySummary compact capacity={data.view.capacity} schedule={data.view.schedule} />
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
-          <div class="border-b border-[var(--border)] pb-3">
-            <div class="text-[10px] uppercase tracking-[0.05em] text-[var(--text-faint)]">This week</div>
-            <h2 class="mt-1 text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Unassigned</h2>
-          </div>
-
-          <div class="space-y-2 pt-3">
+        <PanelCard title="Unassigned" eyebrow="This week">
+          <div class="space-y-2">
             {#if unassignedTasks.length === 0}
-              <p class="rounded-[16px] border border-dashed border-[var(--border)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
-                No unassigned tasks for this week.
-              </p>
+              <EmptyState
+                compact
+                title="Nothing floating"
+                description="All open work is already parked on a day."
+              />
             {:else}
               {#each unassignedTasks as task (task.id)}
-                <div class="flex items-start justify-between gap-3 rounded-[16px] border border-[var(--border)] px-3.5 py-2.5 transition-colors hover:bg-[var(--panel-soft)]">
-                  <span class="min-w-0">
-                    <span class="block text-sm font-medium text-[var(--text-primary)]">{task.title_snapshot}</span>
-                    <TaskMetaChips
-                      compact
-                      hours={task.hours_needed}
-                      sourceType={task.source_type}
-                    />
-                  </span>
-                  <span class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-                      onclick={() => toggleTask(task, 'done')}
-                    >
-                      Done
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded-full border border-[var(--border)] p-1 text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]"
-                      onclick={() => archiveTask(task)}
-                    >
-                      <Archive size={12} />
-                    </button>
-                  </span>
-                </div>
+                <TaskRow
+                  task={task}
+                  onToggle={() => toggleTask(task, 'done')}
+                  onDelete={() => archiveTask(task)}
+                />
               {/each}
             {/if}
           </div>
-        </section>
+        </PanelCard>
 
-        <section class="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-4">
-          <div class="border-b border-[var(--border)] pb-3">
-            <div class="text-[10px] uppercase tracking-[0.05em] text-[var(--text-faint)]">Completed</div>
-            <h2 class="mt-1 text-sm font-medium tracking-[-0.02em] text-[var(--text-primary)]">Done</h2>
-          </div>
+        <PanelCard eyebrow="Completed" title="Done">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-left text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            onclick={() => (completedOpen = !completedOpen)}
+          >
+            <span>{completedTasks.length} completed task{completedTasks.length === 1 ? '' : 's'}</span>
+            <ChevronDown
+              size={15}
+              class={`transition-transform ${completedOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
 
-          <div class="space-y-2 pt-3">
+          <div class={`space-y-2 overflow-hidden transition-all ${completedOpen ? 'mt-3 max-h-[32rem]' : 'max-h-0'}`}>
             {#if completedTasks.length === 0}
-              <p class="rounded-[16px] border border-dashed border-[var(--border)] px-3.5 py-3 text-sm text-[var(--text-muted)]">
-                No completed items yet.
-              </p>
+              <EmptyState compact title="No completed items" description="Done work will collect here." />
             {:else}
               {#each completedTasks as task (task.id)}
-                <button
-                  type="button"
-                  class="flex w-full items-start justify-between gap-3 rounded-[16px] border border-[var(--border)] bg-[var(--panel-soft)]/70 px-3.5 py-2.5 text-left opacity-80 transition-colors hover:opacity-100"
-                  onclick={() => toggleTask(task, 'open')}
-                >
-                  <span class="min-w-0">
-                    <span class="block text-sm text-[var(--text-muted)] line-through">{task.title_snapshot}</span>
-                    <TaskMetaChips
-                      compact
-                      hours={task.hours_needed}
-                      sourceType={task.source_type}
-                      carried={task.carried_from_instance_id !== null}
-                    />
-                  </span>
-                  <span class="mt-1 h-4 w-4 rounded-full border border-[var(--border-strong)] bg-[var(--accent)]"></span>
-                </button>
+                <TaskRow
+                  task={task}
+                  dimmed
+                  onToggle={() => toggleTask(task, 'open')}
+                />
               {/each}
             {/if}
           </div>
-        </section>
+        </PanelCard>
       </aside>
     </div>
   </div>

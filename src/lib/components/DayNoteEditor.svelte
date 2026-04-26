@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Check } from 'lucide-svelte';
   import BlockEditor from '$lib/components/BlockEditor.svelte';
-  import TaskMetaChips from '$lib/components/TaskMetaChips.svelte';
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import PanelCard from '$lib/components/ui/PanelCard.svelte';
+  import TaskRow from '$lib/components/ui/TaskRow.svelte';
   import type { DayName, PlannerBlock, TaskInstance } from '$lib/planner/types';
 
   let {
@@ -30,47 +31,25 @@
   const hasBlocks = $derived(blocks.length > 0);
 </script>
 
-<article style="border-radius:8px;border:1px solid var(--border);background:var(--panel);padding:16px 20px">
-  <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:8px">
-      <h2 style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0">{dayName}</h2>
-      <span style="font-size:12px;color:var(--text-faint)">{dateLabel}</span>
+<PanelCard padded={false} className={isToday ? 'border-[var(--accent)]/35' : ''}>
+  <div class="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+    <div class="flex items-baseline gap-2">
+      <h2 class="text-sm font-medium text-[var(--text-primary)]">{dayName}</h2>
+      <span class="text-xs text-[var(--text-faint)]">{dateLabel}</span>
     </div>
     {#if isToday}
-      <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--accent);background:var(--accent-subtle);padding:2px 8px;border-radius:4px">Today</span>
+      <Badge tone="accent">Today</Badge>
     {/if}
   </div>
 
-  <div class="pt-4">
+  <div class="px-5 py-4">
     {#if hasTasks}
-      <div class="space-y-0.5">
+      <div class="space-y-2">
         {#each tasks as task (task.id)}
-          <button
-            type="button"
-            class="flex w-full items-start gap-3 rounded-[16px] py-2 text-left text-sm transition-colors hover:bg-[var(--panel-soft)]/70"
-            onclick={() => onToggleTask(task, task.status === 'done' ? 'open' : 'done')}
-          >
-            <span class={`mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border ${
-              task.status === 'done'
-                ? 'border-[var(--success)] bg-[var(--success)]'
-                : 'border-[var(--border-strong)] text-transparent'
-            }`}>
-              {#if task.status === 'done'}
-                <Check size={11} />
-              {/if}
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class={`block ${task.status === 'done' ? 'text-zinc-400 line-through' : 'text-[var(--text-primary)]'}`}>
-                {task.title_snapshot}
-              </span>
-              <TaskMetaChips
-                compact
-                hours={task.hours_needed}
-                sourceType={task.source_type}
-                carried={task.carried_from_instance_id !== null}
-              />
-            </span>
-          </button>
+          <TaskRow
+            task={task}
+            onToggle={() => onToggleTask(task, task.status === 'done' ? 'open' : 'done')}
+          />
         {/each}
       </div>
     {/if}
@@ -87,4 +66,4 @@
       onCommit={(nextBlocks) => onSaveBlocks(dayName, nextBlocks)}
     />
   </div>
-</article>
+</PanelCard>

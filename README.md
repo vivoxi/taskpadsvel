@@ -1,11 +1,15 @@
 # Taskpad Svelte
 
-Taskpad Svelte is a focused personal planning app rebuilt around four primary surfaces:
+Taskpad Svelte is a focused personal planning app rebuilt around three primary surfaces and a couple of deeper utility views:
 
-- `Dashboard`: the default calendar workspace
+- `Calendar`: the default dashboard workspace
 - `Week`: weekly execution plus daily notes
-- `Planner`: month-level recurring work and scheduling
 - `Notes`: a simple server-backed notes surface with folders, attachments, and soft delete
+
+Advanced surfaces stay available without competing with the core flow:
+
+- `Advanced Planner`: month-level recurring work and scheduling
+- `History`: completed, carried, and archived task review
 
 ## Stack
 
@@ -16,9 +20,9 @@ Taskpad Svelte is a focused personal planning app rebuilt around four primary su
 
 ## Main Pages
 
-- `/dashboard`: default calendar board with drag-and-drop task placement
+- `/dashboard`: Calendar with drag-and-drop task placement plus the planner side panel
 - `/week`: weekly execution plus editable daily notes
-- `/planner`: recurring weekly/monthly planning for the selected month
+- `/planner`: Advanced Planner for recurring weekly/monthly planning
 - `/notes`: Notes v2 with simple blocks, folders, trash, and auth-gated attachments
 - `/one-time`: document-style one-time notes/tasks
 - `/history`: completed, carried, and archived task history
@@ -30,11 +34,13 @@ Legacy routes redirect to the current surfaces:
 
 ## Key Behaviors
 
-- The app opens into the dashboard calendar workspace.
+- The app opens into the Calendar workspace.
 - Past weeks stay editable. There is no snapshot or archive mode.
 - Recurring work is modeled through `task_templates` and concrete `task_instances`.
+- Planner is treated as an advanced calendar companion rather than a primary navigation surface.
 - Weekly notes are block-based per weekday and can be edited on any week.
 - General notes use Notes v2: server-only Supabase access, simple JSON blocks, category folders, and disk-backed attachments behind auth.
+- One-Time is still live, but it is intended to fold into Notes over time instead of remaining a long-term primary surface.
 
 ## Development
 

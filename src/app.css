@@ -9,6 +9,14 @@
 :root {
   color-scheme: dark;
 
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+
   /* Backgrounds */
   --bg:           #0f0f0f;
   --background:   #0f0f0f;

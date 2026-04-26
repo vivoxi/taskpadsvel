@@ -1,8 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { ChevronDown, ChevronUp, Minus, Plus, Trash2 } from 'lucide-svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import PanelCard from '$lib/components/ui/PanelCard.svelte';
   import { createNoteBlock } from '$lib/notes-v2/validation';
   import type { NoteBlock, NoteBlockType } from '$lib/notes-v2/types';
+
+  // TODO(notes-editor): Unify NotesBlocksEditor and BlockEditor around shared block-row
+  // presentation primitives and keyboard affordances while keeping planner's richer commands
+  // separate from Notes v2's deliberately plain text inputs.
 
   export let blocks: NoteBlock[] = [];
   export let disabled = false;
@@ -53,60 +60,61 @@
 <div class="space-y-4">
   <div class="flex flex-wrap gap-2">
     {#each addableBlocks as option}
-      <button
-        type="button"
-        class="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
-        onclick={() => addBlock(option.type)}
-        disabled={disabled}
-      >
+      <Button variant="secondary" size="sm" onclick={() => addBlock(option.type)} disabled={disabled}>
         <Plus size={14} />
         {option.label}
-      </button>
+      </Button>
     {/each}
   </div>
 
   {#if blocks.length === 0}
-    <div class="rounded-lg border border-dashed border-[var(--border)] bg-[var(--panel-soft)] px-4 py-6 text-sm text-[var(--text-muted)]">
-      Add a block to start writing.
-    </div>
+    <EmptyState
+      compact
+      title="Start with a block"
+      description="Use text, heading, checklist, bullet, or divider to shape the note."
+    />
   {/if}
 
   {#each blocks as block, index (block.id)}
-    <div class="rounded-lg border border-[var(--border)] bg-[var(--panel-soft)] p-3">
-      <div class="mb-3 flex items-center justify-between gap-3">
+    <PanelCard padded={false} className="overflow-hidden bg-[var(--panel-soft)]">
+      <div class="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2.5">
         <div class="text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-faint)]">
           {block.type}
         </div>
         <div class="flex items-center gap-1">
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!px-1.5 !py-1.5"
             onclick={() => moveBlock(index, -1)}
             disabled={disabled || index === 0}
-            aria-label="Move block up"
+            ariaLabel="Move block up"
           >
             <ChevronUp size={14} />
-          </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!px-1.5 !py-1.5"
             onclick={() => moveBlock(index, 1)}
             disabled={disabled || index === blocks.length - 1}
-            aria-label="Move block down"
+            ariaLabel="Move block down"
           >
             <ChevronDown size={14} />
-          </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--danger)]"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!px-1.5 !py-1.5 hover:!text-[var(--danger)]"
             onclick={() => removeBlock(index)}
             disabled={disabled}
-            aria-label="Delete block"
+            ariaLabel="Delete block"
           >
             <Trash2 size={14} />
-          </button>
+          </Button>
         </div>
       </div>
+      <div class="px-3 py-3">
 
       {#if block.type === 'heading'}
         <input
@@ -162,6 +170,7 @@
       {:else}
         <hr class="border-t border-[var(--border)]" />
       {/if}
-    </div>
+      </div>
+    </PanelCard>
   {/each}
 </div>

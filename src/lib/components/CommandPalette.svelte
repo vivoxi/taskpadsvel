@@ -1,14 +1,15 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/stores';
-  import { CalendarRange, History, Moon, NotebookPen, Rows3, Search, Sparkles } from 'lucide-svelte';
+  import { CalendarRange, History, NotebookPen, Rows3, Search, Sparkles } from 'lucide-svelte';
   import { onMount } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { apiJson, apiSendJson } from '$lib/client/api';
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
   import { monthLabel, normalizeMonthKey } from '$lib/planner/dates';
   import type { SearchResults } from '$lib/planner/types';
   import { commandPaletteOpen, templateMode } from '$lib/stores';
-  import { themeMode, toggleTheme } from '$lib/stores/theme';
 
   type CommandItem = {
     id: string;
@@ -84,13 +85,6 @@
         templateMode.update((value) => !value);
         void goto('/planner');
       }
-    },
-    {
-      id: 'theme',
-      label: $themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-      meta: 'Workspace appearance',
-      icon: Moon,
-      run: () => toggleTheme()
     }
   ]);
 
@@ -205,15 +199,7 @@
 </script>
 
 {#if $commandPaletteOpen}
-  <div
-    style="
-      position:fixed; inset:0; z-index:50;
-      display:flex; align-items:flex-start; justify-content:center;
-      background:rgba(0,0,0,0.7);
-      padding:12vh 16px 0;
-      backdrop-filter:blur(4px);
-    "
-  >
+  <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/70 px-4 pt-[12vh] backdrop-blur-[4px]">
     <button
       type="button"
       class="absolute inset-0"
@@ -221,46 +207,40 @@
       onclick={closePalette}
     ></button>
 
-    <div
-      style="
-        position:relative; z-index:10;
-        width:100%; max-width:560px;
-        background:var(--panel);
-        border:1px solid var(--border-strong);
-        border-radius:12px;
-        overflow:hidden;
-      "
-    >
-      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
+    <div class="relative z-10 w-full max-w-[560px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--panel)]">
+      <div class="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
         <Search size={14} color="var(--text-faint)" />
         <input
           bind:this={inputEl}
           bind:value={query}
           placeholder="Jump anywhere or search tasks…"
-          style="flex:1;background:transparent;border:none;outline:none;font-size:14px;color:var(--text-primary)"
+          class="flex-1 border-none bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
         />
-        <span style="font-size:10px;color:var(--text-faint);border:1px solid var(--border);padding:1px 6px;border-radius:4px">Esc</span>
+        <Badge className="shrink-0">Esc</Badge>
       </div>
 
-      <div style="padding:6px;max-height:360px;overflow-y:auto">
+      <div class="max-h-[360px] overflow-y-auto p-1.5">
         {#if visibleItems.length === 0}
-          <div style="padding:12px 10px;font-size:13px;color:var(--text-muted)">No commands match yet.</div>
+          <EmptyState
+            compact
+            title="No matching commands"
+            description="Try a shorter search or jump to Calendar, Week, Notes, Planner, or History."
+          />
         {:else}
           {#each visibleItems as item, index (item.id)}
             <button
               type="button"
-              style="
-                display:flex; align-items:center; gap:10px;
-                width:100%; padding:8px 10px; border-radius:6px; border:none;
-                background:{index === selectionIndex ? 'var(--panel-strong)' : 'transparent'};
-                color:var(--text-secondary); font-size:13px; text-align:left; cursor:pointer;
-                transition:background 100ms;
-              "
+              class={[
+                'flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm transition-colors',
+                index === selectionIndex
+                  ? 'bg-[var(--panel-strong)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--panel-soft)] hover:text-[var(--text-primary)]'
+              ].join(' ')}
               onclick={() => activate(item)}
             >
               <item.icon size={13} />
-              <span style="color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{item.label}</span>
-              <span style="font-size:11px;color:var(--text-faint);flex-shrink:0">{item.meta}</span>
+              <span class="min-w-0 flex-1 truncate text-[var(--text-primary)]">{item.label}</span>
+              <span class="shrink-0 text-[11px] text-[var(--text-faint)]">{item.meta}</span>
             </button>
           {/each}
         {/if}
