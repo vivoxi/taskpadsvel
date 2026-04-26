@@ -1,63 +1,64 @@
 import { describe, expect, it } from 'vitest';
-import { canReadPage, _requireAuth } from '../src/lib/server/auth';
+import { SESSION_COOKIE_NAME, _requireAuth, canReadPage } from '../src/lib/server/auth';
 import { canReadNotesPage } from '../src/lib/server/notes-v2-errors';
 
-function makeRequest(authHeader?: string): Request {
-  return new Request('http://localhost/dashboard', {
-    headers: authHeader ? { Authorization: authHeader } : {}
-  });
+function makeRequest(options: { auth?: string; cookie?: string } = {}): Request {
+  const headers: Record<string, string> = {};
+  if (options.auth) headers['Authorization'] = options.auth;
+  if (options.cookie) headers['Cookie'] = options.cookie;
+  return new Request('http://localhost/dashboard', { headers });
 }
 
-describe('canReadPage', () => {
-  it('allows access when auth is not required', () => {
+describe('canReadPage — no auth required', () => {
+  it('always allows access when authRequired is false', () => {
     expect(canReadPage({ request: makeRequest(), authRequired: false })).toBe(true);
+    expect(canReadPage({ request: makeRequest({ auth: 'Bearer anything' }), authRequired: false })).toBe(true);
+    expect(canReadPage({ request: makeRequest({ cookie: `${SESSION_COOKIE_NAME}=anything` }), authRequired: false })).toBe(true);
+  });
+});
+
+describe('canReadPage — auth required, session cookie', () => {
+  it('allows access with a matching session cookie', () => {
+    const request = makeRequest({ cookie: `${SESSION_COOKIE_NAME}=secret` });
+    expect(_requireAuth(request, 'secret')).toBeNull();
   });
 
-  it('denies access when auth is required and no token is provided', () => {
-    // canReadPage delegates to _requireAuth(request, process.env.ADMIN_PASSWORD)
-    // Since ADMIN_PASSWORD is not set in test env, canReadPage returns true.
-    // We test the underlying logic via _requireAuth directly.
-    const request = makeRequest();
+  it('denies access with a wrong session cookie', () => {
+    const request = makeRequest({ cookie: `${SESSION_COOKIE_NAME}=wrong` });
     expect(_requireAuth(request, 'secret')).not.toBeNull();
   });
 
-  it('returns false equivalent when password is set and token is missing', () => {
-    // Simulate env with password by testing the gate logic end-to-end via canReadNotesPage
-    // (which now delegates to canReadPage) with _requireAuth as the inner check.
-    // The env-independent path: authRequired=false always passes.
-    const request = makeRequest();
-    expect(canReadPage({ request, authRequired: false })).toBe(true);
+  it('denies access with no credentials when password is set', () => {
+    expect(_requireAuth(makeRequest(), 'secret')).not.toBeNull();
+  });
+});
+
+describe('canReadPage — auth required, Bearer fallback', () => {
+  it('allows access with correct Bearer token when no cookie is present', () => {
+    const request = makeRequest({ auth: 'Bearer secret' });
+    expect(_requireAuth(request, 'secret')).toBeNull();
   });
 
-  it('delegates from canReadNotesPage to canReadPage correctly when auth not required', () => {
-    const request = makeRequest('Bearer anything');
-    expect(canReadNotesPage({ request, authRequired: false })).toBe(true);
+  it('rejects access with wrong Bearer token', async () => {
+    const request = makeRequest({ auth: 'Bearer bad' });
+    const response = _requireAuth(request, 'secret');
+    expect(response?.status).toBe(401);
+    await expect(response?.json()).resolves.toEqual({ error: 'Unauthorized' });
   });
+});
 
-  it('canReadNotesPage and canReadPage agree on locked state', () => {
+describe('canReadNotesPage delegates to canReadPage', () => {
+  it('returns same result as canReadPage when authRequired is false', () => {
     const request = makeRequest();
-    // Both should return the same value for the same inputs
     expect(canReadNotesPage({ request, authRequired: false })).toBe(
       canReadPage({ request, authRequired: false })
     );
   });
-});
 
-describe('_requireAuth page gate integration', () => {
-  it('blocks access with wrong token', async () => {
-    const request = makeRequest('Bearer wrong');
-    const response = _requireAuth(request, 'correct');
-    expect(response?.status).toBe(401);
-    await expect(response?.json()).resolves.toEqual({ error: 'Unauthorized' });
-  });
-
-  it('allows access with correct token', () => {
-    const request = makeRequest('Bearer secret');
-    expect(_requireAuth(request, 'secret')).toBeNull();
-  });
-
-  it('allows access when no password is configured (open instance)', () => {
+  it('returns same result as canReadPage when authRequired is true and no credentials', () => {
     const request = makeRequest();
-    expect(_requireAuth(request, undefined)).toBeNull();
+    expect(canReadNotesPage({ request, authRequired: true })).toBe(
+      canReadPage({ request, authRequired: true })
+    );
   });
 });

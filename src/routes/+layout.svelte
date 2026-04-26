@@ -5,10 +5,10 @@
   import { Toaster } from 'svelte-sonner';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
-  import PasswordModal from '$lib/components/PasswordModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import { initializeTheme, themeMode } from '$lib/stores/theme';
   import { commandPaletteOpen } from '$lib/stores';
+  import { clientAuthenticated } from '$lib/client/api';
   import type { LayoutData } from './$types';
   import type { Snippet } from 'svelte';
 
@@ -19,7 +19,9 @@
     initializeTheme();
   });
 
-  const authRequired = $derived(data.authRequired);
+  $effect(() => {
+    clientAuthenticated.set(data.authenticated);
+  });
 </script>
 
 <svelte:head>
@@ -106,10 +108,6 @@
       </button>
     </div>
   </div>
-{/if}
-
-{#if authRequired}
-  <PasswordModal />
 {/if}
 
 <Toaster theme="dark" position="bottom-right" />

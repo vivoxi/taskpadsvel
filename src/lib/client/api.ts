@@ -1,9 +1,16 @@
 import { env } from '$env/dynamic/public';
 import { browser } from '$app/environment';
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { authPassword, syncState } from '$lib/stores';
 
 export const clientAuthRequired = env.PUBLIC_AUTH_REQUIRED === 'true';
+
+/**
+ * Set to true by the layout once the server confirms the user is authenticated
+ * (via session cookie). Used by canUseClientApi so cookie-auth users are not
+ * incorrectly blocked from making API mutations.
+ */
+export const clientAuthenticated = writable(false);
 
 export class ApiError extends Error {
   status: number;
@@ -16,7 +23,7 @@ export class ApiError extends Error {
 }
 
 export function canUseClientApi(password: string): boolean {
-  return !clientAuthRequired || password.trim().length > 0;
+  return !clientAuthRequired || password.trim().length > 0 || get(clientAuthenticated);
 }
 
 function buildHeaders(input?: HeadersInit): Headers {
@@ -48,13 +55,6 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   const headers = buildHeaders(init.headers);
   const method = (init.method ?? 'GET').toUpperCase();
   const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
-
-  if (env.PUBLIC_AUTH_REQUIRED === 'true' && !headers.has('Authorization')) {
-    if (browser && isMutation) {
-      syncState.set('conflict');
-    }
-    throw new ApiError('Admin password required', 401);
-  }
 
   if (browser && isMutation) {
     syncState.set('saving');
