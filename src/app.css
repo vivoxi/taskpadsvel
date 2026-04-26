@@ -7,8 +7,6 @@
 }
 
 :root {
-  color-scheme: dark;
-
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -17,7 +15,47 @@
   --space-4: 16px;
   --space-5: 20px;
 
-  /* Backgrounds */
+  /* Light mode (default) */
+  --bg:           #f6f7fb;
+  --background:   #f6f7fb;
+  --panel:        #ffffff;
+  --panel-soft:   #f9fafb;
+  --panel-strong: #f1f5f9;
+
+  /* Borders */
+  --border:       #e2e8f0;
+  --border-strong:#cbd5e1;
+
+  /* Text */
+  --text-primary:   #0f172a;
+  --text-secondary: #334155;
+  --text-muted:     #64748b;
+  --text-faint:     #94a3b8;
+
+  /* Accents */
+  --accent:         #4f46e5;
+  --accent-hover:   #4338ca;
+  --accent-subtle:  rgba(79, 70, 229, 0.10);
+  --accent-contrast: #ffffff;
+  --success:        #16a34a;
+  --warning:        #d97706;
+  --danger:         #dc2626;
+
+  /* Shadows */
+  --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Dark mode overrides */
   --bg:           #0f0f0f;
   --background:   #0f0f0f;
   --panel:        #1a1a2e;
@@ -43,7 +81,7 @@
   --warning:        #f59e0b;
   --danger:         #ef4444;
 
-  /* Shadows — removed, kept as aliases for compatibility */
+  /* Shadows */
   --shadow-soft: none;
   --shadow-card: none;
 }

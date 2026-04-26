@@ -6,7 +6,7 @@
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
-  import { initializeTheme } from '$lib/stores/theme';
+  import { initializeTheme, themeMode } from '$lib/stores/theme';
   import { commandPaletteOpen } from '$lib/stores';
   import type { LayoutData } from './$types';
   import type { Snippet } from 'svelte';
@@ -20,13 +20,6 @@
 
 </script>
 
-<svelte:head>
-  <script>
-    (() => {
-      document.documentElement.style.colorScheme = 'dark';
-    })();
-  </script>
-</svelte:head>
 
 <div class="flex h-dvh overflow-hidden bg-[var(--bg)]">
   <Sidebar />
@@ -106,6 +99,6 @@
   </div>
 {/if}
 
-<Toaster theme="dark" position="bottom-right" />
+<Toaster theme={$themeMode} position="bottom-right" />
 <ConfirmModal />
 <CommandPalette />

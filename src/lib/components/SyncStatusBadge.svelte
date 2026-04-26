@@ -2,10 +2,10 @@
   import { syncState } from '$lib/stores';
 
   const palette = {
-    saving: 'bg-zinc-500',
-    synced: 'bg-zinc-900 dark:bg-zinc-100',
-    offline: 'bg-zinc-400',
-    conflict: 'bg-zinc-700'
+    saving: 'bg-[var(--text-muted)]',
+    synced: 'bg-[var(--text-primary)]',
+    offline: 'bg-[var(--border)]',
+    conflict: 'bg-[var(--text-secondary)]'
   } as const;
 </script>
 

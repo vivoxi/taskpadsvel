@@ -3,8 +3,9 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Badge from '$lib/components/ui/Badge.svelte';
   import {
-    CalendarDays, Rows3, NotebookPen
+    CalendarDays, Rows3, NotebookPen, Moon, Sun
   } from 'lucide-svelte';
+  import { themeMode, toggleTheme } from '$lib/stores/theme';
 
   let {
     mobile = false,
@@ -63,6 +64,20 @@
     <Button href="/history" variant="ghost" size="sm" className="w-full justify-start" onclick={onNavigate}>
       History
     </Button>
+    <button
+      onclick={toggleTheme}
+      class="flex w-full items-center gap-2.5 rounded-[var(--radius-md)] px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--panel)] hover:text-[var(--text-primary)]"
+      aria-label="Toggle theme"
+      title={$themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {#if $themeMode === 'dark'}
+        <Sun size={15} />
+        <span>Light mode</span>
+      {:else}
+        <Moon size={15} />
+        <span>Dark mode</span>
+      {/if}
+    </button>
     <Button href="/logout" variant="ghost" size="sm" className="w-full justify-start" onclick={onNavigate}>
       Log out
     </Button>

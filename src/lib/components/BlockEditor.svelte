@@ -787,7 +787,7 @@
                   type="button"
                   aria-label="Delete image"
                   onclick={() => removeBlock(index, false)}
-                  class="absolute right-2 top-2 hidden rounded-lg bg-[var(--panel-strong)] p-1 text-[var(--text-muted)] transition-colors hover:text-red-500 group-hover/img:flex"
+                  class="absolute right-2 top-2 hidden rounded-lg bg-[var(--panel-strong)] p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--danger)] group-hover/img:flex"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -890,7 +890,7 @@
               </button>
               <button
                 type="button"
-                class="flex w-full items-center gap-2 rounded-[12px] px-3 py-1.5 text-left text-sm text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30"
+                class="flex w-full items-center gap-2 rounded-[12px] px-3 py-1.5 text-left text-sm text-[var(--danger)] transition-colors hover:bg-[rgba(220,38,38,0.1)]"
                 onmousedown={(e) => { e.preventDefault(); blockMenuId = null; removeBlock(index); }}
               >
                 <Trash2 size={13} /> Delete

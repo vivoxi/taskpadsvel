@@ -578,7 +578,7 @@
               <div class="mt-1.5 flex items-center justify-between">
                 <button
                   onclick={() => void deleteUnassignedTask(task.id)}
-                  class="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-[var(--text-faint)] transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
+                  class="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-[var(--text-faint)] transition-colors hover:bg-[rgba(220,38,38,0.1)] hover:text-[var(--danger)]"
                 >
                   <Trash2 size={10} />
                   Delete
