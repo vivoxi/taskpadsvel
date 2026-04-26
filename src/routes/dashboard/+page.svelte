@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-svelte';
   import MonthStrip from '$lib/components/MonthStrip.svelte';
+  import PlannerSidePanel from '$lib/components/dashboard/PlannerSidePanel.svelte';
   import { toast } from 'svelte-sonner';
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { isSameDay } from 'date-fns';
@@ -332,6 +333,8 @@
 
   <!-- ── Calendar ── -->
   <div class="flex-1 overflow-auto p-4 md:p-6">
+    <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+      <div class="min-w-0">
 
     <!-- Mobile list view (< sm) -->
     <div class="sm:hidden mb-4 rounded-lg border border-[var(--border)] bg-[var(--panel)] divide-y divide-[var(--border)]">
@@ -650,6 +653,20 @@
           No unassigned tasks — click <Plus size={10} class="inline" /> to add one.
         </p>
       {/if}
+    </div>
+      </div>
+
+      <div class="min-w-0">
+        <div class="xl:sticky xl:top-4">
+          <PlannerSidePanel
+            monthKey={data.view.monthKey}
+            templates={data.view.templates}
+            capacity={data.view.capacity}
+            schedule={data.view.schedule}
+            compact
+          />
+        </div>
+      </div>
     </div>
   </div>
 </div>
