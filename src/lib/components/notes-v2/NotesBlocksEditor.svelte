@@ -1,25 +1,22 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import { ChevronDown, ChevronUp, Minus, Plus, Trash2 } from 'lucide-svelte';
-  import Button from '$lib/components/ui/Button.svelte';
-  import EmptyState from '$lib/components/ui/EmptyState.svelte';
-  import PanelCard from '$lib/components/ui/PanelCard.svelte';
+  import { tick } from 'svelte';
   import { createNoteBlock } from '$lib/notes-v2/validation';
   import type { NoteBlock, NoteBlockType } from '$lib/notes-v2/types';
 
-  // TODO(notes-editor): Unify NotesBlocksEditor and BlockEditor around shared block-row
-  // presentation primitives and keyboard affordances while keeping planner's richer commands
-  // separate from Notes v2's deliberately plain text inputs.
+  type Props = {
+    blocks: NoteBlock[];
+    disabled?: boolean;
+    onchange: (blocks: NoteBlock[]) => void;
+    onblur: () => void;
+  };
 
-  export let blocks: NoteBlock[] = [];
-  export let disabled = false;
+  let { blocks, disabled = false, onchange, onblur }: Props = $props();
 
-  const dispatch = createEventDispatcher<{
-    change: NoteBlock[];
-    blur: void;
-  }>();
+  let slashOpen = $state(false);
+  let slashCursor = $state(0);
+  let slashTargetIdx = $state(0);
 
-  const addableBlocks: Array<{ type: NoteBlockType; label: string }> = [
+  const slashOptions: Array<{ type: NoteBlockType; label: string }> = [
     { type: 'paragraph', label: 'Text' },
     { type: 'heading', label: 'Heading' },
     { type: 'checklist', label: 'Checklist' },
@@ -27,150 +24,295 @@
     { type: 'divider', label: 'Divider' }
   ];
 
-  function emit(nextBlocks: NoteBlock[]) {
-    dispatch('change', nextBlocks);
+  // Plain array — mutated by bind:this, accessed imperatively only
+  let inputEls: (HTMLInputElement | HTMLTextAreaElement | null)[] = [];
+
+  const blockIds = $derived(blocks.map((b) => b.id).join(','));
+
+  $effect(() => {
+    blockIds;
+    tick().then(() => {
+      for (const el of inputEls) {
+        if (el instanceof HTMLTextAreaElement) {
+          el.style.height = 'auto';
+          el.style.height = el.scrollHeight + 'px';
+        }
+      }
+    });
+  });
+
+  export function focusFirst() {
+    tick().then(() => inputEls[0]?.focus());
   }
 
-  function updateBlock(index: number, patch: Partial<NoteBlock>) {
-    emit(blocks.map((block, currentIndex) => (currentIndex === index ? { ...block, ...patch } as NoteBlock : block)));
+  function emit(next: NoteBlock[]) {
+    onchange(next);
   }
 
-  function addBlock(type: NoteBlockType) {
-    emit([...blocks, createNoteBlock(type)]);
+  async function focusAt(index: number, toEnd = true) {
+    await tick();
+    const el = inputEls[index];
+    if (!el) return;
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(toEnd ? len : 0, toEnd ? len : 0);
   }
 
-  function removeBlock(index: number) {
-    emit(blocks.filter((_, currentIndex) => currentIndex !== index));
+  function convertBlock(i: number, type: NoteBlockType, text: string) {
+    const existing = blocks[i];
+    const next = { ...createNoteBlock(type), id: existing.id, text } as NoteBlock;
+    emit(blocks.map((b, idx) => (idx === i ? next : b)));
+    tick().then(() => {
+      const el = inputEls[i];
+      if (el) {
+        el.value = text;
+        el.focus();
+      }
+    });
   }
 
-  function moveBlock(index: number, direction: -1 | 1) {
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= blocks.length) return;
-    const nextBlocks = [...blocks];
-    const [moved] = nextBlocks.splice(index, 1);
-    nextBlocks.splice(nextIndex, 0, moved);
-    emit(nextBlocks);
+  function handleInput(i: number, e: Event) {
+    const el = e.currentTarget as HTMLInputElement | HTMLTextAreaElement;
+    const text = el.value;
+
+    if (el instanceof HTMLTextAreaElement) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+
+    if (text === '# ') { convertBlock(i, 'heading', ''); return; }
+    if (text === '- ') { convertBlock(i, 'bullet', ''); return; }
+    if (text === '[] ' || text === '[ ] ') { convertBlock(i, 'checklist', ''); return; }
+
+    if (text === '/') {
+      slashOpen = true;
+      slashCursor = 0;
+      slashTargetIdx = i;
+    } else if (slashOpen && slashTargetIdx === i) {
+      slashOpen = false;
+    }
+
+    emit(blocks.map((b, idx) => (idx === i ? ({ ...b, text } as NoteBlock) : b)));
   }
 
-  function notifyBlur() {
-    dispatch('blur');
+  function handleKeydown(i: number, e: KeyboardEvent) {
+    const el = e.currentTarget as HTMLInputElement | HTMLTextAreaElement;
+
+    if (slashOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        slashCursor = (slashCursor + 1) % slashOptions.length;
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        slashCursor = (slashCursor - 1 + slashOptions.length) % slashOptions.length;
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applySlash(slashOptions[slashCursor].type);
+        return;
+      }
+      if (e.key === 'Escape') {
+        slashOpen = false;
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const currentType = blocks[i].type;
+      const newType: NoteBlockType =
+        currentType === 'checklist' ? 'checklist'
+        : currentType === 'bullet' ? 'bullet'
+        : 'paragraph';
+      const newBlock = createNoteBlock(newType);
+      const next = [...blocks];
+      next.splice(i + 1, 0, newBlock);
+      emit(next);
+      focusAt(i + 1, false);
+      return;
+    }
+
+    if (e.key === 'Backspace' && el.value === '' && blocks.length > 1) {
+      e.preventDefault();
+      emit(blocks.filter((_, idx) => idx !== i));
+      focusAt(Math.max(0, i - 1));
+      return;
+    }
+
+    if (e.key === 'ArrowUp' && el.selectionStart === 0 && i > 0) {
+      e.preventDefault();
+      focusAt(i - 1);
+    }
+
+    if (e.key === 'ArrowDown' && el.selectionEnd === el.value.length && i < blocks.length - 1) {
+      e.preventDefault();
+      focusAt(i + 1, false);
+    }
+  }
+
+  function applySlash(type: NoteBlockType) {
+    slashOpen = false;
+    convertBlock(slashTargetIdx, type, '');
+  }
+
+  function toggleCheck(i: number) {
+    const block = blocks[i];
+    if (block.type !== 'checklist') return;
+    emit(blocks.map((b, idx) => (idx === i ? ({ ...b, checked: !block.checked } as NoteBlock) : b)));
+  }
+
+  function insertBelow(i: number) {
+    const newBlock = createNoteBlock('paragraph');
+    const next = [...blocks];
+    next.splice(i + 1, 0, newBlock);
+    emit(next);
+    focusAt(i + 1, false);
   }
 </script>
 
-<div class="space-y-4">
-  <div class="flex flex-wrap gap-2">
-    {#each addableBlocks as option}
-      <Button variant="secondary" size="sm" onclick={() => addBlock(option.type)} disabled={disabled}>
-        <Plus size={14} />
-        {option.label}
-      </Button>
-    {/each}
-  </div>
+<div class="relative pl-8">
+  {#each blocks as block, i (block.id)}
+    <div
+      class="group relative"
+      onmouseenter={() => {}}
+      onmouseleave={() => {}}
+      role="none"
+    >
+      <!-- Hover controls: drag handle + insert below -->
+      <div class="pointer-events-none absolute -left-8 top-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+        <span
+          class="cursor-grab rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-secondary)]"
+          role="img"
+          aria-label="Drag handle"
+        >
+          <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+            <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
+            <circle cx="2" cy="7" r="1.5"/><circle cx="8" cy="7" r="1.5"/>
+            <circle cx="2" cy="12" r="1.5"/><circle cx="8" cy="12" r="1.5"/>
+          </svg>
+        </span>
+        <button
+          type="button"
+          class="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--panel)] hover:text-[var(--text-secondary)]"
+          tabindex="-1"
+          aria-label="Insert block below"
+          onclick={() => insertBelow(i)}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Block content -->
+      <div class="relative min-w-0">
+        {#if block.type === 'heading'}
+          <input
+            bind:this={inputEls[i]}
+            class="w-full border-none bg-transparent py-1 text-2xl font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+            placeholder="Heading"
+            value={block.text}
+            {disabled}
+            oninput={(e) => handleInput(i, e)}
+            onkeydown={(e) => handleKeydown(i, e)}
+            onblur={onblur}
+          />
+        {:else if block.type === 'paragraph'}
+          <textarea
+            bind:this={inputEls[i]}
+            class="w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-sm leading-6 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+            placeholder="Type something, or '/' for commands…"
+            rows={1}
+            value={block.text}
+            {disabled}
+            oninput={(e) => handleInput(i, e)}
+            onkeydown={(e) => handleKeydown(i, e)}
+            onblur={onblur}
+          ></textarea>
+        {:else if block.type === 'checklist'}
+          <div class="flex items-center gap-2.5 py-0.5">
+            <button
+              type="button"
+              class="h-4 w-4 flex-shrink-0 rounded border transition-colors {block.checked
+                ? 'border-[var(--accent)] bg-[var(--accent)]'
+                : 'border-[var(--border-strong)] bg-transparent hover:border-[var(--accent)]'}"
+              onclick={() => toggleCheck(i)}
+              {disabled}
+              aria-label={block.checked ? 'Mark incomplete' : 'Mark complete'}
+            >
+              {#if block.checked}
+                <svg viewBox="0 0 12 12" fill="none" class="h-full w-full p-0.5">
+                  <path d="M2 6l3 3 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              {/if}
+            </button>
+            <input
+              bind:this={inputEls[i]}
+              class="min-w-0 flex-1 border-none bg-transparent py-0.5 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] {block.checked
+                ? 'text-[var(--text-muted)] line-through'
+                : ''}"
+              placeholder="To-do"
+              value={block.text}
+              {disabled}
+              oninput={(e) => handleInput(i, e)}
+              onkeydown={(e) => handleKeydown(i, e)}
+              onblur={onblur}
+            />
+          </div>
+        {:else if block.type === 'bullet'}
+          <div class="flex items-start gap-2.5 py-0.5">
+            <span class="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--text-secondary)]"></span>
+            <input
+              bind:this={inputEls[i]}
+              class="min-w-0 flex-1 border-none bg-transparent py-0.5 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+              placeholder="List item"
+              value={block.text}
+              {disabled}
+              oninput={(e) => handleInput(i, e)}
+              onkeydown={(e) => handleKeydown(i, e)}
+              onblur={onblur}
+            />
+          </div>
+        {:else if block.type === 'divider'}
+          <div class="py-3" role="none">
+            <hr class="border-t border-[var(--border)]" />
+          </div>
+        {/if}
+
+        <!-- Slash command menu -->
+        {#if slashOpen && slashTargetIdx === i}
+          <div class="absolute left-0 top-full z-50 mt-1 w-52 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--panel-strong)] p-1 shadow-[var(--shadow-card)]">
+            {#each slashOptions as option, oi}
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {slashCursor === oi
+                  ? 'bg-[var(--accent-subtle)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}"
+                onmousedown={() => applySlash(option.type)}
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/each}
 
   {#if blocks.length === 0}
-    <EmptyState
-      compact
-      title="Start with a block"
-      description="Use text, heading, checklist, bullet, or divider to shape the note."
-    />
+    <button
+      type="button"
+      class="w-full py-2 text-left text-sm text-[var(--text-faint)] hover:text-[var(--text-muted)]"
+      {disabled}
+      onclick={() => {
+        emit([createNoteBlock('paragraph')]);
+        tick().then(() => inputEls[0]?.focus());
+      }}
+    >
+      Click to start writing…
+    </button>
   {/if}
-
-  {#each blocks as block, index (block.id)}
-    <PanelCard padded={false} className="overflow-hidden bg-[var(--panel-soft)]">
-      <div class="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2.5">
-        <div class="text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-faint)]">
-          {block.type}
-        </div>
-        <div class="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="!px-1.5 !py-1.5"
-            onclick={() => moveBlock(index, -1)}
-            disabled={disabled || index === 0}
-            ariaLabel="Move block up"
-          >
-            <ChevronUp size={14} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="!px-1.5 !py-1.5"
-            onclick={() => moveBlock(index, 1)}
-            disabled={disabled || index === blocks.length - 1}
-            ariaLabel="Move block down"
-          >
-            <ChevronDown size={14} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="!px-1.5 !py-1.5 hover:!text-[var(--danger)]"
-            onclick={() => removeBlock(index)}
-            disabled={disabled}
-            ariaLabel="Delete block"
-          >
-            <Trash2 size={14} />
-          </Button>
-        </div>
-      </div>
-      <div class="px-3 py-3">
-
-      {#if block.type === 'heading'}
-        <input
-          class="w-full border-none bg-transparent text-2xl font-semibold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
-          placeholder="Heading"
-          value={block.text}
-          oninput={(event) => updateBlock(index, { text: event.currentTarget.value })}
-          onblur={notifyBlur}
-          disabled={disabled}
-        />
-      {:else if block.type === 'paragraph'}
-        <textarea
-          class="min-h-28 w-full resize-y border-none bg-transparent text-sm leading-6 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
-          placeholder="Write a note"
-          value={block.text}
-          oninput={(event) => updateBlock(index, { text: event.currentTarget.value })}
-          onblur={notifyBlur}
-          disabled={disabled}
-        ></textarea>
-      {:else if block.type === 'checklist'}
-        <label class="flex items-start gap-3">
-          <input
-            type="checkbox"
-            class="mt-1 h-4 w-4 rounded border-[var(--border)] bg-[var(--panel)] text-[var(--accent)]"
-            checked={block.checked}
-            onchange={(event) => updateBlock(index, { checked: event.currentTarget.checked })}
-            onblur={notifyBlur}
-            disabled={disabled}
-          />
-          <input
-            class="min-w-0 flex-1 border-none bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
-            placeholder="Checklist item"
-            value={block.text}
-            oninput={(event) => updateBlock(index, { text: event.currentTarget.value })}
-            onblur={notifyBlur}
-            disabled={disabled}
-          />
-        </label>
-      {:else if block.type === 'bullet'}
-        <label class="flex items-start gap-3">
-          <span class="pt-1 text-[var(--text-secondary)]">
-            <Minus size={14} />
-          </span>
-          <input
-            class="min-w-0 flex-1 border-none bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
-            placeholder="Bullet item"
-            value={block.text}
-            oninput={(event) => updateBlock(index, { text: event.currentTarget.value })}
-            onblur={notifyBlur}
-            disabled={disabled}
-          />
-        </label>
-      {:else}
-        <hr class="border-t border-[var(--border)]" />
-      {/if}
-      </div>
-    </PanelCard>
-  {/each}
 </div>

@@ -46,6 +46,8 @@
   let editingCategoryName = $state('');
   let openCategoryMenuId = $state<string | null>(null);
   let attachmentsOpen = $state(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let editorRef = $state<any>(null);
 
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -742,20 +744,27 @@
           </div>
 
           <input
-            class="w-full border-none bg-transparent text-3xl font-semibold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
+            class="w-full border-none bg-transparent text-4xl font-bold text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
             value={selectedNote.title}
             placeholder="Untitled"
             maxlength="200"
             oninput={(event) => updateSelectedNote({ title: event.currentTarget.value })}
             onblur={() => void flushSave()}
+            onkeydown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                editorRef?.focusFirst();
+              }
+            }}
           />
         </div>
 
         <div class="min-h-0 flex-1 overflow-auto px-6 py-5">
           <NotesBlocksEditor
+            bind:this={editorRef}
             blocks={selectedNote.content}
-            on:change={(event) => updateSelectedNote({ content: event.detail })}
-            on:blur={() => void flushSave()}
+            onchange={(blocks) => updateSelectedNote({ content: blocks })}
+            onblur={() => void flushSave()}
           />
 
           <PanelCard title="Attachments" eyebrow="Files" className="mt-8 bg-[var(--panel-soft)]">
@@ -821,35 +830,32 @@
           </PanelCard>
         </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-6 py-4">
-          <div class="text-xs text-[var(--text-muted)]">
-            Updated {noteDateLabel(selectedNote.updated_at)} · {selectedNote.content.length} blocks
-          </div>
-          <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-6 py-2 text-xs text-[var(--text-faint)]">
+          <span>Updated {noteDateLabel(selectedNote.updated_at)}</span>
+          <div class="flex items-center gap-3">
             {#if selectedNote.deleted_at}
               <button
                 type="button"
-                class="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                class="transition-colors hover:text-[var(--text-primary)]"
                 onclick={restoreNote}
               >
-                <RefreshCcw size={14} class="mr-1 inline" />
+                <RefreshCcw size={12} class="mr-1 inline" />
                 Restore
               </button>
               <button
                 type="button"
-                class="rounded-lg border border-[rgba(239,68,68,0.35)] px-3 py-2 text-sm text-[var(--danger)]"
+                class="text-[var(--danger)] opacity-70 transition-opacity hover:opacity-100"
                 onclick={permanentlyDeleteNote}
               >
-                Delete Permanently
+                Delete permanently
               </button>
             {:else}
               <button
                 type="button"
-                class="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--danger)]"
+                class="transition-colors hover:text-[var(--danger)]"
                 onclick={moveToTrash}
               >
-                <Trash2 size={14} class="mr-1 inline" />
-                Move to Trash
+                Move to trash
               </button>
             {/if}
           </div>
